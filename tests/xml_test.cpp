@@ -1,0 +1,686 @@
+﻿// XML format adapter tests.
+// Covers parsing (elements/attributes/text/mixed content/CDATA/comments/PIs/
+// self-closing/nesting/entities/namespaces), error paths, serialization
+// round-trips (compact and pretty), and reflection binding
+// (attribute / child-element / _text / repeated-child collection / nested /
+// enum). Structs are defined at global scope; test functions live in
+// namespace rtti_test_lib. English comments only.
+
+#include <rtti/xml.hpp>
+#include "test_harness.hpp"
+#include <cstdint>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+// --- Reflected types at global scope ---------------------------------------
+
+enum class XmlColor { Red, Green, Blue };
+
+RTTI_DEFINE_ENUM(XmlColor, Red, Green, Blue)
+
+struct Point {
+    int x = 0;
+    int y = 0;
+    RTTI_DEFINE_TYPE_INTRUSIVE(Point, x, y)
+};
+
+struct Stats {
+    int id = 0;
+    double score = 0.0;
+    std::string name;
+    std::vector<int> scores;
+    std::vector<Point> points;
+    std::map<std::string, int> table;
+    std::set<std::string> tags;
+    Point center;
+    XmlColor color = XmlColor::Red;
+    bool active = false;
+    RTTI_DEFINE_TYPE_INTRUSIVE(Stats, id, score, name, scores, points, table,
+                               tags, center, color, active)
+};
+
+struct HandInfo {
+    int id = 0;
+    std::string name;
+    double score = 0.0;
+    bool active = false;
+    RTTI_DEFINE_TYPE_INTRUSIVE(HandInfo, id, name, score, active)
+};
+
+struct PlainText {
+    std::string value;
+    RTTI_DEFINE_TYPE_INTRUSIVE(PlainText, value)
+};
+
+struct TextNode {
+    std::string _text;
+    RTTI_DEFINE_TYPE_INTRUSIVE(TextNode, _text)
+};
+
+// Streaming SAX event recorder (uniquely named to avoid ODR clashes with
+// other test translation units). Records one XmlSaxEvent per callback and can
+// be configured to cancel (return false) on a specific event.
+struct XmlSaxEvent {
+    std::string op;  // start/attr/text/end/comment/cdata/pi
+    std::string a;   // primary payload (name, text, content)
+    std::string b;   // secondary payload (attribute value only)
+};
+
+struct XmlSaxRecorder {
+    std::vector<XmlSaxEvent> events;
+    bool cancel_on = false;  // when set, cancel on the first matching event
+    std::string cancel_op;
+    std::string cancel_a;
+    bool canceled = false;
+
+    bool start(rtti::string_view n) { return record("start", n, ""); }
+    bool end(rtti::string_view n) { return record("end", n, ""); }
+    bool attr(rtti::string_view n, rtti::string_view v) {
+        return record("attr", n, v);
+    }
+    bool text(rtti::string_view t) { return record("text", t, ""); }
+    bool comment(rtti::string_view c) { return record("comment", c, ""); }
+    bool cdata(rtti::string_view c) { return record("cdata", c, ""); }
+    bool pi(rtti::string_view p) { return record("pi", p, ""); }
+
+    std::string last() const {
+        return events.empty() ? std::string("<none>")
+                              : (events.back().op + ":" + events.back().a +
+                                 (events.back().op == "attr" ? "=" + events.back().b
+                                                             : std::string()));
+    }
+
+private:
+    bool record(const char* op, rtti::string_view a, rtti::string_view b) {
+        events.push_back(XmlSaxEvent{op, std::string(a), std::string(b)});
+        if (cancel_on && op == cancel_op && a == cancel_a) {
+            canceled = true;
+            return false;
+        }
+        return true;
+    }
+};
+
+namespace rtti_test_lib {
+
+namespace {
+
+void check_stats_eq(const Stats& a, const Stats& b) {
+    RTTI_CHECK_EQ(a.id, b.id);
+    RTTI_CHECK(a.score == b.score);
+    RTTI_CHECK_EQ(a.name, b.name);
+    RTTI_CHECK_EQ(a.scores.size(), b.scores.size());
+    for (std::size_t i = 0; i < a.scores.size(); ++i) {
+        RTTI_CHECK_EQ(a.scores[i], b.scores[i]);
+    }
+    RTTI_CHECK_EQ(a.points.size(), b.points.size());
+    for (std::size_t i = 0; i < a.points.size(); ++i) {
+        RTTI_CHECK_EQ(a.points[i].x, b.points[i].x);
+        RTTI_CHECK_EQ(a.points[i].y, b.points[i].y);
+    }
+    RTTI_CHECK_EQ(a.table.size(), b.table.size());
+    for (const auto& kv : a.table) {
+        auto it = b.table.find(kv.first);
+        RTTI_CHECK(it != b.table.end());
+        if (it != b.table.end()) {
+            RTTI_CHECK_EQ(kv.second, it->second);
+        }
+    }
+    RTTI_CHECK_EQ(a.tags.size(), b.tags.size());
+    for (const auto& t : a.tags) {
+        RTTI_CHECK(b.tags.find(t) != b.tags.end());
+    }
+    RTTI_CHECK_EQ(a.center.x, b.center.x);
+    RTTI_CHECK_EQ(a.center.y, b.center.y);
+    RTTI_CHECK(a.color == b.color);
+    RTTI_CHECK_EQ(a.active, b.active);
+}
+
+std::string string_of(rtti::value_io* v) {
+    rtti::string_view sv;
+    if (v == nullptr || !v->as_string(sv)) {
+        return std::string("<no-string>");
+    }
+    return std::string(sv);
+}
+
+} // namespace
+
+// --- Parsing: structure, attributes, children, text, entities --------------
+
+RTTI_TEST_CASE(xml_parse_document) {
+    const char* src =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<person id=\"42\" active=\"true\" xmlns=\"urn:base\" xmlns:p=\"urn:p\">\n"
+        "  <!-- a comment -->\n"
+        "  <name>Alice &amp; Bob &lt;dev&gt;</name>\n"
+        "  <age>30</age>\n"
+        "  <meta><![CDATA[raw <stuff> & more]]></meta>\n"
+        "  <?target data-val?>\n"
+        "  <empty/>\n"
+        "  <scores>1</scores>\n"
+        "  <scores>2</scores>\n"
+        "  <scores>3</scores>\n"
+        "  <addr><city>NYC</city><zip>10001</zip></addr>\n"
+        "  <h>caf&#233; &#x1F600; &#65;</h>\n"
+        "</person>\n";
+
+    const auto rd = rtti::xml::parse(src);
+    RTTI_CHECK(rd.ok());
+    if (!rd.ok()) {
+        return;
+    }
+    const rtti::xml::document& d = rd.value;
+
+    RTTI_CHECK(d.type() == rtti::value_io::kind::object);
+
+    // Attribute binding (id).
+    rtti::value_io* idv = nullptr;
+    RTTI_CHECK(d.get_key("id", idv));
+    RTTI_CHECK(idv != nullptr);
+    std::int64_t iv = 0;
+    RTTI_CHECK(idv->as_integer(iv));
+    RTTI_CHECK_EQ(iv, std::int64_t(42));
+    RTTI_CHECK_EQ(string_of(idv), std::string("42"));
+
+    // Attribute binding (active, boolean).
+    rtti::value_io* actv = nullptr;
+    RTTI_CHECK(d.get_key("active", actv));
+    bool ab = false;
+    RTTI_CHECK(actv->as_bool(ab));
+    RTTI_CHECK(ab);
+
+    // Child element text (name), with entity decoding.
+    rtti::value_io* namev = nullptr;
+    RTTI_CHECK(d.get_key("name", namev));
+    RTTI_CHECK_EQ(string_of(namev), std::string("Alice & Bob <dev>"));
+
+    // Scalar child (age).
+    rtti::value_io* agev = nullptr;
+    RTTI_CHECK(d.get_key("age", agev));
+    std::int64_t age = 0;
+    RTTI_CHECK(agev->as_integer(age));
+    RTTI_CHECK_EQ(age, std::int64_t(30));
+
+    // CDATA content.
+    rtti::value_io* metav = nullptr;
+    RTTI_CHECK(d.get_key("meta", metav));
+    RTTI_CHECK_EQ(string_of(metav), std::string("raw <stuff> & more"));
+
+    // Repeated same-name children become an array.
+    rtti::value_io* sc = nullptr;
+    RTTI_CHECK(d.get_key("scores", sc));
+    RTTI_CHECK(sc != nullptr);
+    RTTI_CHECK(sc->type() == rtti::value_io::kind::array);
+    RTTI_CHECK_EQ(sc->size(), std::size_t(3));
+    std::int64_t s0 = 0;
+    RTTI_CHECK(sc->at(0)->as_integer(s0));
+    RTTI_CHECK_EQ(s0, std::int64_t(1));
+    std::int64_t s2 = 0;
+    RTTI_CHECK(sc->at(2)->as_integer(s2));
+    RTTI_CHECK_EQ(s2, std::int64_t(3));
+
+    // Nested object element.
+    rtti::value_io* addr = nullptr;
+    RTTI_CHECK(d.get_key("addr", addr));
+    RTTI_CHECK(addr != nullptr);
+    RTTI_CHECK(addr->type() == rtti::value_io::kind::object);
+    rtti::value_io* city = nullptr;
+    RTTI_CHECK(addr->get_key("city", city));
+    RTTI_CHECK_EQ(string_of(city), std::string("NYC"));
+    rtti::value_io* zip = nullptr;
+    RTTI_CHECK(addr->get_key("zip", zip));
+    std::int64_t z = 0;
+    RTTI_CHECK(zip->as_integer(z));
+    RTTI_CHECK_EQ(z, std::int64_t(10001));
+
+    // Empty (self-closing) element is present.
+    rtti::value_io* emptyv = nullptr;
+    RTTI_CHECK(d.get_key("empty", emptyv));
+
+    // Numeric character references.
+    rtti::value_io* hv = nullptr;
+    RTTI_CHECK(d.get_key("h", hv));
+    RTTI_CHECK_EQ(string_of(hv), std::string("caf") +
+                                     std::string("\xC3\xA9") +
+                                     std::string(" ") + std::string("\xF0\x9F\x98\x80") +
+                                     std::string(" ") + std::string("A"));
+
+    // Namespace attributes preserved + in-scope lookup.
+    RTTI_CHECK_EQ(d.ns_uri(nullptr, ""), std::string("urn:base"));
+    RTTI_CHECK_EQ(d.ns_uri(nullptr, "p"), std::string("urn:p"));
+
+    // Serialization keeps comments and PIs in place.
+    const std::string out = rtti::xml::serialize(d);
+    RTTI_CHECK(out.find("<!-- a comment -->") != std::string::npos);
+    RTTI_CHECK(out.find("<?target data-val?>") != std::string::npos);
+    RTTI_CHECK(out.find("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") !=
+               std::string::npos);
+    // Round-trip the serialized form and re-verify the core values.
+    const auto rd2 = rtti::xml::parse(out);
+    RTTI_CHECK(rd2.ok());
+    if (rd2.ok()) {
+        rtti::value_io* id2 = nullptr;
+        RTTI_CHECK(rd2.value.get_key("id", id2));
+        std::int64_t iv2 = 0;
+        RTTI_CHECK(id2->as_integer(iv2));
+        RTTI_CHECK_EQ(iv2, std::int64_t(42));
+        rtti::value_io* sc2 = nullptr;
+        RTTI_CHECK(rd2.value.get_key("scores", sc2));
+        RTTI_CHECK_EQ(sc2->size(), std::size_t(3));
+    }
+}
+
+// --- Attribute priority over same-named child element ----------------------
+
+RTTI_TEST_CASE(xml_attr_priority) {
+    const auto rd = rtti::xml::parse("<person id=\"1\"><id>99</id></person>");
+    RTTI_CHECK(rd.ok());
+    if (!rd.ok()) {
+        return;
+    }
+    rtti::value_io* idv = nullptr;
+    RTTI_CHECK(rd.value.get_key("id", idv));
+    std::int64_t iv = 0;
+    RTTI_CHECK(idv->as_integer(iv));
+    RTTI_CHECK_EQ(iv, std::int64_t(1));
+}
+
+// --- Mixed content: text interleaved with child elements -------------------
+
+RTTI_TEST_CASE(xml_mixed_content) {
+    const auto rd = rtti::xml::parse("<p>Hello <b>world</b>!</p>");
+    RTTI_CHECK(rd.ok());
+    if (!rd.ok()) {
+        return;
+    }
+    // Element text content concatenates text children only (DOM semantics).
+    rtti::value_io* tv = nullptr;
+    RTTI_CHECK(rd.value.get_key("value", tv));
+    RTTI_CHECK_EQ(string_of(tv), std::string("Hello !"));
+    // The child element is still addressable.
+    rtti::value_io* bv = nullptr;
+    RTTI_CHECK(rd.value.get_key("b", bv));
+    RTTI_CHECK_EQ(string_of(bv), std::string("world"));
+    // Serialize/parse keeps the mixed structure and text.
+    const std::string out = rtti::xml::serialize(rd.value);
+    const auto rd2 = rtti::xml::parse(out);
+    RTTI_CHECK(rd2.ok());
+    if (rd2.ok()) {
+        rtti::value_io* tv2 = nullptr;
+        RTTI_CHECK(rd2.value.get_key("value", tv2));
+        RTTI_CHECK_EQ(string_of(tv2), std::string("Hello !"));
+    }
+}
+
+// --- Error paths ------------------------------------------------------------
+
+RTTI_TEST_CASE(xml_parse_errors) {
+    {
+        const auto r = rtti::xml::parse("<root><a></b></root>");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::mismatched_tag);
+    }
+    {
+        const auto r = rtti::xml::parse("<a x=\"1\" x=\"2\"/>");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::duplicate_attribute);
+    }
+    {
+        const auto r = rtti::xml::parse("<root><a>");
+        RTTI_CHECK(!r.ok());
+    }
+    {
+        const auto r = rtti::xml::parse("");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::invalid_root);
+    }
+    {
+        const auto r = rtti::xml::parse("   \n\t  ");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::invalid_root);
+    }
+    {
+        const auto r = rtti::xml::parse("<root>&nope;</root>");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::bad_entity);
+    }
+    {
+        const auto r = rtti::xml::parse("<root><a></root>");
+        RTTI_CHECK(!r.ok());
+    }
+}
+
+// --- Nesting depth limit ----------------------------------------------------
+
+RTTI_TEST_CASE(xml_parse_too_deep) {
+    std::string deep;
+    for (int i = 0; i < 600; ++i) {
+        deep += "<a>";
+    }
+    for (int i = 0; i < 600; ++i) {
+        deep += "</a>";
+    }
+    const auto r = rtti::xml::parse(deep);
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK(r.err.code == rtti::error_code::too_deep);
+}
+
+// --- DTD internal entities + Billion-Laughs guard --------------------------
+
+RTTI_TEST_CASE(xml_dtd_entities) {
+    const char* src =
+        "<?xml version=\"1.0\"?>\n"
+        "<!DOCTYPE root [\n"
+        "  <!ENTITY author \"Jane Doe\">\n"
+        "  <!ENTITY copyright \"2026 (c) &author;\">\n"
+        "]>\n"
+        "<root><who>&author;</who><cpy>&copyright;</cpy></root>";
+    const auto rd = rtti::xml::parse(src);
+    RTTI_CHECK(rd.ok());
+    if (!rd.ok()) {
+        return;
+    }
+    rtti::value_io* who = nullptr;
+    RTTI_CHECK(rd.value.get_key("who", who));
+    RTTI_CHECK_EQ(string_of(who), std::string("Jane Doe"));
+    rtti::value_io* cpy = nullptr;
+    RTTI_CHECK(rd.value.get_key("cpy", cpy));
+    RTTI_CHECK_EQ(string_of(cpy), std::string("2026 (c) Jane Doe"));
+}
+
+RTTI_TEST_CASE(xml_dtd_billion_laughs) {
+    const char* src =
+        "<!DOCTYPE root [\n"
+        "  <!ENTITY a \"x\">\n"
+        "  <!ENTITY b \"&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;\">\n"
+        "  <!ENTITY c \"&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;\">\n"
+        "  <!ENTITY d \"&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;\">\n"
+        "  <!ENTITY e \"&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;\">\n"
+        "]>\n"
+        "<root>&e;</root>";
+    const auto r = rtti::xml::parse(src);
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK(r.err.code == rtti::error_code::too_deep);
+}
+
+// --- Serialization round-trip ----------------------------------------------
+
+RTTI_TEST_CASE(xml_serialize_roundtrip) {
+    const char* src =
+        "<root><id>7</id><score>3.5</score><name>O&#39;Brien</name>"
+        "<scores>10</scores><scores>20</scores><scores>30</scores>"
+        "<points><x>1</x><y>2</y></points><points><x>3</x><y>4</y></points>"
+        "<table><a>1</a><b>2</b></table>"
+        "<tags>x</tags><tags>y</tags>"
+        "<center><x>5</x><y>6</y></center>"
+        "<color>Green</color><active>true</active></root>";
+
+    const auto rd = rtti::xml::parse(src);
+    RTTI_CHECK(rd.ok());
+
+    // Pretty serialization then re-parse keeps the structure.
+    const std::string pretty = rtti::xml::serialize(rd.value);
+    RTTI_CHECK(pretty.find('\n') != std::string::npos);
+    const auto rp = rtti::xml::parse(pretty);
+    RTTI_CHECK(rp.ok());
+    if (rp.ok()) {
+        rtti::value_io* idv = nullptr;
+        RTTI_CHECK(rp.value.get_key("id", idv));
+        std::int64_t iv = 0;
+        RTTI_CHECK(idv->as_integer(iv));
+        RTTI_CHECK_EQ(iv, std::int64_t(7));
+        rtti::value_io* sc = nullptr;
+        RTTI_CHECK(rp.value.get_key("scores", sc));
+        RTTI_CHECK_EQ(sc->size(), std::size_t(3));
+        rtti::value_io* nm = nullptr;
+        RTTI_CHECK(rp.value.get_key("name", nm));
+        RTTI_CHECK_EQ(string_of(nm), std::string("O'Brien"));
+    }
+
+    // Compact serialization contains no newlines.
+    const rtti::xml::write_config compact_cfg{true, 0};
+    const std::string compact = rtti::xml::serialize(rd.value, compact_cfg);
+    RTTI_CHECK(compact.find('\n') == std::string::npos);
+    const auto rc = rtti::xml::parse(compact);
+    RTTI_CHECK(rc.ok());
+}
+
+// --- Reflection binding: attribute, child text, vector, nested, enum -------
+
+RTTI_TEST_CASE(xml_reflect_hand_written) {
+    const char* src =
+        "<person id=\"7\" name=\"Zoe\"><score>3.5</score><active>true</active></person>";
+    const auto r = rtti::xml::parse_as<HandInfo>(src);
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    RTTI_CHECK_EQ(r.value.id, 7);
+    RTTI_CHECK_EQ(r.value.name, std::string("Zoe"));
+    RTTI_CHECK(r.value.score == 3.5);
+    RTTI_CHECK(r.value.active);
+}
+
+RTTI_TEST_CASE(xml_reflect_roundtrip) {
+    Stats s;
+    s.id = 7;
+    s.score = 3.25;
+    s.name = "Alice <&> \"Q\"";
+    s.scores = {10, 20, 30};
+    s.points = {{1, 2}, {3, 4}};
+    s.table = {{"a", 1}, {"b", 2}};
+    s.tags = {"x", "y"};
+    s.center = {5, 6};
+    s.color = XmlColor::Blue;
+    s.active = true;
+
+    const std::string out = rtti::xml::serialize(s);
+    const auto r = rtti::xml::parse_as<Stats>(out);
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    check_stats_eq(r.value, s);
+
+    // Compact output also round-trips.
+    const rtti::xml::write_config c{true, 0};
+    const std::string out2 = rtti::xml::serialize(s, c);
+    const auto r2 = rtti::xml::parse_as<Stats>(out2);
+    RTTI_CHECK(r2.ok());
+    if (r2.ok()) {
+        check_stats_eq(r2.value, s);
+    }
+
+    // No declaration also round-trips.
+    const rtti::xml::write_config nd{false, 4};
+    const std::string out3 = rtti::xml::serialize(s, nd);
+    RTTI_CHECK(out3.find("<?xml") == std::string::npos);
+    const auto r3 = rtti::xml::parse_as<Stats>(out3);
+    RTTI_CHECK(r3.ok());
+    if (r3.ok()) {
+        check_stats_eq(r3.value, s);
+    }
+}
+
+RTTI_TEST_CASE(xml_reflect_text_binding) {
+    // The field named "value" binds to the element's own text.
+    const auto r1 = rtti::xml::parse_as<PlainText>("<root>hello</root>");
+    RTTI_CHECK(r1.ok());
+    if (r1.ok()) {
+        RTTI_CHECK_EQ(r1.value.value, std::string("hello"));
+    }
+    // Serialization writes it back as element text, so the round-trip holds.
+    const std::string out = rtti::xml::serialize(PlainText{"hi"});
+    RTTI_CHECK(out.find("<root>hi</root>") != std::string::npos);
+    const auto r2 = rtti::xml::parse_as<PlainText>(out);
+    RTTI_CHECK(r2.ok());
+    if (r2.ok()) {
+        RTTI_CHECK_EQ(r2.value.value, std::string("hi"));
+    }
+
+    // Same for the "_text" field.
+    const auto r3 = rtti::xml::parse_as<TextNode>("<root>world</root>");
+    RTTI_CHECK(r3.ok());
+    if (r3.ok()) {
+        RTTI_CHECK_EQ(r3.value._text, std::string("world"));
+    }
+    const std::string out2 = rtti::xml::serialize(TextNode{"bye"});
+    RTTI_CHECK(out2.find("<root>bye</root>") != std::string::npos);
+    const auto r4 = rtti::xml::parse_as<TextNode>(out2);
+    RTTI_CHECK(r4.ok());
+    if (r4.ok()) {
+        RTTI_CHECK_EQ(r4.value._text, std::string("bye"));
+    }
+}
+
+// --- Enum round-trip --------------------------------------------------------
+
+RTTI_TEST_CASE(xml_enum_roundtrip) {
+    const std::string out = rtti::xml::serialize(XmlColor::Green);
+    RTTI_CHECK(out.find("Green") != std::string::npos);
+    const auto r = rtti::xml::parse_as<XmlColor>(out);
+    RTTI_CHECK(r.ok());
+    if (r.ok()) {
+        RTTI_CHECK(r.value == XmlColor::Green);
+    }
+    const auto r2 = rtti::xml::parse_as<XmlColor>("<root>Blue</root>");
+    RTTI_CHECK(r2.ok());
+    if (r2.ok()) {
+        RTTI_CHECK(r2.value == XmlColor::Blue);
+    }
+}
+
+// --- Streaming SAX: event order --------------------------------------------
+
+RTTI_TEST_CASE(xml_sax_events) {
+    XmlSaxRecorder rec;
+    rtti::xml::parse_events ev;
+    ev.element_start = [&](rtti::string_view n) { return rec.start(n); };
+    ev.element_end = [&](rtti::string_view n) { return rec.end(n); };
+    ev.attribute = [&](rtti::string_view n, rtti::string_view v) {
+        return rec.attr(n, v);
+    };
+    ev.text = [&](rtti::string_view t) { return rec.text(t); };
+    ev.comment = [&](rtti::string_view c) { return rec.comment(c); };
+    ev.cdata = [&](rtti::string_view c) { return rec.cdata(c); };
+    ev.pi = [&](rtti::string_view p) { return rec.pi(p); };
+
+    const char* src =
+        "<root a=\"1\"><item>x</item><item>y</item><!--c--><![CDATA[d]]></root>";
+    const auto r = rtti::xml::parse_stream(src, ev);
+    RTTI_CHECK(r.ok());
+
+    const std::vector<std::string> want = {
+        "start:root", "attr:a=1",   "start:item", "text:x",  "end:item",
+        "start:item", "text:y",     "end:item",   "comment:c",
+        "cdata:d",    "end:root"};
+    RTTI_CHECK_EQ(rec.events.size(), want.size());
+    for (std::size_t i = 0; i < want.size() && i < rec.events.size(); ++i) {
+        std::string got = rec.events[i].op + ":" + rec.events[i].a;
+        if (rec.events[i].op == "attr") {
+            got += "=" + rec.events[i].b;
+        }
+        RTTI_CHECK_EQ(got, want[i]);
+    }
+}
+
+// --- Streaming SAX: mixed content, PI and self-closing ----------------------
+
+RTTI_TEST_CASE(xml_sax_mixed_and_misc) {
+    XmlSaxRecorder rec;
+    rtti::xml::parse_events ev;
+    ev.element_start = [&](rtti::string_view n) { return rec.start(n); };
+    ev.element_end = [&](rtti::string_view n) { return rec.end(n); };
+    ev.text = [&](rtti::string_view t) { return rec.text(t); };
+    ev.pi = [&](rtti::string_view p) { return rec.pi(p); };
+
+    // "Hello " and "!" are separated by the <b> element, so they arrive as two
+    // text events; the PI is delivered as "target content"; the self-closing
+    // <c/> yields both start and end events.
+    const char* src = "<p>Hello <b>world</b>!<?t data?><c/></p>";
+    const auto r = rtti::xml::parse_stream(src, ev);
+    RTTI_CHECK(r.ok());
+
+    const std::vector<std::string> want = {
+        "start:p", "text:Hello ", "start:b", "text:world",
+        "end:b",   "text:!",     "pi:t data", "start:c", "end:c", "end:p"};
+    RTTI_CHECK_EQ(rec.events.size(), want.size());
+    for (std::size_t i = 0; i < want.size() && i < rec.events.size(); ++i) {
+        std::string got = rec.events[i].op + ":" + rec.events[i].a;
+        RTTI_CHECK_EQ(got, want[i]);
+    }
+}
+
+// --- Streaming SAX: early cancel --------------------------------------------
+
+RTTI_TEST_CASE(xml_sax_cancel) {
+    XmlSaxRecorder rec;
+    rec.cancel_on = true;
+    rec.cancel_op = "end";
+    rec.cancel_a = "a";
+    rtti::xml::parse_events ev;
+    ev.element_start = [&](rtti::string_view n) { return rec.start(n); };
+    ev.element_end = [&](rtti::string_view n) { return rec.end(n); };
+    ev.text = [&](rtti::string_view t) { return rec.text(t); };
+
+    const auto r = rtti::xml::parse_stream("<root><a>1</a><b>2</b></root>", ev);
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK(rec.canceled);
+    RTTI_CHECK_EQ(rec.events.size(), std::size_t(4));
+    RTTI_CHECK_EQ(rec.last(), std::string("end:a"));
+}
+
+// --- Streaming SAX: syntax error --------------------------------------------
+
+RTTI_TEST_CASE(xml_sax_error) {
+    XmlSaxRecorder rec;
+    rtti::xml::parse_events ev;
+    ev.element_start = [&](rtti::string_view n) { return rec.start(n); };
+    ev.element_end = [&](rtti::string_view n) { return rec.end(n); };
+
+    const auto r = rtti::xml::parse_stream("<root><a></b></root>", ev);
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK(r.err.code == rtti::error_code::mismatched_tag);
+}
+
+// --- Serialization into a preallocated buffer -------------------------------
+
+RTTI_TEST_CASE(xml_serialize_buffer) {
+    const char* src =
+        "<root><id>7</id><name>O&#39;Brien</name>"
+        "<scores>1</scores><scores>2</scores></root>";
+    const auto rd = rtti::xml::parse(src);
+    RTTI_CHECK(rd.ok());
+    if (!rd.ok()) {
+        return;
+    }
+
+    // Default config: buffer result matches the string result exactly.
+    const std::string ref = rtti::xml::serialize(rd.value);
+    std::string buf;
+    rtti::xml::serialize(rd.value, buf);
+    RTTI_CHECK_EQ(buf, ref);
+
+    // Compact config matches too.
+    const rtti::xml::write_config c{true, 0};
+    const std::string refc = rtti::xml::serialize(rd.value, c);
+    std::string bufc;
+    rtti::xml::serialize(rd.value, bufc, c);
+    RTTI_CHECK_EQ(bufc, refc);
+
+    // The overload appends to an existing buffer (caller clears to overwrite).
+    std::string out = "PREFIX:";
+    rtti::xml::serialize(rd.value, out);
+    RTTI_CHECK_EQ(out.size(), ref.size() + 7);
+    RTTI_CHECK_EQ(std::string(out, 7), ref);
+
+    // Clearing then serializing reproduces the reference.
+    out.clear();
+    rtti::xml::serialize(rd.value, out);
+    RTTI_CHECK_EQ(out, ref);
+}
+
+} // namespace rtti_test_lib

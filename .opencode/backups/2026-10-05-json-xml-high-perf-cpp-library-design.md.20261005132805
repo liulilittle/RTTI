@@ -1,0 +1,188 @@
+# JSON/XML 高性能无依赖 C++ 库 — 设计文档
+
+日期:2026-10-05
+路径:architectural(新项目)
+
+## 1. 目标与成功标准
+
+构建一个 C++17 无第三方依赖的库,提供 JSON 与 XML 的解析(DOM + 流式)与序列化。
+
+- **交付形态**:编译为静态库(头文件 + lib),头文件不依赖任何第三方头。
+- **API 形态**:DOM 树(可读、可改、可序列化)+ 可选流式解析(SAX 事件回调高速通道)。
+- **XML 范围**:全特性 DOM —— 元素/属性/文本(混合内容)/CDATA/注释/处理指令/命名空间/DTD 实体展开(安全)。
+- **JSON 范围**:标准 JSON(DOM + 流式),区分 integer/real,strict 输出。
+- **性能目标**:主流 x86-64 单线程,百字节级小文档 3-8M 次/秒解析;大文档按吞吐 MB/s 计;序列化吞吐同量级。
+- **约束**:无运行时依赖,支持 MSVC/GCC/Clang(x86-64,SSE/AVX2 可用时启用 SIMD,不可用回落标量)。
+
+## 2. 整体架构
+
+共享基础设施 + 双数据模型(JSON、XML 各自最优节点布局)。
+
+```
+include/jsonxx/
+  common.hpp       // string_view、Result<T>、错误码、MemoryArena、SIMD 扫描器
+  json.hpp         // JSON DOM 节点、parse/流式、修改 API
+  xml.hpp          // XML DOM 节点、parse、命名空间、实体
+  serializer.hpp   // JSON/XML 序列化(strict/compact 配置)
+src/               // 静态库实现
+bench/             // 基准(小文档 ops/s、大文档 MB/s)
+tests/             // 单元/集成/边界测试
+```
+
+### 2.1 共享层(common)
+
+- `string_view`:零拷贝传递,所有字符串数据归 parse 输入缓冲或 arena 所有。
+- `MemoryArena`:一次分配大块,节点/字符串按池内偏移分配,整文档一次释放;按需增长,`new` 仅在扩容时发生。
+- `Result<T>`:携带值或错误码 + 字节偏移 + 惰性行列换算。
+- `ErrorCode` 枚举(见 4.2)。
+- `utf8_validate_simd / utf8_validate_scalar`:strict 模式校验。
+- SIMD 结构字符扫描:JSON `{}[],:`;XML `<>"'` 与实体起始。
+
+## 3. 数据模型
+
+### 3.1 JSON 节点(扁平数组 + arena)
+
+```
+enum class jtype : uint8_t { null, boolean, integer, real, string, array, object };
+struct jvalue {
+  jtype type;
+  union {
+    bool b;
+    int64_t i;
+    double d;
+    struct { const char* s; size_t len; } str;
+    struct { uint32_t child; uint32_t count; } arr;   // 子索引连续区间
+    struct { uint32_t child; uint32_t count; } obj;   // 键值对连续存储
+  };
+};
+```
+
+- 数字区分 integer/real,整数字面快路径不经过 `strtod`。
+- 对象子区间为连续 {key_view, value_index} 对;键默认零拷贝视图。
+- 树根返回 `const jvalue&`;修改通过 DOM 修改 API,修改后偏移结构由 API 维护。
+
+### 3.2 XML 节点(pugixml 式链式 + arena)
+
+```
+enum class xtype : uint8_t { document, element, pcdata, cdata, comment, pi };
+struct xnode {
+  xtype type;
+  const char* name; const char* value; size_t len;
+  xnode* first_child; xnode* last_child;
+  xnode* next_sibling; xnode* prev_sibling;
+  xattr* first_attr;
+};
+struct xattr { const char* name, * value; size_t value_len; xattr* next; };
+```
+
+- 命名空间:解析时建立 `xmlns` 前缀→URI 绑定(URI 由 arena 持有),作用域栈下推/弹出;解析完成后通过 `xattr` 链旁的 ns 链可查询元素的 in-scope 命名空间。
+- 混合内容:文本与子元素同链,序列化时合并相邻文本输出。
+- 实体:预定义 5 个(`&amp; &lt; &gt; &apos; &quot;`)+ 数字实体 + 自定义(来自内部 DTD 子集)。
+
+## 4. 错误处理与安全
+
+### 4.1 错误策略
+
+- 解析失败立即停止,返回 `Result<T>` 的 `ErrorCode` + 字节偏移;行/列惰性换算。
+- 提供错误上下文片段(错误位置前后 ≤32 字节)。
+- 流式模式下回调返回 `false` 即取消解析,不建树。
+
+### 4.2 错误码
+
+```
+ok, unexpected_token, unterminated_string, invalid_number, invalid_utf8,
+unterminated_comment, mismatched_tag, duplicate_attribute, bad_entity,
+unterminated_cdata, dtd_missing, too_deep, invalid_root
+```
+
+### 4.3 安全防护
+
+- 实体展开:深度上限(默认 8)+ 展开次数上限,防 Billion Laughs(实体扩展炸弹)。
+- 最大嵌套深度:默认 512,可配置。
+- DTD:默认只处理内部子集;`dtd_missing` 错误覆盖缺失声明;不拉外部实体。
+- XML 常规宽松模式不做逐字节 UTF-8 校验;strict 模式 SIMD 校验(可配置)。
+
+## 5. 性能设计
+
+1. **SIMD 结构字符扫描**:JSON/XML 均用 AVX2/SSE 一次比较 32/16 字节定位结构字符,减少分支与逐字符跳转。
+2. **整数组装路径**:手工解析整数返回 int64,不落浮点。
+3. **字符串零拷贝**:无转义字符串直接指向输入缓冲视图;转义字符串一次性进 arena。
+4. **arena 一次分配**:整文档节点/字符串单次 malloc(按需增长),释放整文档单次 free。
+5. **栈机单遍**:JSON 用显式栈跟踪深度与节点索引,规避递归与二次遍历。
+6. **惰性 UTF-8**:默认宽松模式零校验开销;strict 用 SIMD。
+7. **预分配序列化缓冲**:序列化先估长再填充,避免多次 realloc。
+
+## 6. 序列化
+
+- JSON strict 输出:UTF-8 转义(`\" \\ \b \f \n \r \t` + 控制字符 `\uXXXX`),对象键排序可选(默认不排序)。
+- XML 输出:声明、命名空间(必要时)、属性转义、文本转义(`& < >`)、CDATA/注释/PI 原样;相邻文本合并输出。
+- 两者都提供 `serialize(root, buffer)` 与返回 `std::string` 两个入口;配置项:缩进(indent)/紧凑(strict JSON)/XML 声明。
+
+## 7. 流式 API(SAX)
+
+- 统一事件回调接口:`object_start/object_end/array_start/array_end/key/string_value/integer_value/real_value/bool_value/null_value/text/cdata/comment/pi/element_start/element_end/attribute`。
+- JSON/XML 的 DOM 解析器内部均构建于流式之上,保证行为一致;流式 API 独立暴露供零树高吞吐路径使用。
+
+## 8. 结构体绑定层(反射填充)
+
+C++17 无原生反射,采用 **nlohmann 式单宏** 生成用户结构体与 JSON/XML 之间的双向转换,成员↔键名由宏自动对应,无需手写任何代码。
+
+### 8.1 单宏用法
+
+```cpp
+struct person {
+    std::string name;
+    std::string address;
+    int age;
+};
+
+// 在结构体外部、同一命名空间内定义(全局命名空间也可)
+JSONXX_DEFINE_TYPE(person, name, address, age);
+```
+
+- 完全复刻 nlohmann 的 `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE` 语义:一个宏、结构体外定义、逗号成员列表,宏自动生成 `from_json/to_json`(以及可选的 `from_xml/to_xml`)。
+- 同命名空间内 ADL 查找,任意类型嵌套自动递归。
+- 对应侵入式宏 `JSONXX_DEFINE_TYPE_INTRUSIVE(person, name, address, age)` 放结构体内部,支持 `private/protected` 成员。
+- 宏展开为对成员逐一的转换语句,成员名即 JSON 键 / XML 属性·元素名,编译期确定、零运行时查找、单成员内联赋值。
+
+### 8.2 转换模板(宏展开到的内部实现)
+
+- 内建 `convert<T>` 覆盖:基本类型(int/double/bool/enum/整数/实数)、`std::string`、`std::optional<T>`、`std::vector<T>`、`std::array<T,N>`、`std::map<K,V>`、`std::unordered_map<K,V>`、嵌套结构体(检测到同样宏生成的 ADL 即递归)。
+- 容器填充:数组先取长度再 `reserve` 预分配;丢失键保留成员默认值(可配置严格模式报错),多余键默认忽略。
+- 枚举:宏成员可带转换 `JSONXX_DEFINE_ENUM(MyEnum, A, B, C)`,字符串↔枚举值双向。
+- 任意未覆盖类型:用户可手写 `from_json/to_json/from_xml/to_xml` ADL 函数,与宏生成共存(ADL 先命中用户函数)。
+
+### 8.3 XML 绑定映射规则
+
+- 字段 `id` ↔ 同名**属性**优先(`<x id="1">`)。
+- 字段 `name` ↔ 同名**子元素**文本(`<name>xxx</name>`);无对应子元素/属性时映射元素整体文本内容。
+- 专用字段名 `value` 或 `_text` ↔ 元素整体文本内容(含 CDATA 合并,同 DOM 序列化规则)。
+- `std::vector<T>` 字段 ↔ 同名子元素集合(`<item>…</item><item>…</item>`)。
+- 结构体字段 ↔ 同名子元素解析。
+
+### 8.4 性能
+
+- 宏生成函数体无查找表、无虚函数,单成员直接内联赋值。
+- 数组预分配避免重分配放大;整数字段走快路径。
+
+## 9. 测试与验证
+
+- 单元测试:节点模型、arena、SIMD 扫描(含无 SIMD 回退)、UTF-8。
+- 解析正确性:标准 JSON 用例、XML 全特性(命名空间/DTD 实体/CDTA/PI/混合内容)、错误路径与边界(空输入/超深/超长/实体炸弹)。
+- 序列化往返:parse → serialize → parse 一致。
+- 绑定层测试:单宏(`JSONXX_DEFINE_TYPE`)与侵入式(`JSONXX_DEFINE_TYPE_INTRUSIVE`)生成双向转换、枚举宏(`JSONXX_DEFINE_ENUM`)、容器/嵌套/可选字段、ADL 手写覆盖、严格模式报错、XML 属性-元素-文本映射规则。
+- 性能基准:百字节级小文档 ops/s(3-8M 目标)、大文档 MB/s;MSVC/GCC 各跑一轮;SIMD 与标量对比。
+
+## 10. 范围排除(明确不包含)
+
+- XML↔JSON 自动互转。
+- XPath/XSLT/流式 DOM(SAX 与 DOM 分离)。
+- 外部 DTD/实体拉取(XML 安全默认关闭)。
+- 非 x86-64 架构优化(平台扩展留接口)。
+- 基于 C++26 P2996 反射的零宏自动推导(约束为 C++17,单宏方案是 C++17 可行上限)。
+
+## 11. 目录与构建
+
+- `CMakeLists.txt`:`add_library(jsonxx STATIC)`;`tests`、`bench` 独立 target。
+- `-O2`(bench/release 用 `-O3 -march=native` 可选)。
+- 无第三方依赖。

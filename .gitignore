@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+build-off/
+cmake-build-*/
+*.user
+*.suo
+*.exe
+*.obj
+*.pdb
+*.ilk
+
+# Visual Studio / JetBrains
+.vs/
+.idea/
+
+# Temporary
+*.log
+*.tmp
+
+# SDD / superpowers scratch
+.superpowers/
