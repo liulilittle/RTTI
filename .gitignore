@@ -19,3 +19,6 @@ cmake-build-*/
 
 # SDD / superpowers scratch
 .superpowers/
+
+# Git worktrees
+.worktrees/
