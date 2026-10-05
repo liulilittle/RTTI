@@ -10,8 +10,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <optional>
 #include <string>
+#include <tuple>
 #include <type_traits>
+#include <variant>
 #include <typeinfo>
 #include <utility>
 
@@ -129,6 +132,8 @@ struct has_push_back<T, std::void_t<decltype(std::declval<T&>().push_back(
 
 // Forward declaration: has_data is defined later (with the container-family
 // discrimination traits); is_tuple needs it to tell std::array from tuple.
+// The default argument is supplied here so has_data<T> is valid where the
+// trait is used; the later definition does not repeat it.
 template <typename T, typename = void>
 struct has_data;
 
@@ -890,7 +895,7 @@ struct has_hasher : std::false_type {};
 template <typename T>
 struct has_hasher<T, std::void_t<typename T::hasher>> : std::true_type {};
 
-template <typename T, typename = void>
+template <typename T, typename>
 struct has_data : std::false_type {};
 template <typename T>
 struct has_data<T, std::void_t<decltype(std::declval<T&>().data())>> : std::true_type {};
