@@ -90,6 +90,30 @@ struct FlatBox {
 // registration is required.
 struct FlatChain {};
 
+// 8-byte element vectors (i64/f64) exercise vector data alignment, and the
+// longs-only case drives a single-present-slot (slot 0) table.
+struct FlatWide {
+    std::vector<std::int64_t> longs;
+    std::vector<double> doubles;
+
+    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(FlatWide, longs, doubles)
+};
+
+bool operator==(const FlatWide& a, const FlatWide& b) {
+    return a.longs == b.longs && a.doubles == b.doubles;
+}
+
+// Single slot-0 string-vector table (important presence check).
+struct FlatSlot0 {
+    std::vector<std::string> names;
+
+    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(FlatSlot0, names)
+};
+
+bool operator==(const FlatSlot0& a, const FlatSlot0& b) {
+    return a.names == b.names;
+}
+
 // ---- typed round-trip helpers ----------------------------------------------
 
 bool operator==(const FlatVec3& a, const FlatVec3& b) {
@@ -236,6 +260,23 @@ struct schema<rtti_test_lib::FlatChain> {
         make_field_desc("dummy", 0, fkind::i32),
         make_field_desc("child", 1, fkind::table, fkind::none,
                         schema_of<rtti_test_lib::FlatChain>()),
+    };
+};
+
+template <>
+struct schema<rtti_test_lib::FlatWide> {
+    static constexpr std::size_t count = 2;
+    static inline const field_desc fields[count] = {
+        make_field_desc("longs", 0, fkind::vector, fkind::i64),
+        make_field_desc("doubles", 1, fkind::vector, fkind::f64),
+    };
+};
+
+template <>
+struct schema<rtti_test_lib::FlatSlot0> {
+    static constexpr std::size_t count = 1;
+    static inline const field_desc fields[count] = {
+        make_field_desc("names", 0, fkind::vector, fkind::string),
     };
 };
 
@@ -675,6 +716,75 @@ RTTI_TEST_CASE(FlatDeepNestingGuard) {
     const auto ok = rtti::flat::parse<FlatChain>(
         rtti::string_view(deep.data(), deep.size()), loose);
     RTTI_CHECK(ok.ok());
+}
+
+RTTI_TEST_CASE(Flat8ByteVectorRoundtrip) {
+    // i64/f64 element vectors must keep the data immediately after the length
+    // prefix (no padding between count and element data) and read back exactly.
+    FlatWide w;
+    w.longs = {100000000000LL, -1};
+    w.doubles = {1.5, -2.25};
+
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::serialize(w, wire), rtti::error_code::ok);
+    const auto back = rtti::flat::parse_as<FlatWide>(
+        rtti::string_view(wire.data(), wire.size()));
+    RTTI_CHECK(back.ok());
+    RTTI_CHECK(back.value == w);
+    RTTI_CHECK_EQ(back.value.longs[0], std::int64_t(100000000000LL));
+    RTTI_CHECK_EQ(back.value.longs[1], std::int64_t(-1));
+    RTTI_CHECK(back.value.doubles[0] == 1.5);
+    RTTI_CHECK(back.value.doubles[1] == -2.25);
+
+    // The first long's little-endian low byte must sit right after the count
+    // (no 4-byte padding gap the start of the 8-byte elements).
+    RTTI_CHECK(wire.size() >= 8);
+    std::size_t count_pos = wire.size();
+    for (std::size_t i = 4; i + 4 <= wire.size(); ++i) {
+        const bool cnt = static_cast<unsigned char>(wire[i]) == 0x02 &&
+                         static_cast<unsigned char>(wire[i + 1]) == 0x00 &&
+                         static_cast<unsigned char>(wire[i + 2]) == 0x00 &&
+                         static_cast<unsigned char>(wire[i + 3]) == 0x00;
+        if (cnt) {
+            count_pos = i;
+            break;
+        }
+    }
+    // Element data starts right after the count: [count+4 .. count+20) must
+    // hold {100000000000, -1} with no gap. Only probe when fully in bounds.
+    const bool scratch_ok =
+        count_pos >= 4 && count_pos + 4 + 16 <= wire.size();
+    RTTI_CHECK(scratch_ok);
+    if (scratch_ok) {
+        std::uint64_t e0 = 0, e1 = 0;
+        for (int k = 0; k < 8; ++k) {
+            e0 |= static_cast<std::uint64_t>(
+                      static_cast<unsigned char>(wire[count_pos + 4 + k]))
+                  << (8 * k);
+            e1 |= static_cast<std::uint64_t>(
+                      static_cast<unsigned char>(wire[count_pos + 12 + k]))
+                  << (8 * k);
+        }
+        RTTI_CHECK_EQ(e0, std::uint64_t(100000000000LL));
+        RTTI_CHECK_EQ(e1,
+                      static_cast<std::uint64_t>(static_cast<std::int64_t>(-1)));
+    }
+}
+
+RTTI_TEST_CASE(FlatSlot0OnlyTableRoundtrip) {
+    // A table whose only present field sits at slot 0 must still emit a
+    // non-empty vtable; the field may not be silently dropped.
+    FlatSlot0 s;
+    s.names = {"alpha", "beta", "gamma"};
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::serialize(s, wire), rtti::error_code::ok);
+    const auto back = rtti::flat::parse_as<FlatSlot0>(
+        rtti::string_view(wire.data(), wire.size()));
+    RTTI_CHECK(back.ok());
+    RTTI_CHECK(back.value == s);
+    RTTI_CHECK_EQ(back.value.names.size(), size_t(3));
+    RTTI_CHECK_EQ(back.value.names[0], std::string("alpha"));
+    RTTI_CHECK_EQ(back.value.names[2], std::string("gamma"));
 }
 
 RTTI_TEST_CASE(FlatFileIdentifierHelpers) {

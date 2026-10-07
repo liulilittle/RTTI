@@ -168,6 +168,13 @@ inline std::size_t round_up(std::size_t v, std::size_t align) noexcept {
     const std::size_t r = v % align;
     return r ? v + (align - r) : v;
 }
+// True when id points to exactly four non-NUL characters (a well-formed
+// 4-byte file identifier literal). The scan stops at the literal's NUL, so a
+// short identifier never reads past its own storage.
+inline bool is_id4(const char* id) noexcept {
+    return id != nullptr && id[0] != '\0' && id[1] != '\0' && id[2] != '\0' &&
+           id[3] != '\0';
+}
 } // namespace
 
 document::document() {
@@ -1149,11 +1156,10 @@ struct builder {
     std::string out;
 
     // Reserve the header (root uoffset + optional file_identifier) and emit
-    // the identifier bytes when the declaring schema has one.
+    // the identifier bytes when the declaring schema has a well-formed one.
     void begin(const schema_info* si) {
         out.clear();
-        const bool has_id = si != nullptr && si->identifier != nullptr &&
-                            si->identifier[0] != '\0';
+        const bool has_id = si != nullptr && is_id4(si->identifier);
         out.assign(has_id ? 8u : 4u, '\0');
         if (has_id) {
             std::memcpy(&out[4], si->identifier, 4);
@@ -1291,18 +1297,33 @@ inline error_code build_vector(builder& B, const rtti::value_io* arr,
     if (count > 0xFFFFFFFFull) {
         return error_code::overflow;
     }
-    B.pad(4);
+    // The element data starts right after the 4-byte length prefix, with no
+    // gap, so the length-prefix position must make `length + 4` aligned to the
+    // element alignment (the uoffset target itself needs 4-byte alignment).
+    std::size_t data_align = 4; // uoffset elements (string/table)
+    if (flat_is_scalar(fd.elem)) {
+        data_align = flat_scalar_size(fd.elem);
+        if (data_align == 0) {
+            return error_code::kind_mismatch;
+        }
+    } else if (fd.elem == fkind::stct && fd.sub != nullptr) {
+        data_align = struct_align_of(fd.sub);
+    }
+    std::size_t count_pos = round_up(B.pos(), 4);
+    if (data_align > 4) {
+        while ((count_pos + 4) % data_align != 0) {
+            count_pos = round_up(count_pos + 1, 4);
+        }
+    }
+    if (count_pos > B.pos()) {
+        B.out.append(count_pos - B.pos(), '\0');
+    }
     start = B.pos();
     B.put_u32(start, static_cast<std::uint32_t>(count));
     if (count == 0) {
         return error_code::ok;
     }
     if (flat_is_scalar(fd.elem)) {
-        const std::size_t esz = flat_scalar_size(fd.elem);
-        if (esz == 0) {
-            return error_code::kind_mismatch;
-        }
-        B.pad(esz);
         for (std::size_t i = 0; i < count; ++i) {
             const rtti::value_io* el = arr->at(i);
             if (el == nullptr) {
@@ -1356,7 +1377,6 @@ inline error_code build_vector(builder& B, const rtti::value_io* arr,
         if (fd.sub == nullptr) {
             return error_code::kind_mismatch;
         }
-        B.pad(struct_align_of(fd.sub));
         for (std::size_t i = 0; i < count; ++i) {
             const rtti::value_io* el = arr->at(i);
             if (el == nullptr) {
@@ -1450,9 +1470,11 @@ inline error_code build_table(builder& B, const rtti::value_io* obj,
     std::uint16_t max_present_slot = 0;
     bool any = false;
     for (std::size_t f = 0; f < n; ++f) {
-        if (present[f] && si->fields[f].slot > max_present_slot) {
-            max_present_slot = si->fields[f].slot;
+        if (present[f]) {
             any = true;
+            if (si->fields[f].slot > max_present_slot) {
+                max_present_slot = si->fields[f].slot;
+            }
         }
     }
     const std::uint16_t vtable_slots = any
@@ -1590,8 +1612,8 @@ inline error_code build_table(builder& B, const rtti::value_io* obj,
 // ---------------------------------------------------------------------------
 
 bool verify_file_identifier(rtti::string_view src, const char* identifier) {
-    if (identifier == nullptr || identifier[0] == '\0') {
-        return true;
+    if (!is_id4(identifier)) {
+        return true; // no (or malformed) identifier declares nothing to check
     }
     return src.size() >= 8 &&
            std::memcmp(src.data() + 4, identifier, 4) == 0;
@@ -1603,7 +1625,7 @@ error_code wire_to_tree(rtti::string_view src, const schema_info* si,
         return error_code::kind_mismatch;
     }
     // Validate the optional file identifier before any table read.
-    if (si->identifier != nullptr && si->identifier[0] != '\0') {
+    if (is_id4(si->identifier)) {
         if (!verify_file_identifier(src, si->identifier)) {
             return error_code::invalid_root;
         }
