@@ -213,6 +213,21 @@ RTTI_TEST_CASE(FormatNumberInvalidSpec) {
     // Trailing bytes after the type.
     RTTI_CHECK_EQ(rtti::format_number(42, "d ", &e), std::string());
     RTTI_CHECK_EQ(e.code, rtti::error_code::unexpected_token);
+    // An oversized width is rejected with invalid_number instead of padding a
+    // huge string (never a std::length_error / crash, spec §0).
+    e = rtti::error_info{};
+    RTTI_CHECK_EQ(rtti::format_number(42, "99999999999999999999d", &e),
+                  std::string());
+    RTTI_CHECK_EQ(e.code, rtti::error_code::invalid_number);
+    e = rtti::error_info{};
+    RTTI_CHECK_EQ(rtti::format_number(1.5, "99999999999999f", &e),
+                  std::string());
+    RTTI_CHECK_EQ(e.code, rtti::error_code::invalid_number);
+    // The documented bound (8192) is the exact edge: 8192 pads, 8193 rejects.
+    RTTI_CHECK_EQ(rtti::format_number(42, "8192d").size(), std::size_t(8192));
+    e = rtti::error_info{};
+    RTTI_CHECK_EQ(rtti::format_number(42, "8193d", &e), std::string());
+    RTTI_CHECK_EQ(e.code, rtti::error_code::invalid_number);
 }
 
 RTTI_TEST_CASE(FormatToStringOverload) {
@@ -269,6 +284,14 @@ RTTI_TEST_CASE(FormatNodeToString) {
     // A scalar node formats directly.
     RTTI_CHECK_EQ(rtti::node_to_string(c), std::string("7"));
     RTTI_CHECK_EQ(rtti::node_to_string(x, ".1f"), std::string("3.5"));
+
+    // A family-incompatible spec falls back to the default text AND reports a
+    // successful outcome: err is reset to ok after the graceful fallback.
+    rtti::error_info e_ok;
+    RTTI_CHECK_EQ(rtti::node_to_string(c, ".2f", &e_ok), std::string("7"));
+    RTTI_CHECK_EQ(e_ok.code, rtti::error_code::ok);
+    RTTI_CHECK_EQ(rtti::node_to_string(x, ",d", &e_ok), std::string("3.5"));
+    RTTI_CHECK_EQ(e_ok.code, rtti::error_code::ok);
 
     // Fail-safe null argument.
     rtti::error_info e;

@@ -146,6 +146,9 @@ public:
     // boolean "empty == failure" signal (spec §0 fail-safe, never a crash).
     // The instant is UTC-normalized (offsets never survive a parse), so %z and
     // %Z are constants.
+    // The out-parameter overload APPENDS into `out` (it never clears the
+    // buffer) and, on an invalid directive, `out` holds the partial text
+    // produced before the error.
     error_code format(string_view pattern, std::string& out) const {
         const date_fields f = decompose();
         const std::size_t n = pattern.size();

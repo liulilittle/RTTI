@@ -16,7 +16,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
-#include <limits>
 #include <string>
 
 #include <rtti/base_convert.hpp>
@@ -253,14 +252,22 @@ inline bool type_allowed(char c, bool is_floating) noexcept {
 
 } // namespace
 
+// Maximum accepted `width` field. Anything larger would make emit_number pad a
+// multi-megabyte string and could exhaust string capacity (std::length_error);
+// per spec §0 the formatter must never throw, so an oversized width is
+// rejected like an oversized precision.
+namespace {
+constexpr std::size_t kMaxWidth = 8192;
+} // namespace
+
 number_parts parse_number_spec(string_view spec, bool is_floating,
                                error_info* err) {
     number_parts p;
-    const auto fail = [&p, err]() {
+    const auto fail = [&p, err](error_code code = error_code::unexpected_token) {
         p.ok = false;
-        p.err = error_code::unexpected_token;
+        p.err = code;
         if (err != nullptr) {
-            err->code = error_code::unexpected_token;
+            err->code = code;
         }
     };
     const std::size_t n = spec.size();
@@ -331,12 +338,16 @@ number_parts parse_number_spec(string_view spec, bool is_floating,
         } else if (c >= '0' && c <= '9') {
             width_started = true;
             const std::size_t d = static_cast<std::size_t>(c - '0');
-            const std::size_t max = (std::numeric_limits<std::size_t>::max)();
-            if (p.width > (max - d) / 10) {
-                p.width = max; // clamp instead of wrapping
-            } else {
-                p.width = p.width * 10 + d;
+            if (p.width > kMaxWidth) { // never pad beyond the documented bound
+                fail(error_code::invalid_number);
+                return p;
             }
+            if (p.width > kMaxWidth / 10 ||
+                p.width * 10 > kMaxWidth - d) { // overflow of the bound
+                fail(error_code::invalid_number);
+                return p;
+            }
+            p.width = p.width * 10 + d;
         } else if (type_allowed(c, is_floating)) {
             p.type = c;
             if (i + 1 != n) { // the type must be the last component

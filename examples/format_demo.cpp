@@ -201,6 +201,12 @@ int main() {
         show("node_to_string(&doc, \".1f\")", node_to_string(&doc, ".1f"),
              "{\"n\":7,\"x\":2.5,\"arr\":[1]}");
         show("node_to_string scalar", node_to_string(n), "7");
+        // Fail-safe: a null node yields an empty string and an error code.
+        error_info null_err;
+        const std::string null_out = node_to_string(nullptr, "", &null_err);
+        std::cout << "    node_to_string(nullptr) -> \"" << null_out
+                  << "\" code=" << static_cast<int>(null_err.code)
+                  << " (" << null_err.message() << ")  [fail-safe]\n";
 
         // format_reflected walks the type_desc field table.
         rtti_demo_format::FormatDemoPoint pt;

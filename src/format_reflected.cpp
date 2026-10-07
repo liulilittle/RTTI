@@ -63,8 +63,15 @@ inline std::string node_to_string_impl(const value_io* node, string_view spec,
             if (t.empty() && !spec.empty()) {
                 // A spec valid for reals but not for integers (e.g. ".2f"):
                 // fall back to the plain decimal form instead of emitting "".
-                return rtti::detail::format_number_signed(
+                // The first (rejected) attempt already recorded its error; the
+                // graceful fallback is a success, so its outcome must win
+                // ("write err only on failure").
+                const std::string d = rtti::detail::format_number_signed(
                     i, string_view(), err);
+                if (err != nullptr && !d.empty()) {
+                    err->code = error_code::ok;
+                }
+                return d;
             }
             return t;
         }
@@ -75,8 +82,12 @@ inline std::string node_to_string_impl(const value_io* node, string_view spec,
             }
             std::string t = rtti::detail::format_number_real(d, spec, err);
             if (t.empty() && !spec.empty()) {
-                return rtti::detail::format_number_real(
+                const std::string fallback = rtti::detail::format_number_real(
                     d, string_view(), err);
+                if (err != nullptr && !fallback.empty()) {
+                    err->code = error_code::ok;
+                }
+                return fallback;
             }
             return t;
         }

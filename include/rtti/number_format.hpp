@@ -146,7 +146,8 @@ std::string node_to_string(const value_io* node,
 // Reflection-driven formatting (spec §7.4): walk the reflected field table of
 // T (registered with RTTI_DEFINE_TYPE*) and render the object as a compact
 // object line. The optional spec is applied to every numeric field value.
-// Returns an empty string when T has no field table or the walk fails.
+// A zero-field table renders as "{}"; a failed field read returns an empty
+// string (never throws).
 template <typename T>
 std::string format_reflected(const T& obj, string_view spec = string_view(),
                              error_info* err = nullptr) {
