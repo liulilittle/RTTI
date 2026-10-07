@@ -30,6 +30,8 @@ set(RTTI_TEST_SOURCES
     method_reflect_test.cpp
     ioc_test.cpp
     fuzz_test.cpp
+    string_ops_test.cpp
+    format_test.cpp
 )
 
 # Format adapter tests compile only when their feature gate is on (default ON).
@@ -60,6 +62,26 @@ endif()
 if(RTTI_ENABLE_PROTO)
   list(APPEND RTTI_TEST_SOURCES proto_test.cpp)
   list(APPEND RTTI_TEST_SOURCES proto_schema_test.cpp)
+endif()
+# flat_test / flat_schema_test include <rtti/flat.hpp> which hard-#errors when
+# the flatbuffers adapter is disabled, so they compile only under the FLAT gate.
+if(RTTI_ENABLE_FLAT)
+  list(APPEND RTTI_TEST_SOURCES flat_test.cpp)
+  # flat_schema_test provides its own main (RTTI_TEST_MAIN, see test harness),
+  # so it must build as a standalone executable instead of joining rtti_tests.
+  add_executable(rtti_flat_schema_tests flat_schema_test.cpp)
+  target_link_libraries(rtti_flat_schema_tests PRIVATE rtti)
+  target_compile_features(rtti_flat_schema_tests PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(rtti_flat_schema_tests PRIVATE /W4 /permissive-)
+    target_link_options(rtti_flat_schema_tests PRIVATE /STACK:16777216)
+  else()
+    target_compile_options(rtti_flat_schema_tests PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  add_test(NAME rtti_flat_schema_tests COMMAND rtti_flat_schema_tests)
+  # flat_schema_test deliberately reads the committed official fixtures from the
+  # repository directory (test comment), so run it from the source root.
+  set_tests_properties(rtti_flat_schema_tests PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
 
 add_executable(rtti_tests ${RTTI_TEST_SOURCES})
