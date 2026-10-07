@@ -1,0 +1,13 @@
+own: 7
+[rtti.fixt.extra]: 42
+[rtti.fixt.who]: "rtti"
+[rtti.fixt.tags]: 1
+[rtti.fixt.tags]: 2
+[rtti.fixt.tags]: 3
+[rtti.fixt.ptr] {
+  x: 9
+}
+[rtti.fixt.kind]: KIND_ONE
+[rtti.fixt.z]: -5
+[rtti.fixt.ratio]: 1.5
+[rtti.fixt.ok]: true

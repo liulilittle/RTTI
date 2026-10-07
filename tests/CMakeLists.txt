@@ -62,6 +62,22 @@ endif()
 if(RTTI_ENABLE_PROTO)
   list(APPEND RTTI_TEST_SOURCES proto_test.cpp)
   list(APPEND RTTI_TEST_SOURCES proto_schema_test.cpp)
+  # proto_extension_test provides its own main (RTTI_TEST_MAIN, see the test
+  # harness) and reads the committed official protoc fixtures from the
+  # repository directory, so it builds as a standalone executable like
+  # rtti_flat_schema_tests.
+  add_executable(rtti_proto_extension_tests proto_extension_test.cpp)
+  target_link_libraries(rtti_proto_extension_tests PRIVATE rtti)
+  target_compile_features(rtti_proto_extension_tests PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(rtti_proto_extension_tests PRIVATE /W4 /permissive-)
+    target_link_options(rtti_proto_extension_tests PRIVATE /STACK:16777216)
+  else()
+    target_compile_options(rtti_proto_extension_tests PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  add_test(NAME rtti_proto_extension_tests COMMAND rtti_proto_extension_tests)
+  set_tests_properties(rtti_proto_extension_tests PROPERTIES
+                       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
 # flat_test / flat_schema_test include <rtti/flat.hpp> which hard-#errors when
 # the flatbuffers adapter is disabled, so they compile only under the FLAT gate.

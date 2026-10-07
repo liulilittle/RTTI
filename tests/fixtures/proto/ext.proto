@@ -1,0 +1,30 @@
+// proto2 extension fixture (Task 4): message Base declares an extension
+// range; the top-level extend blocks define scalar/enum/message/repeated
+// extensions against Base. Official protoc 36.2 encodes/decodes Ext.Base.
+syntax = "proto2";
+package rtti.fixt;
+
+message Ptr {
+  optional int32 x = 1;
+}
+
+enum Kind {
+  KIND_ZERO = 0;
+  KIND_ONE = 1;
+}
+
+message Base {
+  extensions 100 to 199;
+  optional int32 own = 1;
+}
+
+extend Base {
+  optional int32 extra = 100;
+  optional string who = 101;
+  repeated int32 tags = 102 [packed = true];
+  optional Ptr ptr = 103;
+  optional Kind kind = 104;
+  optional sint64 z = 105;
+  optional double ratio = 106;
+  optional bool ok = 107;
+}
