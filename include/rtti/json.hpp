@@ -37,6 +37,7 @@
 #include <string>
 #include <system_error>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -48,6 +49,7 @@
 
 #include <rtti/error.hpp>
 #include <rtti/memory.hpp>
+#include <rtti/naming.hpp>
 #include <rtti/reflection.hpp>
 #include <rtti/convert.hpp>
 #include <rtti/detail/scan.hpp>
@@ -55,10 +57,22 @@
 namespace rtti {
 namespace json {
 
+// Re-exported so cfg.key_case = rtti::json::key_case::snake reads naturally.
+using rtti::detail::key_case;
+
 // DOM write options.
 struct write_config {
     int indent = 2;          // 0 = compact single line; >0 = pretty with spaces
     bool sort_keys = false;  // optional deterministic key order
+    // Reflected-field key naming (Task D1). Fields default to identity /
+    // no rename map / keep-empty so existing call sites are unchanged. All
+    // new fields are appended AFTER the original members so legacy positional
+    // aggregate initialization (e.g. write_config{0, false}) keeps mapping
+    // indent/sort_keys exactly as before.
+    char indent_char = ' ';  // indentation fill character (e.g. '\t')
+    detail::key_case key_case = detail::key_case::identity;
+    const std::map<std::string, std::string>* rename_map = nullptr;
+    bool skip_empty = false;
 };
 
 // Streaming event callbacks (SAX): a single-pass pull of the document without
@@ -163,6 +177,13 @@ struct node : public rtti::value_io {
     std::size_t slen = 0;                                // payload length in bytes
     std::vector<node*> arr;                              // array children
     std::vector<std::pair<const char*, node*>> obj;      // object entries, key in arena
+    // Lazy key index for large objects. Keys are string_views over the
+    // arena-duplicated key bytes, so they stay valid for the document
+    // lifetime; the index is built on first get_key once the object grows
+    // past kHashThreshold and stays in sync on set_key. Small objects keep
+    // the linear scan (no per-node allocation overhead).
+    mutable std::unordered_map<string_view, node*> hash_;
+    mutable bool hash_valid_ = false;
 
     rtti::memory_arena* arena = nullptr;                 // owning document's arena
     std::vector<node*>* owned = nullptr;                 // document's node pool
@@ -257,6 +278,10 @@ struct node : public rtti::value_io {
         }
         const char* kp = arena->dup(key.data(), key.size());
         obj.emplace_back(kp, static_cast<node*>(v));
+        if (hash_valid_) {
+            // Keep the lazy index in sync so a later get_key stays O(1).
+            hash_.emplace(string_view(kp, key.size()), static_cast<node*>(v));
+        }
     }
     value_io* make_scalar(field_value v) override {
         reset();
@@ -312,9 +337,33 @@ private:
         slen = 0;
         arr.clear();
         obj.clear();
+        hash_.clear();
+        hash_valid_ = false;
+    }
+    void build_index() const {
+        hash_.reserve(obj.size());
+        for (const auto& e : obj) {
+            // emplace keeps the first entry on duplicate keys, matching the
+            // first-match semantics of the linear scan.
+            hash_.emplace(
+                string_view(e.first, std::char_traits<char>::length(e.first)),
+                e.second);
+        }
+        hash_valid_ = true;
     }
     bool get_key_impl(string_view key, value_io*& out) const {
         if (k != rtti::value_io::kind::object) {
+            return false;
+        }
+        if (!hash_valid_ && obj.size() > kHashThreshold) {
+            build_index();
+        }
+        if (hash_valid_) {
+            const auto it = hash_.find(key);
+            if (it != hash_.end()) {
+                out = it->second;
+                return true;
+            }
             return false;
         }
         for (const auto& e : obj) {
@@ -326,13 +375,14 @@ private:
         }
         return false;
     }
+    static constexpr std::size_t kHashThreshold = 8;
 };
 
 } // namespace detail
 
 // --- document implementation ----------------------------------------------
 
-detail::node* document::new_node() {
+inline detail::node* document::new_node() {
     detail::node* raw = arena_.alloc_obj<detail::node>();
     if (raw == nullptr) {
         return nullptr;
@@ -343,11 +393,11 @@ detail::node* document::new_node() {
     return raw;
 }
 
-document::~document() {
+inline document::~document() {
     destroy_nodes();
 }
 
-void document::destroy_nodes() noexcept {
+inline void document::destroy_nodes() noexcept {
     // Nodes are carved from arena blocks; the arena reclaims the bytes without
     // running destructors, and the two child vectors (arr/obj) hold heap
     // buffers of their own, so each node gets an explicit destructor call.
@@ -359,7 +409,7 @@ void document::destroy_nodes() noexcept {
     owned_.clear();
 }
 
-document::document(document&& other) noexcept
+inline document::document(document&& other) noexcept
     : max_depth_(other.max_depth_),
       arena_(std::move(other.arena_)),
       owned_(std::move(other.owned_)),
@@ -375,7 +425,7 @@ document::document(document&& other) noexcept
     }
 }
 
-document& document::operator=(document&& other) noexcept {
+inline document& document::operator=(document&& other) noexcept {
     if (this != &other) {
         destroy_nodes();    // teardown the current node pool
         root_ = nullptr;
@@ -394,71 +444,71 @@ document& document::operator=(document&& other) noexcept {
     return *this;
 }
 
-value_io::kind document::type() const noexcept {
+inline value_io::kind document::type() const noexcept {
     return root_ != nullptr ? root_->type() : value_io::kind::null;
 }
-bool document::as_bool(bool& out) const noexcept {
+inline bool document::as_bool(bool& out) const noexcept {
     return root_ != nullptr && root_->as_bool(out);
 }
-bool document::as_integer(int64_t& out) const noexcept {
+inline bool document::as_integer(int64_t& out) const noexcept {
     return root_ != nullptr && root_->as_integer(out);
 }
-bool document::as_real(double& out) const noexcept {
+inline bool document::as_real(double& out) const noexcept {
     return root_ != nullptr && root_->as_real(out);
 }
-bool document::as_string(string_view& out) const noexcept {
+inline bool document::as_string(string_view& out) const noexcept {
     return root_ != nullptr && root_->as_string(out);
 }
-std::size_t document::size() const noexcept {
+inline std::size_t document::size() const noexcept {
     return root_ != nullptr ? root_->size() : 0;
 }
-value_io* document::at(std::size_t index) {
+inline value_io* document::at(std::size_t index) {
     return root_ != nullptr ? root_->at(index) : nullptr;
 }
-value_io* document::at(std::size_t index) const {
+inline value_io* document::at(std::size_t index) const {
     return root_ != nullptr ? root_->at(index) : nullptr;
 }
-bool document::get_key(string_view key, value_io*& out) {
+inline bool document::get_key(string_view key, value_io*& out) {
     return root_ != nullptr && root_->get_key(key, out);
 }
-bool document::get_key(string_view key, value_io*& out) const {
+inline bool document::get_key(string_view key, value_io*& out) const {
     return root_ != nullptr && root_->get_key(key, out);
 }
-bool document::get_key_at(std::size_t index, string_view& key,
+inline bool document::get_key_at(std::size_t index, string_view& key,
                           value_io*& out) const {
     return root_ != nullptr && root_->get_key_at(index, key, out);
 }
-value_io* document::make_array() {
+inline value_io* document::make_array() {
     if (root_ == nullptr) {
         root_ = new_node();
     }
     return root_->make_array();
 }
-void document::push_back(value_io* v) {
+inline void document::push_back(value_io* v) {
     if (root_ != nullptr) {
         root_->push_back(v);
     }
 }
-value_io* document::make_object() {
+inline value_io* document::make_object() {
     if (root_ == nullptr) {
         root_ = new_node();
     }
     return root_->make_object();
 }
-void document::set_key(string_view key, value_io* v) {
+inline void document::set_key(string_view key, value_io* v) {
     if (root_ != nullptr) {
         root_->set_key(key, v);
     }
 }
-value_io* document::make_scalar(field_value v) {
+inline value_io* document::make_scalar(field_value v) {
     if (root_ == nullptr) {
         root_ = new_node();
     }
     return root_->make_scalar(v);
 }
-value_io* document::make_node() { return new_node(); }
+inline value_io* document::make_node() { return new_node(); }
 
-std::string document::write(const write_config& cfg) const {
+inline std::string document::write(const write_config& cfg) const {
     std::string out;
     if (root_ != nullptr) {
         detail::serialize_node(*root_, cfg, 0, out);
@@ -468,7 +518,7 @@ std::string document::write(const write_config& cfg) const {
     return out;
 }
 
-void document::write(const write_config& cfg, std::string& out) const {
+inline void document::write(const write_config& cfg, std::string& out) const {
     if (root_ != nullptr) {
         detail::serialize_node(*root_, cfg, 0, out);
     } else {
@@ -549,7 +599,7 @@ struct parser {
     void utf8_encode(std::uint32_t cp, std::string& out);
 };
 
-node* parser::parse_value(std::size_t depth) {
+inline node* parser::parse_value(std::size_t depth) {
     skip_ws();
     if (pos >= src.size()) {
         err = fail(error_code::unexpected_token, pos);
@@ -580,7 +630,7 @@ node* parser::parse_value(std::size_t depth) {
     }
 }
 
-node* parser::parse_object(std::size_t depth) {
+inline node* parser::parse_object(std::size_t depth) {
     const std::size_t limit =
         (doc != nullptr) ? doc->max_depth_ : stream_max_depth;
     if (depth >= limit) {
@@ -666,7 +716,7 @@ node* parser::parse_object(std::size_t depth) {
     }
 }
 
-node* parser::parse_array(std::size_t depth) {
+inline node* parser::parse_array(std::size_t depth) {
     const std::size_t limit =
         (doc != nullptr) ? doc->max_depth_ : stream_max_depth;
     if (depth >= limit) {
@@ -721,7 +771,7 @@ node* parser::parse_array(std::size_t depth) {
     }
 }
 
-node* parser::parse_literal() {
+inline node* parser::parse_literal() {
     if (pos + 4 <= src.size() && src.compare(pos, 4, "true") == 0) {
         pos += 4;
         if (events != nullptr) {
@@ -764,7 +814,7 @@ node* parser::parse_literal() {
     return nullptr;
 }
 
-node* parser::parse_string_node() {
+inline node* parser::parse_string_node() {
     string_view direct;
     bool escaped = false;
     std::string decoded;
@@ -795,7 +845,7 @@ node* parser::parse_string_node() {
     return n;
 }
 
-node* parser::parse_number() {
+inline node* parser::parse_number() {
     const std::size_t start = pos;
     // The digit runs below stay as the original byte loops: scan.hpp exposes
     // structural-character/whitespace masks only, not a digit mask, and the
@@ -899,24 +949,30 @@ node* parser::parse_number() {
 // into the source when no escapes were present, otherwise `decoded` holds the
 // decoded bytes (escaped flag tells the caller which one to use).
 //
-// The quote/backslash scan intentionally keeps the original per-byte loop:
-// string bodies in typical documents are a few bytes long, and routing them
-// through scan.hpp (whose fixed per-call setup only pays off at or beyond its
-// 16-byte SIMD block) measured roughly 20-35% slower on the standard dense
-// 1MB benchmark. Only whitespace skipping uses the shared scanner (see
-// skip_ws).
-bool parser::scan_string(string_view& direct, bool& escaped,
+// The literal stretch between the opening quote (or an escape) and the next
+// quote/backslash is located with scan.hpp's find_first_of + json_string_mask
+// (SIMD-accelerated on x86); the control-character check and the escape
+// decoding stay per-byte because only they need byte-level decisions.
+// Interleaved bench_parse measurements on the standard dense 1MB document
+// showed no measurable regression from this swap (median 2.1 vs 2.1 MB/s,
+// Debug, contested machine), so it is kept; only whitespace skipping shares
+// the scanner today.
+inline bool parser::scan_string(string_view& direct, bool& escaped,
                          std::string& decoded) {
     const std::size_t open = pos;
     ++pos;
     const std::size_t start = pos;
-    while (pos < src.size() && src[pos] != '"' && src[pos] != '\\') {
-        if (static_cast<unsigned char>(src[pos]) < 0x20) {
-            err = fail(error_code::unexpected_token, pos);
+    const char* body = rtti::detail::find_first_of(
+        src.data() + pos, src.data() + src.size(),
+        rtti::detail::json_string_mask());
+    for (const char* p = src.data() + pos; p < body; ++p) {
+        if (static_cast<unsigned char>(*p) < 0x20) {
+            err = fail(error_code::unexpected_token,
+                       static_cast<std::size_t>(p - src.data()));
             return false;
         }
-        ++pos;
     }
+    pos = static_cast<std::size_t>(body - src.data());
     if (pos >= src.size()) {
         err = fail(error_code::unterminated_string, open);
         return false;
@@ -997,7 +1053,7 @@ bool parser::scan_string(string_view& direct, bool& escaped,
 }
 
 // Decode a \uXXXX escape (surrogate pairs supported) at src[pos].
-bool parser::decode_u_hex(std::string& out) {
+inline bool parser::decode_u_hex(std::string& out) {
     const std::size_t esc = pos - 2; // position of the backslash
     if (pos + 4 > src.size()) {
         err = fail(error_code::invalid_utf8, esc);
@@ -1057,7 +1113,7 @@ bool parser::decode_u_hex(std::string& out) {
     return true;
 }
 
-void parser::utf8_encode(std::uint32_t cp, std::string& out) {
+inline void parser::utf8_encode(std::uint32_t cp, std::string& out) {
     if (cp < 0x80) {
         out.push_back(static_cast<char>(cp));
     } else if (cp < 0x800) {
@@ -1131,7 +1187,7 @@ inline void append_newline_indent(const write_config& cfg, int level,
     out.push_back('\n');
     out.append(static_cast<std::size_t>(cfg.indent) *
                    static_cast<std::size_t>(level),
-               ' ');
+               cfg.indent_char);
 }
 
 // Shortest round-tripping real; JSON has no Inf/NaN, so those become null.
@@ -1140,10 +1196,7 @@ inline void append_real(double value, std::string& out) {
         out += "null";
         return;
     }
-    char buf[32];
-    const auto res = std::to_chars(buf, buf + sizeof(buf), value,
-                                   std::chars_format::general);
-    out.append(buf, static_cast<std::size_t>(res.ptr - buf));
+    rtti::detail::format_real(value, out);
 }
 
 inline void serialize_node(const node& n, const write_config& cfg, int level,
@@ -1221,7 +1274,7 @@ inline void serialize_node(const node& n, const write_config& cfg, int level,
 
 // Parse `src` into a document. Returns error_info with a byte offset on
 // failure.
-result<document> parse(string_view src) {
+inline result<document> parse(string_view src) {
     result<document> r;
     document doc;
     detail::parser p;
@@ -1252,7 +1305,7 @@ result<document> parse(string_view src) {
 // Returns ok on a full successful parse; a callback returning false cancels
 // the parse and also yields ok (an early stop is not an error). Syntax errors
 // yield the usual error_info.
-result<void> parse_stream(string_view src, const parse_events& events) {
+inline result<void> parse_stream(string_view src, const parse_events& events) {
     result<void> r;
     detail::parser p;
     p.src = src;
@@ -1281,14 +1334,14 @@ result<void> parse_stream(string_view src, const parse_events& events) {
 }
 
 // Serialize a document to a string.
-std::string serialize(const document& doc, const write_config& cfg = {}) {
+inline std::string serialize(const document& doc, const write_config& cfg = {}) {
     return doc.write(cfg);
 }
 
 // Serialize a document into a caller-provided buffer, avoiding an intermediate
 // std::string. The buffer is cleared first, so repeated calls to the same
 // buffer overwrite (never append); no stale trailing bytes survive.
-void serialize(const document& doc, std::string& out,
+inline void serialize(const document& doc, std::string& out,
                const write_config& cfg = {}) {
     out.clear();
     doc.write(cfg, out);
@@ -1319,15 +1372,57 @@ result<T> parse_as(string_view src) {
 }
 
 // rtti::to_value(root, obj) -> serialize. Returns an empty string when the
-// conversion fails (e.g. an enum value not present in its label table).
+// conversion fails (e.g. an enum value not present in its label table). When
+// the config carries a naming policy (key_case / rename_map / skip_empty),
+// the conversion goes through to_value_named so reflected field keys follow
+// the policy; with a default config the plain to_value path is used unchanged.
 template <typename T>
 std::string serialize(const T& obj, const write_config& cfg = {}) {
     document doc;
-    const error_code e = rtti::to_value(&doc, obj);
+    error_code e = error_code::ok;
+    if (cfg.rename_map == nullptr && cfg.key_case == rtti::detail::key_case::identity &&
+        !cfg.skip_empty) {
+        e = rtti::to_value(&doc, obj);
+    } else {
+        const rtti::detail::naming_policy np{cfg.key_case, cfg.rename_map,
+                                       cfg.skip_empty};
+        e = rtti::to_value_named(&doc, obj, np);
+    }
     if (e != error_code::ok) {
         return std::string();
     }
     return serialize(doc, cfg);
+}
+
+// Config-aware parse: parse `src`, then convert with from_value_named so
+// output keys written under the same naming policy map back to field names.
+template <typename T>
+result<T> parse_as(string_view src, const write_config& cfg) {
+    result<T> r;
+    result<document> parsed = parse(src);
+    if (!parsed.ok()) {
+        r.err = parsed.err;
+        return r;
+    }
+    T out{};
+    error_code e = error_code::ok;
+    if (cfg.rename_map == nullptr && cfg.key_case == rtti::detail::key_case::identity &&
+        !cfg.skip_empty) {
+        e = rtti::from_value(&parsed.value, out);
+    } else {
+        const rtti::detail::naming_policy np{cfg.key_case, cfg.rename_map,
+                                       cfg.skip_empty};
+        e = rtti::from_value_named(&parsed.value, out, np);
+    }
+    if (e != error_code::ok) {
+        r.err.code = e;
+        r.err.src = src.data();
+        r.err.src_len = src.size();
+        r.err.offset = 0;
+        return r;
+    }
+    r.value = std::move(out);
+    return r;
 }
 
 } // namespace json

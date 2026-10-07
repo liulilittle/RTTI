@@ -33,6 +33,7 @@
 
 #include <rtti/convert.hpp>
 #include <rtti/memory.hpp>
+#include <rtti/naming.hpp>
 #include <rtti/detail/scan.hpp>
 
 #include <cctype>
@@ -50,11 +51,21 @@
 namespace rtti {
 namespace xml {
 
+// Re-exported so cx.key_case = rtti::xml::key_case::snake reads naturally.
+using rtti::detail::key_case;
+
 // Serialization options.
 struct write_config {
     bool with_declaration = true;  // emit "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     int indent = 4;                // 0 = compact; >0 = pretty with that many spaces
-    // Future extension points: entity-escaping policy, line terminator, etc.
+    // Reflected-field key naming (Task D1/D2). Defaults keep existing call
+    // sites unchanged. New fields are appended AFTER the original members so
+    // legacy positional aggregate initialization (e.g. write_config{true, 4})
+    // keeps mapping with_declaration/indent exactly as before.
+    char indent_char = ' ';        // indentation fill character (e.g. '\t')
+    detail::key_case key_case = detail::key_case::identity;
+    const std::map<std::string, std::string>* rename_map = nullptr;
+    bool skip_empty = false;
 };
 
 // Parse options.
@@ -325,7 +336,7 @@ public:
                 scalar_str = std::to_string(v.as_integer());
                 break;
             case rtti::field_value::kind::real:
-                scalar_str = format_real(v.as_real());
+                rtti::detail::format_real(v.as_real(), scalar_str);
                 break;
             default:
                 scalar_str.clear();
@@ -507,12 +518,6 @@ private:
         }
         return true;
     }
-
-    static std::string format_real(double d) {
-        char buf[64];
-        const int n = std::snprintf(buf, sizeof(buf), "%.17g", d);
-        return std::string(buf, n > 0 ? static_cast<std::size_t>(n) : 0);
-    }
 };
 
 } // namespace detail
@@ -584,6 +589,14 @@ public:
         return root_->make_scalar(v);
     }
     value_io* make_node() override { return create_node(); }
+
+    // Copy `s` into this document's arena and return a stable NUL-terminated
+    // pointer. Write-side element names (assigned through set_key) are stored
+    // as string_views, so transient keys (e.g. a named-conversion std::string
+    // temporary) are interned here to outlive the document.
+    const char* intern(string_view s) {
+        return arena_.dup(s.data(), s.size());
+    }
 
     // Returns the in-scope namespace URI bound to `prefix` at `elem`
     // (nullptr meaning the root element); empty string when unbound.
@@ -671,7 +684,7 @@ inline document::~document() {
     destroy_nodes();
 }
 
-document::document(document&& other) noexcept
+inline document::document(document&& other) noexcept
     : root_(other.root_),
       owned_(std::move(other.owned_)),
       arena_(std::move(other.arena_)),
@@ -689,7 +702,7 @@ document::document(document&& other) noexcept
     }
 }
 
-document& document::operator=(document&& other) noexcept {
+inline document& document::operator=(document&& other) noexcept {
     if (this != &other) {
         destroy_nodes();  // teardown the current node pool
         root_ = other.root_;
@@ -734,6 +747,13 @@ inline void detail::node::set_key(string_view key, value_io* v) {
 inline void detail::node::attach_under_key(string_view key, node* v) {
     if (v == nullptr) {
         return;
+    }
+    // Element names are string_views; intern the key so it stays valid for
+    // the document lifetime even when the caller passed a temporary (the
+    // named-conversion path in convert.hpp does exactly that).
+    if (owner != nullptr) {
+        const char* kp = owner->intern(key);
+        key = string_view(kp, key.size());
     }
     if (v->wm == wmode::array) {
         for (node* c : v->children) {
@@ -1748,10 +1768,10 @@ inline void escape_attr(std::string& out, string_view s) {
 }
 
 inline void render_element(const node* n, std::string& out, std::size_t depth, bool pretty,
-                           std::size_t indent);
+                           std::size_t indent, char indent_char);
 
 inline void render_node(const node* n, std::string& out, std::size_t depth, bool pretty,
-                        std::size_t indent) {
+                        std::size_t indent, char indent_char) {
     switch (n->kind) {
         case nkind::text:
             escape_text(out, n->data);
@@ -1776,7 +1796,7 @@ inline void render_node(const node* n, std::string& out, std::size_t depth, bool
             out += "?>";
             break;
         case nkind::element:
-            render_element(n, out, depth, pretty, indent);
+            render_element(n, out, depth, pretty, indent, indent_char);
             break;
         default:
             break;
@@ -1784,7 +1804,7 @@ inline void render_node(const node* n, std::string& out, std::size_t depth, bool
 }
 
 inline void render_element(const node* n, std::string& out, std::size_t depth, bool pretty,
-                           std::size_t indent) {
+                           std::size_t indent, char indent_char) {
     out.push_back('<');
     append_view(out, n->name);
     for (const auto& a : n->attrs) {
@@ -1811,13 +1831,13 @@ inline void render_element(const node* n, std::string& out, std::size_t depth, b
     for (const node* c : n->children) {
         if (!inline_content && pretty) {
             out.push_back('\n');
-            out.append((depth + 1) * indent, ' ');
+            out.append((depth + 1) * indent, indent_char);
         }
-        render_node(c, out, depth + 1, pretty, indent);
+        render_node(c, out, depth + 1, pretty, indent, indent_char);
     }
     if (!inline_content && pretty) {
         out.push_back('\n');
-        out.append(depth * indent, ' ');
+        out.append(depth * indent, indent_char);
     }
     out += "</";
     append_view(out, n->name);
@@ -1829,13 +1849,13 @@ inline void render_element(const node* n, std::string& out, std::size_t depth, b
 namespace detail {
 
 inline void render_misc(const std::vector<node*>& misc, std::string& out, bool pretty,
-                        std::size_t indent) {
+                        std::size_t indent, char indent_char) {
     for (const node* n : misc) {
         if (pretty) {
             out.push_back('\n');
             (void)indent;
         }
-        render_node(n, out, 0, pretty, indent);
+        render_node(n, out, 0, pretty, indent, indent_char);
     }
 }
 
@@ -1857,17 +1877,17 @@ inline void serialize_into(const document& doc, const write_config& cfg,
             out.push_back('\n');
         }
     }
-    render_misc(doc.prolog_nodes(), out, pretty, indent);
+    render_misc(doc.prolog_nodes(), out, pretty, indent, cfg.indent_char);
     if (doc.root_plus() != nullptr) {
         if (pretty && (!doc.prolog_nodes().empty() || cfg.with_declaration)) {
             out.push_back('\n');
         }
-        render_element(doc.root_plus(), out, 0, pretty, indent);
+        render_element(doc.root_plus(), out, 0, pretty, indent, cfg.indent_char);
         if (pretty) {
             out.push_back('\n');
         }
     }
-    render_misc(doc.epilog_nodes(), out, pretty, indent);
+    render_misc(doc.epilog_nodes(), out, pretty, indent, cfg.indent_char);
 }
 
 } // namespace detail
@@ -1902,10 +1922,45 @@ inline result<T> parse_as(string_view src) {
     return out;
 }
 
+// Config-aware parse: output keys written under the same naming policy map
+// back to field names through from_value_named.
+template <typename T>
+inline result<T> parse_as(string_view src, const write_config& cfg) {
+    result<T> out;
+    const result<document> rd = parse(src);
+    if (!rd.ok()) {
+        out.err = rd.err;
+        return out;
+    }
+    error_code e = error_code::ok;
+    if (cfg.rename_map == nullptr && cfg.key_case == rtti::detail::key_case::identity &&
+        !cfg.skip_empty) {
+        e = rtti::from_value(&rd.value, out.value);
+    } else {
+        const rtti::detail::naming_policy np{cfg.key_case, cfg.rename_map,
+                                       cfg.skip_empty};
+        e = rtti::from_value_named(&rd.value, out.value, np);
+    }
+    out.err.code = e;
+    if (e != error_code::ok) {
+        out.err.src = src.data();
+        out.err.src_len = src.size();
+    }
+    return out;
+}
+
 template <typename T>
 inline std::string serialize(const T& obj, const write_config& cfg = {}) {
     document doc;
-    const error_code e = rtti::to_value(&doc, obj);
+    error_code e = error_code::ok;
+    if (cfg.rename_map == nullptr && cfg.key_case == rtti::detail::key_case::identity &&
+        !cfg.skip_empty) {
+        e = rtti::to_value(&doc, obj);
+    } else {
+        const rtti::detail::naming_policy np{cfg.key_case, cfg.rename_map,
+                                       cfg.skip_empty};
+        e = rtti::to_value_named(&doc, obj, np);
+    }
     if (e != error_code::ok) {
         return std::string();
     }

@@ -25,6 +25,11 @@ const char* to_string(error_code code) noexcept {
         case error_code::no_such_field: return "no such field";
         case error_code::kind_mismatch: return "kind mismatch";
         case error_code::missing_key: return "missing key";
+        case error_code::proto_truncated: return "truncated protobuf field";
+        case error_code::proto_bad_field: return "invalid protobuf field";
+        case error_code::proto_type_mismatch: return "protobuf wire type mismatch";
+        case error_code::overflow: return "overflow";
+        case error_code::no_such_method: return "no such method";
     }
     return "unknown error";
 }

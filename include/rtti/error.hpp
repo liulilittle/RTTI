@@ -29,7 +29,12 @@ enum class error_code : uint8_t {
     ini_missing_value,
     no_such_field,
     kind_mismatch,
-    missing_key
+    missing_key,
+    proto_truncated,
+    proto_bad_field,
+    proto_type_mismatch,
+    overflow,
+    no_such_method
 };
 
 // Human-readable English message for a code. Never returns nullptr.

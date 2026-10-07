@@ -154,6 +154,16 @@ inline char_mask json_structural_mask() noexcept {
     return m;
 }
 
+// Mask of the characters that terminate a JSON string literal: the closing
+// quote and the escape backslash. Useful with find_first_of to locate the
+// end of a string body (or an escape that needs decoding) in one shot.
+inline char_mask json_string_mask() noexcept {
+    char_mask m;
+    m.set('"');
+    m.set('\\');
+    return m;
+}
+
 // Mask of XML special bytes: < > & " '.
 inline char_mask xml_special_mask() noexcept {
     char_mask m;

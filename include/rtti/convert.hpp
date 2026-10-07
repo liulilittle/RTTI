@@ -7,21 +7,31 @@
 // arrive in Task 7.
 // English comments only; C++17; no third-party dependencies.
 
+#include <charconv>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include <rtti/base_convert.hpp>
+#include <rtti/date_time.hpp>
 #include <rtti/error.hpp>
+#include <rtti/naming.hpp>
 #include <rtti/reflection.hpp>
 
 namespace rtti {
@@ -38,36 +48,293 @@ namespace rtti {
 
 // --- Scalar converter -------------------------------------------------------
 
+namespace detail {
+
+// True for plain char. Spec §23.1 treats char as an ASCII byte (0..255) when
+// converting between char and integers (distinct from signed char / unsigned
+// char, which keep their own numeric_limits lanes). Serialization emits the
+// byte value so an int -> char -> int round trip is exact for the full byte
+// lane.
+template <typename T>
+struct is_plain_char : std::bool_constant<std::is_same<T, char>::value> {};
+
+// Range-checked int64 -> integral T (spec §23.1 integer family). Overflow
+// returns error_code::overflow and the target is never modified on failure.
+template <typename T>
+inline error_code scalar_int64_to_integral(std::int64_t v, T& out) {
+    if constexpr (is_plain_char<T>::value) {
+        if (v < 0 ||
+            static_cast<std::uint64_t>(v) >
+                static_cast<std::uint64_t>(
+                    (std::numeric_limits<unsigned char>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(static_cast<unsigned char>(v));
+        return error_code::ok;
+    } else if constexpr (std::is_unsigned<T>::value) {
+        if (v < 0 ||
+            static_cast<std::uint64_t>(v) >
+                static_cast<std::uint64_t>((std::numeric_limits<T>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(v);
+        return error_code::ok;
+    } else {
+        if (v < static_cast<std::int64_t>((std::numeric_limits<T>::min)()) ||
+            v > static_cast<std::int64_t>((std::numeric_limits<T>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(v);
+        return error_code::ok;
+    }
+}
+
+// Range-checked uint64 -> integral T. Used by the exact integer-text lane so
+// UINT64_MAX round trips without double precision loss.
+template <typename T>
+inline error_code scalar_uint64_to_integral(std::uint64_t v, T& out) {
+    if constexpr (is_plain_char<T>::value) {
+        if (v > static_cast<std::uint64_t>(255u)) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(static_cast<unsigned char>(v));
+        return error_code::ok;
+    } else if constexpr (std::is_unsigned<T>::value) {
+        if (v > static_cast<std::uint64_t>((std::numeric_limits<T>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(v);
+        return error_code::ok;
+    } else {
+        if (v > static_cast<std::uint64_t>((std::numeric_limits<T>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(v);
+        return error_code::ok;
+    }
+}
+
+// Real -> integral T (spec §23.1): truncate toward zero, then range check.
+// NaN/infinities and out-of-range values are overflow; never UB.
+template <typename T>
+inline error_code scalar_real_to_integral(double v, T& out) {
+    if (!std::isfinite(v)) {
+        return error_code::overflow;
+    }
+    const double t = std::trunc(v);
+    if constexpr (is_plain_char<T>::value) {
+        if (t < 0.0 || t > 255.0) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(static_cast<unsigned char>(t));
+        return error_code::ok;
+    } else if constexpr (std::is_unsigned<T>::value) {
+        if (t < 0.0) {
+            return error_code::overflow;
+        }
+        if constexpr (sizeof(T) == 8) {
+            // static_cast<double>(uint64 max) rounds up to 2^64; any double
+            // at or above 2^64 is out of range.
+            if (t >= 18446744073709551616.0) {
+                return error_code::overflow;
+            }
+        } else if (t > static_cast<double>((std::numeric_limits<T>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(t);
+        return error_code::ok;
+    } else {
+        if constexpr (sizeof(T) == 8) {
+            // static_cast<double>(int64 max) rounds up to 2^63: 2^63 itself
+            // is out of range while int64 min (-2^63) is exactly representable.
+            if (t < -9223372036854775808.0 || t >= 9223372036854775808.0) {
+                return error_code::overflow;
+            }
+        } else if (t < static_cast<double>((std::numeric_limits<T>::min)()) ||
+                   t > static_cast<double>((std::numeric_limits<T>::max)())) {
+            return error_code::overflow;
+        }
+        out = static_cast<T>(t);
+        return error_code::ok;
+    }
+}
+
+// Text -> integral T (spec §23.1 "string -> number"). The whole text must be
+// a number: non-numeric text is kind_mismatch, an out-of-range value is
+// overflow. Integer text is read exactly through the uint64 then int64 lanes
+// (so UINT64_MAX does not lose precision in a double); fractional/exponent
+// text goes through the truncated real path.
+template <typename T>
+inline error_code scalar_text_to_integral(string_view s, T& out) {
+    if (s.empty()) {
+        return error_code::kind_mismatch;
+    }
+    std::uint64_t uv = 0;
+    const auto ures = std::from_chars(s.data(), s.data() + s.size(), uv);
+    if (ures.ec == std::errc() && ures.ptr == s.data() + s.size()) {
+        return scalar_uint64_to_integral<T>(uv, out);
+    }
+    std::int64_t iv = 0;
+    const auto ires = std::from_chars(s.data(), s.data() + s.size(), iv);
+    if (ires.ec == std::errc() && ires.ptr == s.data() + s.size()) {
+        return scalar_int64_to_integral<T>(iv, out);
+    }
+    double dv = 0.0;
+    const auto rres = std::from_chars(s.data(), s.data() + s.size(), dv);
+    if (rres.ec == std::errc::result_out_of_range) {
+        return error_code::overflow;
+    }
+    if (rres.ec != std::errc() || rres.ptr != s.data() + s.size()) {
+        return error_code::kind_mismatch;
+    }
+    return scalar_real_to_integral<T>(dv, out);
+}
+
+// Text -> floating T (spec §23.1). The deterministic inf/-inf/nan tokens the
+// library itself serializes round trip; other non-numeric text is
+// kind_mismatch, an out-of-range magnitude is overflow.
+template <typename T>
+inline error_code scalar_text_to_real(string_view s, T& out) {
+    if (s == "inf" || s == "infinity") {
+        out = std::numeric_limits<T>::infinity();
+        return error_code::ok;
+    }
+    if (s == "-inf" || s == "-infinity") {
+        out = -std::numeric_limits<T>::infinity();
+        return error_code::ok;
+    }
+    if (s == "nan") {
+        out = std::numeric_limits<T>::quiet_NaN();
+        return error_code::ok;
+    }
+    const auto res = std::from_chars(s.data(), s.data() + s.size(), out);
+    if (res.ec == std::errc::result_out_of_range) {
+        return error_code::overflow;
+    }
+    if (res.ec != std::errc() || res.ptr != s.data() + s.size()) {
+        return error_code::kind_mismatch;
+    }
+    return error_code::ok;
+}
+
+// Shortest round-tripping real text for the scalar string converter. Mirrors
+// detail::format_real (defined later in this header) so a real source renders
+// the same way everywhere.
+inline void scalar_format_real(double value, std::string& out) {
+    if (!std::isfinite(value)) {
+        if (std::isnan(value)) {
+            out += "nan";
+        } else {
+            out += std::signbit(value) ? "-inf" : "inf";
+        }
+        return;
+    }
+    char buf[64];
+    const auto res = std::to_chars(buf, buf + sizeof(buf), value);
+    const char* const first = buf;
+    const char* const last = res.ptr;
+    out.append(first, static_cast<std::size_t>(last - first));
+    // Inspect only the token just written: an earlier scalar's '.' in a shared
+    // stream must not suppress this token's ".0".
+    bool has_point = false;
+    for (const char* p = first; p != last; ++p) {
+        if (*p == '.' || *p == 'e' || *p == 'E') {
+            has_point = true;
+            break;
+        }
+    }
+    if (!has_point) {
+        out += ".0";
+    }
+}
+
+// Integral target (spec §23.1): try the source lanes in order and apply the
+// matching conversion rule. Range violations never wrap the target.
+template <typename T>
+inline error_code scalar_integral_from(const value_io* src, T& out) {
+    std::int64_t iv = 0;
+    if (src->as_integer(iv)) {
+        return scalar_int64_to_integral<T>(iv, out);
+    }
+    double dv = 0.0;
+    if (src->as_real(dv)) {
+        return scalar_real_to_integral<T>(dv, out);
+    }
+    string_view sv;
+    if (src->as_string(sv)) {
+        return scalar_text_to_integral<T>(sv, out);
+    }
+    bool bv = false;
+    if (src->as_bool(bv)) {
+        out = static_cast<T>(bv ? 1 : 0);
+        return error_code::ok;
+    }
+    return error_code::kind_mismatch;
+}
+
+// Floating target (spec §23.1): real lane directly, integer lane with IEEE
+// precision loss accepted, text lane parsed. NaN/infinity only reach an
+// integer target through a real/text lane and are reported as overflow there.
+template <typename T>
+inline error_code scalar_real_from(const value_io* src, T& out) {
+    double dv = 0.0;
+    if (src->as_real(dv)) {
+        out = static_cast<T>(dv);
+        return error_code::ok;
+    }
+    std::int64_t iv = 0;
+    if (src->as_integer(iv)) {
+        out = static_cast<T>(iv);
+        return error_code::ok;
+    }
+    string_view sv;
+    if (src->as_string(sv)) {
+        return scalar_text_to_real<T>(sv, out);
+    }
+    return error_code::kind_mismatch;
+}
+
+} // namespace detail
+
 template <typename T, typename = void>
 struct converter {
     static error_code from(const value_io* src, T& out) {
         if constexpr (std::is_same<T, bool>::value) {
             bool v = false;
-            if (!src->as_bool(v)) {
-                return error_code::kind_mismatch;
+            if (src->as_bool(v)) {
+                out = v;
+                return error_code::ok;
             }
-            out = v;
-            return error_code::ok;
+            std::int64_t iv = 0;
+            if (src->as_integer(iv)) {
+                // int <-> bool (spec §23.1): 0 -> false, any nonzero -> true.
+                out = (iv != 0);
+                return error_code::ok;
+            }
+            return error_code::kind_mismatch;
         } else if constexpr (std::is_integral<T>::value) {
-            int64_t v = 0;
-            if (!src->as_integer(v)) {
-                return error_code::kind_mismatch;
-            }
-            out = static_cast<T>(v);
-            return error_code::ok;
+            return detail::scalar_integral_from<T>(src, out);
         } else if constexpr (std::is_floating_point<T>::value) {
-            double v = 0.0;
-            if (!src->as_real(v)) {
-                return error_code::kind_mismatch;
-            }
-            out = static_cast<T>(v);
-            return error_code::ok;
+            return detail::scalar_real_from<T>(src, out);
         } else {
             return error_code::kind_mismatch;
         }
     }
 
     static error_code to(value_io* dst, const T& in) {
+        // Unsigned values above INT64_MAX have no int64 scalar lane, so a
+        // silent static_cast would wrap and drop data (spec §0 forbids silent
+        // loss). Report overflow instead; the exact uint64 lane (numeric text
+        // via to_string_base / JSON number reader) is out of scope for the
+        // value_io scalar bridge today. The sizeof gate keeps bool and narrow
+        // unsigned lanes out of the comparison (C4804 / dead check).
+        if constexpr (std::is_unsigned<T>::value &&
+                      sizeof(T) >= sizeof(std::uint64_t)) {
+            if (in > static_cast<std::uint64_t>(
+                         (std::numeric_limits<std::int64_t>::max)())) {
+                return error_code::overflow;
+            }
+        }
         dst->make_scalar(scalar_of(in));
         return error_code::ok;
     }
@@ -77,7 +344,14 @@ private:
         if constexpr (std::is_same<T, bool>::value) {
             return field_value::of(v);
         } else if constexpr (std::is_integral<T>::value) {
-            return field_value::of(static_cast<int64_t>(v));
+            if constexpr (detail::is_plain_char<T>::value) {
+                // char serializes as its ASCII byte value (spec §23.1) so the
+                // full 0..255 lane round trips exactly.
+                return field_value::of(
+                    static_cast<int64_t>(static_cast<unsigned char>(v)));
+            } else {
+                return field_value::of(static_cast<int64_t>(v));
+            }
         } else if constexpr (std::is_floating_point<T>::value) {
             return field_value::of(static_cast<double>(v));
         } else {
@@ -91,11 +365,27 @@ struct converter<std::basic_string<Char, Traits, Alloc>> {
     static error_code from(const value_io* src,
                            std::basic_string<Char, Traits, Alloc>& out) {
         string_view v;
-        if (!src->as_string(v)) {
-            return error_code::kind_mismatch;
+        if (src->as_string(v)) {
+            out.assign(v.data(), v.size());
+            return error_code::ok;
         }
-        out.assign(v.data(), v.size());
-        return error_code::ok;
+        std::int64_t iv = 0;
+        if (src->as_integer(iv)) {
+            // int -> string (spec §23.1): a numeric source reads as its
+            // decimal text.
+            const std::string s = std::to_string(iv);
+            out.assign(s.data(), s.size());
+            return error_code::ok;
+        }
+        double dv = 0.0;
+        if (src->as_real(dv)) {
+            // float -> string (spec §23.1): shortest round-tripping text.
+            std::string s;
+            rtti::detail::scalar_format_real(dv, s);
+            out.assign(s.data(), s.size());
+            return error_code::ok;
+        }
+        return error_code::kind_mismatch;
     }
     static error_code to(value_io* dst,
                          const std::basic_string<Char, Traits, Alloc>& in) {
@@ -140,7 +430,235 @@ struct converter<T, std::enable_if_t<std::is_enum<T>::value &&
     }
 };
 
-// --- Container converters ---------------------------------------------------
+// date_time (spec §14): a scalar timestamp that converts to/from a numeric
+// Unix epoch or ISO 8601 text. Read: a numeric scalar's unit is inferred from
+// the decimal digit count (10 = seconds, 13 = ms, 16 = us, 19/20 = ns) and an
+// ISO text scalar is parsed; anything else is an error. Write: numeric epoch
+// seconds (spec §14.2 default). Non-default output (ms/us/ns or ISO text) is
+// selected through to_value_dt, the documented config surface.
+enum class date_time_output {
+    numeric_seconds,
+    numeric_ms,
+    numeric_us,
+    numeric_ns,
+    iso_string
+};
+
+template <typename T>
+struct converter<T, std::enable_if_t<is_date_time<T>::value>> {
+    static error_code from(const value_io* src, T& out) {
+        if (src == nullptr) {
+            return error_code::no_such_field;
+        }
+        std::int64_t num = 0;
+        if (src->as_integer(num)) {
+            std::int64_t ns = 0;
+            const error_code e = rtti::epoch_ns_from_digits(num, ns);
+            if (e != error_code::ok) {
+                return e;
+            }
+            out = T(ns);
+            return error_code::ok;
+        }
+        string_view text;
+        if (src->as_string(text)) {
+            const result<T> r = T::parse(text);
+            if (r.err.code != error_code::ok) {
+                return r.err.code;
+            }
+            out = r.value;
+            return error_code::ok;
+        }
+        return error_code::kind_mismatch;
+    }
+    static error_code to(value_io* dst, const T& in) {
+        std::int64_t sec = 0;
+        const error_code e = in.to_unix_seconds(sec);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->make_scalar(field_value::of(sec));
+        return error_code::ok;
+    }
+};
+
+// Explicit-output entry point for date_time: numeric epoch seconds (default),
+// ms, us, ns, or the ISO 8601 text form (which preserves sub-second precision
+// exactly). The plain to_value/from_value paths default to numeric seconds on
+// write and auto-detect the unit on read; this is how a caller opts into a
+// different output representation.
+inline error_code to_value_dt(value_io* dst, const date_time& in,
+                              date_time_output mode) {
+    if (dst == nullptr) {
+        return error_code::no_such_field;
+    }
+    std::int64_t v = 0;
+    switch (mode) {
+        case date_time_output::numeric_ms: {
+            const error_code e = in.to_unix_ms(v);
+            if (e != error_code::ok) {
+                return e;
+            }
+            dst->make_scalar(field_value::of(v));
+            return error_code::ok;
+        }
+        case date_time_output::numeric_us: {
+            const error_code e = in.to_unix_us(v);
+            if (e != error_code::ok) {
+                return e;
+            }
+            dst->make_scalar(field_value::of(v));
+            return error_code::ok;
+        }
+        case date_time_output::numeric_ns: {
+            const error_code e = in.to_unix_ns(v);
+            if (e != error_code::ok) {
+                return e;
+            }
+            dst->make_scalar(field_value::of(v));
+            return error_code::ok;
+        }
+        case date_time_output::iso_string: {
+            const std::string s = in.format();
+            dst->make_scalar(
+                field_value::of(string_view(s.data(), s.size())));
+            return error_code::ok;
+        }
+        default: {
+            const error_code e = in.to_unix_seconds(v);
+            if (e != error_code::ok) {
+                return e;
+            }
+            dst->make_scalar(field_value::of(v));
+            return error_code::ok;
+        }
+    }
+}
+
+// Reflected-member write hookup. A date_time member serializes through the
+// ISO-string output so sub-second precision is preserved by reflected-struct
+// writes (the scalar default stays numeric epoch seconds, spec §14.2; the
+// explicit-modes entry point to_value_dt remains the opt-in surface). All
+// other member types route through the plain converter chain unchanged.
+template <typename M>
+inline error_code member_to_value(value_io* dst, const M& v) {
+    if constexpr (is_date_time<M>::value) {
+        return rtti::to_value_dt(dst, v, rtti::date_time_output::iso_string);
+    } else {
+        return rtti::to_value(dst, v);
+    }
+}
+
+template <typename M>
+inline error_code member_to_value_named(value_io* dst, const M& v,
+                                        const detail::naming_policy& np) {
+    if constexpr (is_date_time<M>::value) {
+        (void)np;
+        return rtti::to_value_dt(dst, v, rtti::date_time_output::iso_string);
+    } else {
+        return rtti::to_value_named(dst, v, np);
+    }
+}
+
+// Arbitrary-base integer bridge (spec §15.4): to_value_base /
+// from_value_base serialize an integer as a base-N string through an explicit
+// output entry point, mirroring the date_time design where the plain to_value
+// defaults to numeric output and text is opted into via to_value_dt. The plain
+// from_value/to_value paths keep emitting numeric scalars for integers (the
+// four-format assertions depend on it); `base` (2..64) is the documented
+// config surface, with an optional custom digits table. date_time epochs are
+// int64, so the signed entry points cover that hookup (numeric timestamp <-> 
+// arbitrary-base string).
+inline error_code to_value_base(value_io* dst, std::uint64_t value,
+                                unsigned base, const char* digits = nullptr) {
+    if (dst == nullptr) {
+        return error_code::no_such_field;
+    }
+    const std::string s = rtti::detail::to_base(value, base, digits);
+    if (s.empty()) {
+        return error_code::invalid_number;
+    }
+    dst->make_scalar(field_value::of(string_view(s.data(), s.size())));
+    return error_code::ok;
+}
+
+inline error_code from_value_base(const value_io* src, unsigned base,
+                                  std::uint64_t& out) {
+    if (src == nullptr) {
+        return error_code::no_such_field;
+    }
+    string_view s;
+    if (!src->as_string(s)) {
+        return error_code::kind_mismatch;
+    }
+    return rtti::detail::from_base(s, base, out);
+}
+
+inline error_code to_value_base_signed(value_io* dst, std::int64_t value,
+                                       unsigned base) {
+    if (dst == nullptr) {
+        return error_code::no_such_field;
+    }
+    const std::string s = rtti::detail::to_base_signed(value, base);
+    if (s.empty()) {
+        return error_code::invalid_number;
+    }
+    dst->make_scalar(field_value::of(string_view(s.data(), s.size())));
+    return error_code::ok;
+}
+
+inline error_code from_value_base_signed(const value_io* src, unsigned base,
+                                         std::int64_t& out) {
+    if (src == nullptr) {
+        return error_code::no_such_field;
+    }
+    string_view s;
+    if (!src->as_string(s)) {
+        return error_code::kind_mismatch;
+    }
+    return rtti::detail::from_base_signed(s, base, out);
+}
+
+// Fixed-size C char array (char[N]): a string target, not a numeric sequence
+// (spec §12.2 excludes char element arrays from is_c_array). Serializes as a
+// text scalar (up to the first NUL); deserializes from a text scalar sized
+// into the buffer -- over-long input is kind_mismatch, never an overrun.
+template <std::size_t N>
+struct converter<char[N], void> {
+    static error_code from(const value_io* src, char (&out)[N]) {
+        string_view v;
+        if (!src->as_string(v)) {
+            return error_code::kind_mismatch;
+        }
+        if (v.size() >= N) {
+            return error_code::kind_mismatch;
+        }
+        std::memset(out, 0, N);
+        for (std::size_t i = 0; i < v.size(); ++i) {
+            out[i] = v[i];
+        }
+        return error_code::ok;
+    }
+    static error_code to(value_io* dst, const char (&in)[N]) {
+        std::size_t len = 0;
+        while (len < N && in[len] != '\0') {
+            ++len;
+        }
+        dst->make_scalar(field_value::of(string_view(in, len)));
+        return error_code::ok;
+    }
+};
+
+// --- Sequence converters ----------------------------------------------------
+
+// std::vector<bool> is a bit-packed specialization whose iterators yield proxy
+// objects on some standard libraries (libstdc++/libc++ const iterators too).
+// Copy each proxy element into a real bool before conversion so the sequence
+// path stays portable; on MSVC the const proxy already converts to bool here.
+template <typename T, typename = void>
+struct is_vector_bool : std::false_type {};
+template <typename Alloc>
+struct is_vector_bool<std::vector<bool, Alloc>> : std::true_type {};
 
 // Sequence family (vector/list/deque): array <-> elements.
 template <typename Seq>
@@ -168,13 +686,24 @@ error_code sequence_from(const value_io* src, Seq& out) {
 template <typename Seq>
 error_code sequence_to(value_io* dst, const Seq& in) {
     dst->make_array();
-    for (const auto& item : in) {
-        value_io* child = dst->make_node();
-        const error_code e = to_value(child, item);
-        if (e != error_code::ok) {
-            return e;
+    if constexpr (is_vector_bool<Seq>::value) {
+        for (bool item : in) {
+            value_io* child = dst->make_node();
+            const error_code e = to_value(child, item);
+            dst->push_back(child);
+            if (e != error_code::ok) {
+                return e;
+            }
         }
-        dst->push_back(child);
+    } else {
+        for (const auto& item : in) {
+            value_io* child = dst->make_node();
+            const error_code e = to_value(child, item);
+            if (e != error_code::ok) {
+                return e;
+            }
+            dst->push_back(child);
+        }
     }
     return error_code::ok;
 }
@@ -267,7 +796,7 @@ error_code queue_from(const value_io* src, Q& out) {
     if (src->type() != value_io::kind::array) {
         return error_code::kind_mismatch;
     }
-    std::queue<typename Q::value_type> empty;
+    Q empty;
     out.swap(empty);
     const std::size_t n = src->size();
     for (std::size_t i = 0; i < n; ++i) {
@@ -308,7 +837,7 @@ error_code stack_from(const value_io* src, S& out) {
     if (src->type() != value_io::kind::array) {
         return error_code::kind_mismatch;
     }
-    std::stack<typename S::value_type> empty;
+    S empty;
     out.swap(empty);
     const std::size_t n = src->size();
     for (std::size_t i = n; i-- > 0;) {
@@ -384,6 +913,311 @@ error_code priority_queue_to(value_io* dst, const PQ& in) {
     return error_code::ok;
 }
 
+// --- New type-family converters (optional/variant/tuple/fixed sequence) ------
+// Optional/variant/tuple/pair/array are composite shapes that dispatch through
+// the same from_value/to_value core. std::pair is a 2-element tuple
+// (std::get works, std::tuple_size is specialized), so it is covered entirely
+// by the tuple path and has no converter of its own.
+
+// optional: empty -> null, engaged -> converted value.
+template <typename T>
+error_code optional_from(const value_io* src, std::optional<T>& out) {
+    if (src == nullptr) {
+        return error_code::no_such_field;
+    }
+    if (src->type() == value_io::kind::null) {
+        out.reset();
+        return error_code::ok;
+    }
+    T v{};
+    const error_code e = from_value(src, v);
+    if (e != error_code::ok) {
+        return e;
+    }
+    out = std::move(v);
+    return error_code::ok;
+}
+
+template <typename T>
+error_code optional_to(value_io* dst, const std::optional<T>& in) {
+    if (!in.has_value()) {
+        dst->make_scalar(field_value{});
+        return error_code::ok;
+    }
+    return to_value(dst, *in);
+}
+
+// variant: object {"index":N,"value":V}. to_ emits the active alternative's
+// value; from_ reads the numeric index and dispatches to that alternative
+// only. Every alternative read is a generic from_value<Alt> call so all
+// alternatives may be instantiated without any non-generic operation leaking
+// into the wrong branch (Review Focus RF5).
+template <typename V>
+error_code variant_to(value_io* dst, const V& in) {
+    if (in.valueless_by_exception()) {
+        return error_code::kind_mismatch;
+    }
+    dst->make_object();
+    error_code e = error_code::ok;
+    std::visit([&](const auto& val) {
+        value_io* index_node = dst->make_node();
+        index_node->make_scalar(
+            field_value::of(static_cast<int64_t>(in.index())));
+        dst->set_key("index", index_node);
+        value_io* value_node = dst->make_node();
+        // Propagate a child conversion failure instead of silently leaving an
+        // empty "value" node behind.
+        e = to_value(value_node, val);
+        dst->set_key("value", value_node);
+    }, in);
+    return e;
+}
+
+template <typename V, std::size_t I>
+error_code variant_from_at(const value_io* src, V& out) {
+    using Alt = std::variant_alternative_t<I, V>;
+    Alt a{};
+    const error_code e = from_value(src, a);
+    if (e != error_code::ok) {
+        return e;
+    }
+    out = std::move(a);
+    return error_code::ok;
+}
+
+template <typename V, std::size_t... I>
+error_code variant_from_indexed(const value_io* src, V& out, std::size_t idx,
+                                std::index_sequence<I...>) {
+    error_code e = error_code::kind_mismatch;
+    (void)std::initializer_list<int>{
+        (idx == I ? (e = variant_from_at<V, I>(src, out)) : e, 0)...};
+    return e;
+}
+
+template <typename V>
+error_code variant_from(const value_io* src, V& out) {
+    if (src->type() != value_io::kind::object) {
+        return error_code::kind_mismatch;
+    }
+    value_io* index_node = nullptr;
+    if (!src->get_key("index", index_node)) {
+        return error_code::kind_mismatch;
+    }
+    int64_t idx = 0;
+    if (!index_node->as_integer(idx)) {
+        return error_code::kind_mismatch;
+    }
+    if (idx < 0 || static_cast<std::size_t>(idx) >= std::variant_size<V>::value) {
+        return error_code::kind_mismatch;
+    }
+    value_io* value_node = nullptr;
+    if (!src->get_key("value", value_node)) {
+        return error_code::kind_mismatch;
+    }
+    return variant_from_indexed(value_node, out, static_cast<std::size_t>(idx),
+                                std::make_index_sequence<std::variant_size<V>::value>{});
+}
+
+// tuple/pair: make_index_sequence expansion (never std::apply(index_sequence)
+// -- MSVC cannot reliably fold its tuple_size, Review Focus RF3).
+template <typename Tuple, std::size_t... I>
+error_code tuple_to_seq(value_io* dst, const Tuple& t, std::index_sequence<I...>) {
+    dst->make_array();
+    error_code e = error_code::ok;
+    (void)std::initializer_list<int>{
+        ([&] {
+            value_io* child = dst->make_node();
+            const error_code c = to_value(child, std::get<I>(t));
+            dst->push_back(child);
+            if (c != error_code::ok && e == error_code::ok) {
+                e = c;  // propagate the first child failure, keep converting
+            }
+            return 0;
+        }())...};
+    return e;
+}
+
+template <typename Tuple>
+error_code tuple_to(value_io* dst, const Tuple& in) {
+    return tuple_to_seq(dst, in,
+                        std::make_index_sequence<std::tuple_size<Tuple>::value>{});
+}
+
+template <typename Tuple, std::size_t... I>
+error_code tuple_from_seq(const value_io* src, Tuple& out, std::index_sequence<I...>) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    error_code e = error_code::ok;
+    (void)std::initializer_list<int>{
+        ([&] {
+            value_io* child = src->at(I);
+            if (child == nullptr) {
+                e = error_code::kind_mismatch;
+                return 0;
+            }
+            const error_code c = from_value(child, std::get<I>(out));
+            if (c != error_code::ok) {
+                e = c;
+            }
+            return 0;
+        }())...};
+    return e;
+}
+
+template <typename Tuple>
+error_code tuple_from(const value_io* src, Tuple& out) {
+    return tuple_from_seq(src, out,
+                          std::make_index_sequence<std::tuple_size<Tuple>::value>{});
+}
+
+// Fixed-size sequence (std::array): array <-> elements, bounded by size().
+template <typename A>
+error_code fixed_sequence_to(value_io* dst, const A& in) {
+    dst->make_array();
+    for (const auto& item : in) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value(child, item);
+        dst->push_back(child);
+        if (e != error_code::ok) {
+            return e;
+        }
+    }
+    return error_code::ok;
+}
+
+template <typename A>
+error_code fixed_sequence_from(const value_io* src, A& out) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    const std::size_t n = src->size() < out.size() ? src->size() : out.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        const error_code e = from_value(child, out[i]);
+        if (e != error_code::ok) {
+            return e;
+        }
+    }
+    return error_code::ok;
+}
+
+// --- C-style array converters (spec §12.2) ---------------------------------
+// Native T[N] / T[N][M] / T[A][B][C] convert through compile-time extents with
+// strict known-size validation on read: an element count that does not match
+// the exact extent product is kind_mismatch, never a truncation or overrun.
+// Serialization produces nested arrays (one level per dimension; natural for
+// JSON/TOML). Deserialization accepts either the nested form or a flat
+// row-major element list (spec §12.3 minimal form).
+
+// Product of every compile-time extent of a C array type (rank 0 => 1).
+template <typename T>
+struct carray_total : std::integral_constant<std::size_t, 1> {};
+template <typename T, std::size_t N>
+struct carray_total<T[N]>
+    : std::integral_constant<std::size_t, N * carray_total<T>::value> {};
+
+// Number of dimensions of a C array type.
+template <typename T>
+constexpr std::size_t carray_rank() noexcept {
+    return std::rank<T>::value;
+}
+
+// Compile-time extent of dimension I (0-based) via std::extent.
+template <typename T, std::size_t I>
+constexpr std::size_t carray_extent() noexcept {
+    return std::extent<T, I>::value;
+}
+
+// Serialize a C array as an array of elements; multidimensional arrays recurse
+// one dimension per level, emitting nested arrays.
+template <typename T, std::size_t N>
+error_code carray_to(value_io* dst, const T (&in)[N]) {
+    dst->make_array();
+    for (std::size_t i = 0; i < N; ++i) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value(child, in[i]);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->push_back(child);
+    }
+    return error_code::ok;
+}
+
+// Row-major flat fill: treat src as one flat element sequence spanning the
+// full product of extents, filling the array linearly.
+template <typename T, std::size_t N>
+error_code carray_from_flat(const value_io* src, std::size_t base, T (&out)[N]) {
+    if constexpr (std::is_array<T>::value) {
+        constexpr std::size_t inner = carray_total<T>::value;
+        for (std::size_t i = 0; i < N; ++i) {
+            const error_code e = carray_from_flat(src, base + i * inner, out[i]);
+            if (e != error_code::ok) {
+                return e;
+            }
+        }
+        return error_code::ok;
+    } else {
+        for (std::size_t i = 0; i < N; ++i) {
+            value_io* child = src->at(base + i);
+            if (child == nullptr) {
+                return error_code::kind_mismatch;
+            }
+            const error_code e = from_value(child, out[i]);
+            if (e != error_code::ok) {
+                return e;
+            }
+        }
+        return error_code::ok;
+    }
+}
+
+// Read a C array from an array source. The element count must match the exact
+// compile-time extent(s): a multidimensional target accepts either the nested
+// form (one child array per dimension) or a flat row-major list. Any mismatch
+// returns kind_mismatch; writes never go out of bounds.
+template <typename T, std::size_t N>
+error_code carray_from(const value_io* src, T (&out)[N]) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    constexpr std::size_t total = carray_total<T[N]>::value;
+    const std::size_t sz = src->size();
+    if constexpr (std::is_array<T>::value) {
+        // Nested interpretation attempted first (only meaningful when the
+        // element type is itself an array; also disambiguates M==1 where the
+        // flat and nested counts coincide).
+        if (sz == N) {
+            error_code e = error_code::ok;
+            for (std::size_t i = 0; i < N; ++i) {
+                value_io* child = src->at(i);
+                if (child == nullptr) {
+                    return error_code::kind_mismatch;
+                }
+                e = carray_from(child, out[i]);
+                if (e != error_code::ok) {
+                    break;
+                }
+            }
+            if (e == error_code::ok) {
+                return error_code::ok;
+            }
+            if (sz == total) {
+                return carray_from_flat(src, 0, out);
+            }
+            return e;
+        }
+    }
+    if (sz == total) {
+        return carray_from_flat(src, 0, out);
+    }
+    return error_code::kind_mismatch;
+}
+
 // --- Reflected-struct walk (field-table path) ------------------------------
 // A type registered with RTTI_DEFINE_TYPE is read/written field by field.
 // Missing-key behavior depends on has_default<T>: the plain macro returns
@@ -431,6 +1265,33 @@ error_code reflect_to(value_io* dst, const T& in) {
 
 // --- Entry points -----------------------------------------------------------
 
+// Depth budget shared by the read/write converter chains. The format parsers
+// cap tree depth at 512 (e.g. JSON/XML/TOML max_depth), but a write path over
+// a self-referential data structure recursed without any bound and overflowed
+// the stack. Every from_value/to_value entry carries a thread-local depth
+// guard; exceeding it reports error_code::too_deep instead of crashing.
+namespace detail {
+
+inline constexpr std::size_t kConversionMaxDepth = 512;
+
+inline int& conversion_depth() noexcept {
+    static thread_local int depth = 0;
+    return depth;
+}
+
+struct conversion_depth_guard {
+    conversion_depth_guard() noexcept : depth_(++conversion_depth()) {}
+    ~conversion_depth_guard() noexcept { --conversion_depth(); }
+    bool over() const noexcept {
+        return static_cast<unsigned>(depth_) > kConversionMaxDepth;
+    }
+
+private:
+    int depth_;
+};
+
+} // namespace detail
+
 // Detection: does the type's associated namespace provide an ADL
 // from_value/to_value hook with the 3-argument signature (plan contract)?
 // The rtti two-argument templates never match the 3-argument detection, so
@@ -461,7 +1322,33 @@ error_code from_value(const value_io* src, T& out) {
     if (src == nullptr) {
         return error_code::no_such_field;
     }
-    if constexpr (is_map<T>::value) {
+    detail::conversion_depth_guard depth_guard;
+    if (depth_guard.over()) {
+        return error_code::too_deep;
+    }
+    // Dispatch order: optional -> variant -> tuple (pair is a 2-tuple) ->
+    // c_array -> fixed_sequence -> map -> set -> priority_queue -> queue ->
+    // stack -> sequence -> reflected -> adl -> converter. is_fixed_sequence
+    // never matches map/set (is_associative excludes them, reflection.hpp), so
+    // ordering it before the associative branches is safe without leaking
+    // key-based containers into the index-addressable fixed-sequence path.
+    // Native C arrays (is_c_array) have no value_type, so they reach neither
+    // is_sequence nor is_fixed_sequence and are routed before fixed_sequence
+    // (spec §12.4).
+    if constexpr (is_optional<T>::value) {
+        return optional_from(src, out);
+    } else if constexpr (is_variant<T>::value) {
+        return variant_from(src, out);
+    } else if constexpr (is_tuple<T>::value) {
+        return tuple_from(src, out);
+    } else if constexpr (is_c_array<T>::value) {
+        // Before fixed_sequence: C arrays have no value_type/push_back, so
+        // they can never reach the fixed-sequence branch; ordering here keeps
+        // the fixed-size families grouped (spec §12.4).
+        return carray_from(src, out);
+    } else if constexpr (is_fixed_sequence<T>::value) {
+        return fixed_sequence_from(src, out);
+    } else if constexpr (is_map<T>::value) {
         return map_from(src, out);
     } else if constexpr (is_set<T>::value) {
         return set_from(src, out);
@@ -474,6 +1361,10 @@ error_code from_value(const value_io* src, T& out) {
         return stack_from(src, out);
     } else if constexpr (is_sequence<T>::value) {
         return sequence_from(src, out);
+    } else if constexpr (is_date_time<T>::value) {
+        // Before is_reflected: a user-registered date_time still converts as a
+        // scalar timestamp, not as a field-walked object (spec §14.2).
+        return converter<T>::from(src, out);
     } else if constexpr (is_reflected<T>::value) {
         return reflect_from(src, out);
     } else if constexpr (has_adl_from<T>::value) {
@@ -491,7 +1382,22 @@ error_code to_value(value_io* dst, const T& in) {
     if (dst == nullptr) {
         return error_code::no_such_field;
     }
-    if constexpr (is_map<T>::value) {
+    detail::conversion_depth_guard depth_guard;
+    if (depth_guard.over()) {
+        return error_code::too_deep;
+    }
+    // Dispatch order mirrors from_value.
+    if constexpr (is_optional<T>::value) {
+        return optional_to(dst, in);
+    } else if constexpr (is_variant<T>::value) {
+        return variant_to(dst, in);
+    } else if constexpr (is_tuple<T>::value) {
+        return tuple_to(dst, in);
+    } else if constexpr (is_c_array<T>::value) {
+        return carray_to(dst, in);
+    } else if constexpr (is_fixed_sequence<T>::value) {
+        return fixed_sequence_to(dst, in);
+    } else if constexpr (is_map<T>::value) {
         return map_to(dst, in);
     } else if constexpr (is_set<T>::value) {
         return set_to(dst, in);
@@ -504,6 +1410,8 @@ error_code to_value(value_io* dst, const T& in) {
         return stack_to(dst, in);
     } else if constexpr (is_sequence<T>::value) {
         return sequence_to(dst, in);
+    } else if constexpr (is_date_time<T>::value) {
+        return converter<T>::to(dst, in);
     } else if constexpr (is_reflected<T>::value) {
         return reflect_to(dst, in);
     } else if constexpr (has_adl_to<T>::value) {
@@ -514,5 +1422,763 @@ error_code to_value(value_io* dst, const T& in) {
         return converter<T>::to(dst, in);
     }
 }
+
+// --- Named conversion (key naming policy) ----------------------------------
+// to_value_named / from_value_named mirror the plain to_value / from_value
+// dispatch chain while applying the naming policy at the reflected-field
+// boundary: keys are computed through detail::apply_naming and skip_empty
+// drops empty fields on the serialize side. Container element recursion goes
+// through the named variants so a nested reflected struct inside any container
+// is renamed too; associative-container keys are user data and stay untouched.
+
+template <typename T>
+error_code to_value_named(value_io* dst, const T& in,
+                          const detail::naming_policy& np);
+
+template <typename T>
+error_code from_value_named(const value_io* src, T& out,
+                            const detail::naming_policy& np);
+
+namespace detail {
+
+// True when a reflected field's value is "empty" under skip_empty semantics:
+// a null-equivalent value (empty optional / null pointer), an empty container
+// (size()==0), an empty string, a numeric zero, or a false bool. Containers
+// are probed through the type-erased field accessor (size() is const-safe and
+// never mutates its object); scalars go through get() -> field_value so the
+// check is format-independent.
+inline bool field_is_empty(const field_access_base* fa, const void* obj) {
+    if (fa->is_null_value(obj)) {
+        return true;
+    }
+    if (fa->is_container()) {
+        return fa->size(const_cast<void*>(obj)) == 0;
+    }
+    const field_value v = fa->get(obj);
+    switch (v.type()) {
+        case field_value::kind::string:
+            return v.as_string().empty();
+        case field_value::kind::integer:
+            return v.as_integer() == 0;
+        case field_value::kind::real:
+            return v.as_real() == 0.0;
+        case field_value::kind::boolean:
+            return !v.as_bool();
+        default:
+            return false;
+    }
+}
+
+} // namespace detail
+
+template <typename T>
+error_code reflect_to_named(value_io* dst, const T& in,
+                            const detail::naming_policy& np) {
+    dst->make_object();
+    const auto* const* f = fields<T>();
+    for (std::size_t i = 0; i < field_count<T>(); ++i) {
+        const field_access_base* fa = f[i];
+        if (np.skip_empty &&
+            rtti::detail::field_is_empty(fa, static_cast<const void*>(&in))) {
+            continue;
+        }
+        value_io* child = dst->make_node();
+        const error_code e =
+            fa->get_value_named(static_cast<const void*>(&in), child, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->set_key(rtti::detail::apply_naming(fa->name, np), child);
+    }
+    return error_code::ok;
+}
+
+template <typename T>
+error_code reflect_from_named(const value_io* src, T& out,
+                              const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::object) {
+        return error_code::kind_mismatch;
+    }
+    const auto* const* f = fields<T>();
+    for (std::size_t i = 0; i < field_count<T>(); ++i) {
+        const field_access_base* fa = f[i];
+        value_io* sub = nullptr;
+        const std::string key = rtti::detail::apply_naming(fa->name, np);
+        if (!src->get_key(key, sub)) {
+            if (has_default<T>::value) {
+                continue; // keep existing member value
+            }
+            return error_code::missing_key;
+        }
+        const error_code e = fa->set_value_named(static_cast<void*>(&out), sub, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+    }
+    return error_code::ok;
+}
+
+template <typename T>
+error_code optional_to_named(value_io* dst, const std::optional<T>& in,
+                             const detail::naming_policy& np) {
+    if (!in.has_value()) {
+        dst->make_scalar(field_value{});
+        return error_code::ok;
+    }
+    return to_value_named(dst, *in, np);
+}
+
+template <typename T>
+error_code optional_from_named(const value_io* src, std::optional<T>& out,
+                               const detail::naming_policy& np) {
+    if (src == nullptr) {
+        return error_code::no_such_field;
+    }
+    if (src->type() == value_io::kind::null) {
+        out.reset();
+        return error_code::ok;
+    }
+    T v{};
+    const error_code e = from_value_named(src, v, np);
+    if (e != error_code::ok) {
+        return e;
+    }
+    out = std::move(v);
+    return error_code::ok;
+}
+
+template <typename V>
+error_code variant_to_named(value_io* dst, const V& in,
+                            const detail::naming_policy& np) {
+    if (in.valueless_by_exception()) {
+        return error_code::kind_mismatch;
+    }
+    dst->make_object();
+    error_code e = error_code::ok;
+    std::visit([&](const auto& val) {
+        value_io* index_node = dst->make_node();
+        index_node->make_scalar(
+            field_value::of(static_cast<int64_t>(in.index())));
+        dst->set_key("index", index_node);
+        value_io* value_node = dst->make_node();
+        e = to_value_named(value_node, val, np);
+        dst->set_key("value", value_node);
+    }, in);
+    return e;
+}
+
+template <typename V, std::size_t I>
+error_code variant_from_at_named(const value_io* src, V& out,
+                                 const detail::naming_policy& np) {
+    using Alt = std::variant_alternative_t<I, V>;
+    Alt a{};
+    const error_code e = from_value_named(src, a, np);
+    if (e != error_code::ok) {
+        return e;
+    }
+    out = std::move(a);
+    return error_code::ok;
+}
+
+template <typename V, std::size_t... I>
+error_code variant_from_indexed_named(const value_io* src, V& out,
+                                      std::size_t idx,
+                                      std::index_sequence<I...>,
+                                      const detail::naming_policy& np) {
+    error_code e = error_code::kind_mismatch;
+    (void)std::initializer_list<int>{
+        (idx == I ? (e = variant_from_at_named<V, I>(src, out, np)) : e, 0)...};
+    return e;
+}
+
+template <typename V>
+error_code variant_from_named(const value_io* src, V& out,
+                              const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::object) {
+        return error_code::kind_mismatch;
+    }
+    value_io* index_node = nullptr;
+    if (!src->get_key("index", index_node)) {
+        return error_code::kind_mismatch;
+    }
+    int64_t idx = 0;
+    if (!index_node->as_integer(idx)) {
+        return error_code::kind_mismatch;
+    }
+    if (idx < 0 || static_cast<std::size_t>(idx) >= std::variant_size<V>::value) {
+        return error_code::kind_mismatch;
+    }
+    value_io* value_node = nullptr;
+    if (!src->get_key("value", value_node)) {
+        return error_code::kind_mismatch;
+    }
+    return variant_from_indexed_named(
+        value_node, out, static_cast<std::size_t>(idx),
+        std::make_index_sequence<std::variant_size<V>::value>{}, np);
+}
+
+template <typename Tuple, std::size_t... I>
+error_code tuple_to_seq_named(value_io* dst, const Tuple& t,
+                              std::index_sequence<I...>,
+                              const detail::naming_policy& np) {
+    dst->make_array();
+    error_code e = error_code::ok;
+    (void)std::initializer_list<int>{
+        ([&] {
+            value_io* child = dst->make_node();
+            const error_code c = to_value_named(child, std::get<I>(t), np);
+            dst->push_back(child);
+            if (c != error_code::ok && e == error_code::ok) {
+                e = c;
+            }
+            return 0;
+        }())...};
+    return e;
+}
+
+template <typename Tuple>
+error_code tuple_to_named(value_io* dst, const Tuple& in,
+                          const detail::naming_policy& np) {
+    return tuple_to_seq_named(dst, in,
+                              std::make_index_sequence<std::tuple_size<Tuple>::value>{},
+                              np);
+}
+
+template <typename Tuple, std::size_t... I>
+error_code tuple_from_seq_named(const value_io* src, Tuple& out,
+                                std::index_sequence<I...>,
+                                const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    error_code e = error_code::ok;
+    (void)std::initializer_list<int>{
+        ([&] {
+            value_io* child = src->at(I);
+            if (child == nullptr) {
+                e = error_code::kind_mismatch;
+                return 0;
+            }
+            const error_code c = from_value_named(child, std::get<I>(out), np);
+            if (c != error_code::ok) {
+                e = c;
+            }
+            return 0;
+        }())...};
+    return e;
+}
+
+template <typename Tuple>
+error_code tuple_from_named(const value_io* src, Tuple& out,
+                            const detail::naming_policy& np) {
+    return tuple_from_seq_named(src, out,
+                                std::make_index_sequence<std::tuple_size<Tuple>::value>{},
+                                np);
+}
+
+template <typename A>
+error_code fixed_sequence_to_named(value_io* dst, const A& in,
+                                   const detail::naming_policy& np) {
+    dst->make_array();
+    for (const auto& item : in) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, item, np);
+        dst->push_back(child);
+        if (e != error_code::ok) {
+            return e;
+        }
+    }
+    return error_code::ok;
+}
+
+template <typename A>
+error_code fixed_sequence_from_named(const value_io* src, A& out,
+                                     const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    const std::size_t n = src->size() < out.size() ? src->size() : out.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        const error_code e = from_value_named(child, out[i], np);
+        if (e != error_code::ok) {
+            return e;
+        }
+    }
+    return error_code::ok;
+}
+
+// C-style array named variants: mirror carray_to/carray_from with element
+// recursion through the named converter chain (spec §12.2 + naming policy).
+template <typename T, std::size_t N>
+error_code carray_to_named(value_io* dst, const T (&in)[N],
+                           const detail::naming_policy& np) {
+    dst->make_array();
+    for (std::size_t i = 0; i < N; ++i) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, in[i], np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->push_back(child);
+    }
+    return error_code::ok;
+}
+
+template <typename T, std::size_t N>
+error_code carray_from_flat_named(const value_io* src, std::size_t base,
+                                  T (&out)[N],
+                                  const detail::naming_policy& np) {
+    if constexpr (std::is_array<T>::value) {
+        constexpr std::size_t inner = carray_total<T>::value;
+        for (std::size_t i = 0; i < N; ++i) {
+            const error_code e =
+                carray_from_flat_named(src, base + i * inner, out[i], np);
+            if (e != error_code::ok) {
+                return e;
+            }
+        }
+        return error_code::ok;
+    } else {
+        for (std::size_t i = 0; i < N; ++i) {
+            value_io* child = src->at(base + i);
+            if (child == nullptr) {
+                return error_code::kind_mismatch;
+            }
+            const error_code e = from_value_named(child, out[i], np);
+            if (e != error_code::ok) {
+                return e;
+            }
+        }
+        return error_code::ok;
+    }
+}
+
+template <typename T, std::size_t N>
+error_code carray_from_named(const value_io* src, T (&out)[N],
+                             const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    constexpr std::size_t total = carray_total<T[N]>::value;
+    const std::size_t sz = src->size();
+    if constexpr (std::is_array<T>::value) {
+        if (sz == N) {
+            error_code e = error_code::ok;
+            for (std::size_t i = 0; i < N; ++i) {
+                value_io* child = src->at(i);
+                if (child == nullptr) {
+                    return error_code::kind_mismatch;
+                }
+                e = carray_from_named(child, out[i], np);
+                if (e != error_code::ok) {
+                    break;
+                }
+            }
+            if (e == error_code::ok) {
+                return error_code::ok;
+            }
+            if (sz == total) {
+                return carray_from_flat_named(src, 0, out, np);
+            }
+            return e;
+        }
+    }
+    if (sz == total) {
+        return carray_from_flat_named(src, 0, out, np);
+    }
+    return error_code::kind_mismatch;
+}
+
+template <typename Seq>
+error_code sequence_to_named(value_io* dst, const Seq& in,
+                             const detail::naming_policy& np) {
+    dst->make_array();
+    if constexpr (is_vector_bool<Seq>::value) {
+        for (bool item : in) {
+            value_io* child = dst->make_node();
+            const error_code e = to_value_named(child, item, np);
+            dst->push_back(child);
+            if (e != error_code::ok) {
+                return e;
+            }
+        }
+    } else {
+        for (const auto& item : in) {
+            value_io* child = dst->make_node();
+            const error_code e = to_value_named(child, item, np);
+            if (e != error_code::ok) {
+                return e;
+            }
+            dst->push_back(child);
+        }
+    }
+    return error_code::ok;
+}
+
+template <typename Seq>
+error_code sequence_from_named(const value_io* src, Seq& out,
+                               const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    out.clear();
+    const std::size_t n = src->size();
+    for (std::size_t i = 0; i < n; ++i) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        typename Seq::value_type v{};
+        const error_code e = from_value_named(child, v, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        out.push_back(std::move(v));
+    }
+    return error_code::ok;
+}
+
+template <typename Map>
+error_code map_to_named(value_io* dst, const Map& in,
+                        const detail::naming_policy& np) {
+    dst->make_object();
+    for (const auto& kv : in) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, kv.second, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->set_key(key_traits<typename Map::key_type>::view(kv.first), child);
+    }
+    return error_code::ok;
+}
+
+template <typename Map>
+error_code map_from_named(const value_io* src, Map& out,
+                          const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::object) {
+        return error_code::kind_mismatch;
+    }
+    out.clear();
+    const std::size_t n = src->size();
+    for (std::size_t i = 0; i < n; ++i) {
+        string_view key;
+        value_io* child = nullptr;
+        if (!src->get_key_at(i, key, child) || child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        typename Map::mapped_type v{};
+        const error_code e = from_value_named(child, v, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        typename Map::key_type k{};
+        key_traits<typename Map::key_type>::assign(k, key);
+        out.emplace(std::move(k), std::move(v));
+    }
+    return error_code::ok;
+}
+
+template <typename Set>
+error_code set_to_named(value_io* dst, const Set& in,
+                        const detail::naming_policy& np) {
+    dst->make_array();
+    for (const auto& item : in) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, item, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->push_back(child);
+    }
+    return error_code::ok;
+}
+
+template <typename Set>
+error_code set_from_named(const value_io* src, Set& out,
+                          const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    out.clear();
+    const std::size_t n = src->size();
+    for (std::size_t i = 0; i < n; ++i) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        typename Set::value_type v{};
+        const error_code e = from_value_named(child, v, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        out.insert(std::move(v));
+    }
+    return error_code::ok;
+}
+
+template <typename Q>
+error_code queue_to_named(value_io* dst, const Q& in,
+                          const detail::naming_policy& np) {
+    dst->make_array();
+    Q copy = in;
+    while (!copy.empty()) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, copy.front(), np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->push_back(child);
+        copy.pop();
+    }
+    return error_code::ok;
+}
+
+template <typename Q>
+error_code queue_from_named(const value_io* src, Q& out,
+                            const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    Q empty;
+    out.swap(empty);
+    const std::size_t n = src->size();
+    for (std::size_t i = 0; i < n; ++i) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        typename Q::value_type v{};
+        const error_code e = from_value_named(child, v, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        out.push(std::move(v));
+    }
+    return error_code::ok;
+}
+
+template <typename S>
+error_code stack_to_named(value_io* dst, const S& in,
+                          const detail::naming_policy& np) {
+    dst->make_array();
+    S copy = in;
+    while (!copy.empty()) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, copy.top(), np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->push_back(child);
+        copy.pop();
+    }
+    return error_code::ok;
+}
+
+template <typename S>
+error_code stack_from_named(const value_io* src, S& out,
+                            const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    S empty;
+    out.swap(empty);
+    const std::size_t n = src->size();
+    for (std::size_t i = n; i-- > 0;) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        typename S::value_type v{};
+        const error_code e = from_value_named(child, v, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        out.push(std::move(v));
+    }
+    return error_code::ok;
+}
+
+template <typename PQ>
+error_code priority_queue_to_named(value_io* dst, const PQ& in,
+                                   const detail::naming_policy& np) {
+    dst->make_array();
+    PQ copy = in;
+    while (!copy.empty()) {
+        value_io* child = dst->make_node();
+        const error_code e = to_value_named(child, copy.top(), np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        dst->push_back(child);
+        copy.pop();
+    }
+    return error_code::ok;
+}
+
+template <typename PQ>
+error_code priority_queue_from_named(const value_io* src, PQ& out,
+                                     const detail::naming_policy& np) {
+    if (src->type() != value_io::kind::array) {
+        return error_code::kind_mismatch;
+    }
+    PQ empty;
+    out.swap(empty);
+    const std::size_t n = src->size();
+    for (std::size_t i = n; i-- > 0;) {
+        value_io* child = src->at(i);
+        if (child == nullptr) {
+            return error_code::kind_mismatch;
+        }
+        typename PQ::value_type v{};
+        const error_code e = from_value_named(child, v, np);
+        if (e != error_code::ok) {
+            return e;
+        }
+        out.push(std::move(v));
+    }
+    return error_code::ok;
+}
+
+// Entry points: identical dispatch order to the plain from_value / to_value,
+// with naming applied at the reflected-struct boundary and container
+// recursion routed through the named variants.
+template <typename T>
+error_code from_value_named(const value_io* src, T& out,
+                            const detail::naming_policy& np) {
+    if (src == nullptr) {
+        return error_code::no_such_field;
+    }
+    detail::conversion_depth_guard depth_guard;
+    if (depth_guard.over()) {
+        return error_code::too_deep;
+    }
+    if constexpr (is_optional<T>::value) {
+        return optional_from_named(src, out, np);
+    } else if constexpr (is_variant<T>::value) {
+        return variant_from_named(src, out, np);
+    } else if constexpr (is_tuple<T>::value) {
+        return tuple_from_named(src, out, np);
+    } else if constexpr (is_c_array<T>::value) {
+        return carray_from_named(src, out, np);
+    } else if constexpr (is_fixed_sequence<T>::value) {
+        return fixed_sequence_from_named(src, out, np);
+    } else if constexpr (is_map<T>::value) {
+        return map_from_named(src, out, np);
+    } else if constexpr (is_set<T>::value) {
+        return set_from_named(src, out, np);
+    } else if constexpr (is_priority_queue<T>::value) {
+        return priority_queue_from_named(src, out, np);
+    } else if constexpr (is_queue<T>::value) {
+        return queue_from_named(src, out, np);
+    } else if constexpr (is_stack<T>::value) {
+        return stack_from_named(src, out, np);
+    } else if constexpr (is_sequence<T>::value) {
+        return sequence_from_named(src, out, np);
+    } else if constexpr (is_date_time<T>::value) {
+        return converter<T>::from(src, out);
+    } else if constexpr (is_reflected<T>::value) {
+        return reflect_from_named(src, out, np);
+    } else if constexpr (has_adl_from<T>::value) {
+        error_code e = error_code::ok;
+        from_value(src, out, e); // user hook owns its own key naming
+        return e;
+    } else {
+        return converter<T>::from(src, out);
+    }
+}
+
+template <typename T>
+error_code to_value_named(value_io* dst, const T& in,
+                          const detail::naming_policy& np) {
+    if (dst == nullptr) {
+        return error_code::no_such_field;
+    }
+    detail::conversion_depth_guard depth_guard;
+    if (depth_guard.over()) {
+        return error_code::too_deep;
+    }
+    if constexpr (is_optional<T>::value) {
+        return optional_to_named(dst, in, np);
+    } else if constexpr (is_variant<T>::value) {
+        return variant_to_named(dst, in, np);
+    } else if constexpr (is_tuple<T>::value) {
+        return tuple_to_named(dst, in, np);
+    } else if constexpr (is_c_array<T>::value) {
+        return carray_to_named(dst, in, np);
+    } else if constexpr (is_fixed_sequence<T>::value) {
+        return fixed_sequence_to_named(dst, in, np);
+    } else if constexpr (is_map<T>::value) {
+        return map_to_named(dst, in, np);
+    } else if constexpr (is_set<T>::value) {
+        return set_to_named(dst, in, np);
+    } else if constexpr (is_priority_queue<T>::value) {
+        return priority_queue_to_named(dst, in, np);
+    } else if constexpr (is_queue<T>::value) {
+        return queue_to_named(dst, in, np);
+    } else if constexpr (is_stack<T>::value) {
+        return stack_to_named(dst, in, np);
+    } else if constexpr (is_sequence<T>::value) {
+        return sequence_to_named(dst, in, np);
+    } else if constexpr (is_date_time<T>::value) {
+        return converter<T>::to(dst, in);
+    } else if constexpr (is_reflected<T>::value) {
+        return reflect_to_named(dst, in, np);
+    } else if constexpr (has_adl_to<T>::value) {
+        error_code e = error_code::ok;
+        to_value(dst, in, e); // user hook owns its own key naming
+        return e;
+    } else {
+        return converter<T>::to(dst, in);
+    }
+}
+
+// --- Shared real formatting -------------------------------------------------
+// The single place that turns a double into its serialized text for every
+// format adapter. std::to_chars emits the shortest decimal that round-trips
+// back to the exact value, so 3.14 stays "3.14" instead of the long-tail
+// "3.1400000000000001". A ".0" suffix is appended when the shortest form has
+// no decimal point or exponent (e.g. "1") so parsers read the token back as a
+// floating-point value. Non-finite doubles map to the deterministic tokens
+// "inf"/"-inf"/"nan" (matching the previous snprintf %.17g output) rather
+// than relying on the implementation-defined to_chars handling for those
+// values, so callers never receive an empty string (spec §0). JSON maps
+// non-finite to null before calling; XML/INI keep the inf/nan text.
+namespace detail {
+
+inline void format_real(double value, std::string& out) {
+    if (!std::isfinite(value)) {
+        if (std::isnan(value)) {
+            out += "nan";
+        } else {
+            out += std::signbit(value) ? "-inf" : "inf";
+        }
+        return;
+    }
+    char buf[64];
+    const auto res = std::to_chars(buf, buf + sizeof(buf), value);
+    const char* const first = buf;
+    const char* const last = res.ptr;
+    out.append(first, static_cast<std::size_t>(last - first));
+    // Decide from the token just written, not the accumulated whole stream: an
+    // earlier element's '.' (e.g. "[1.5,") must not suppress this token's
+    // ".0" (C2-①).
+    bool has_point = false;
+    for (const char* p = first; p != last; ++p) {
+        if (*p == '.' || *p == 'e' || *p == 'E') {
+            has_point = true;
+            break;
+        }
+    }
+    if (!has_point) {
+        out += ".0";
+    }
+}
+
+} // namespace detail
 
 } // namespace rtti
