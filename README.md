@@ -23,17 +23,21 @@ Both editions mirror the same section structure and cross-link each heading.
     reflective instantiation), `convert.hpp` (`value_io` +
     `from_value`/`to_value`), `memory.hpp`, `error.hpp`, `rtti_fwd.hpp`
     (feature-gate defaults), plus the standalone core capabilities
-    `date_time.hpp`, `base_convert.hpp`, `to_string.hpp`, `naming.hpp`,
-    `ioc.hpp`.
+    `date_time.hpp`, `base_convert.hpp`, `to_string.hpp`,
+    `number_format.hpp` (format-number/date/reflected/node formatting),
+    `string_ops.hpp` (`rtti::str`), `node_io.hpp` (locate/node_as/to_node),
+    `naming.hpp`, `ioc.hpp`.
   - format adapters: `json.hpp`, `xml.hpp`, `ini.hpp`, `toml.hpp`,
-    `proto.hpp` — each behind its own `RTTI_ENABLE_*` gate.
+    `proto.hpp` (+ `proto_schema.hpp`), `flat.hpp` (+ `flat_schema.hpp`)
+    — each behind its own `RTTI_ENABLE_*` gate.
 - `src/` — static-library sources.
 - `tests/` — self-contained zero-dependency test harness.
 - `bench/` — ops/s microbenchmarks.
-- `examples/` — 7 documented demo programs (`reflection_demo`,
+- `examples/` — 9 documented demo programs (`reflection_demo`,
   `core_convert_demo`, `json_demo`, `xml_demo`, `ini_demo`, `toml_demo`,
-  `proto_demo`), each compilable standalone with MSVC `cl`.
+  `proto_demo`, `format_demo`, `flatbuffers_demo`), each compilable
+  standalone with MSVC `cl`.
 
-Format adapters (JSON/XML/INI/TOML/protobuf) are optional build gates. The
-reflect core compiles with all five gates off, and the stripped build passes
-the full test suite.
+Format adapters (JSON/XML/INI/TOML/protobuf/FlatBuffers) are optional build
+gates. The reflect core compiles with all six gates off, and the stripped
+build passes the full test suite.

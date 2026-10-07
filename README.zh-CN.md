@@ -198,6 +198,53 @@ main 运行之后可靠,静态初始化期内不可靠。
 - 便捷包装 `to_string_base` / `from_string_base` 及其有符号变体,覆盖进制转换
   层。
 
+### 字符串格式化 — `<rtti/number_format.hpp>`,`<rtti/date_time.hpp>`
+
+格式化驱动的文本渲染(spec §7),全部以 `error_code` 失败安全:
+
+- `format_number<T>(v, spec)` — Python format 风格格式串,整数
+  (进制 `d/b/o/x/X`、千分位 `,`、`#` 备用形式、宽度、填充、对齐、符号、
+  前导零)与实数(`f/e/g` 与精度、分组、宽度);默认最短往返文本;
+- `to_string<T>(v, format_spec)` — 薄重载,把整数/实数路由到
+  `format_number`,`date_time` 路由到其 `format(pattern)`;
+- `date_time::format(pattern)` — strftime 风格模式
+  (`%Y %y %m %d %H %M %S %f %F %T %R %z %Z %%`);未知指令报
+  `unexpected_token`;
+- `node_to_string(const value_io*, spec)` — 任意 value_io 节点(对象/数组/
+  标量)到单行文本,数字按 spec 格式化;
+- `format_reflected<T>(obj, spec)` — 遍历 `RTTI_DEFINE_TYPE` 字段表渲染
+  紧凑对象行,spec 应用于每个数字字段。畸形 spec 绝不抛异常:经可选的
+  `error_info*` 返回空串 + `error_code::unexpected_token`。
+
+### 节点级转换 — `<rtti/node_io.hpp>`
+
+在任意 `value_io` DOM 之上的格式无关路径导航:
+
+- `rtti::locate(root, "user.addresses[1].city")` — 点分键 + `[index]`
+  组;缺键 / 越界下标 / 畸形路径报 `no_such_field` 或 `kind_mismatch`
+  (绝不崩溃)。提供 const 与可变两个重载;
+- `rtti::node_as<T>(node)` — 把定位节点经转换层转成 C++ 值
+  (`result<T>`);
+- `rtti::to_node(target, value)` — 用 C++ 值经 `from_value` 替换目标节点
+  的子树,宿主文档随后整体序列化为新内容。`locate` 实现在
+  `src/reflect.cpp`;两个模板是 `convert.hpp` 之上的薄壳。
+
+### `rtti::str` — 全类型字符串转换 + 字符串操作
+
+`<rtti/string_ops.hpp>` 在 `namespace rtti::str` 下汇集转换与操作:
+
+- 转换壳 `to_string` / `from_string` 是既有统一 `rtti::to_string` /
+  `from_string` 层的 using 别名,因此标量、枚举、`date_time`、容器、
+  optional/variant/tuple/pair/array 与反射结构体都经过同一实现互转;
+  `to_base` / `from_base`(及有符号孪生)桥接任意进制辅助(bases 2..64);
+- 字符串操作(非模板,在 `src/string_ops.cpp`):
+  `split` / `join`、`trim` / `ltrim` / `rtrim`、`to_lower` / `to_upper`、
+  `starts_with` / `ends_with`、`replace` / `replace_all`、`repeat`、
+  `pad_left` / `pad_right`、`reverse`、`quote` / `unquote`、
+  `escape` / `unescape`;
+- 纯字符串变换 `noexcept`;解析类(`unquote` / `unescape` / `from_base` /
+  `from_string`)以 `error_code` 报错,绝不崩溃(spec §0 fail-safe)。
+
 ### `naming` — 键命名策略 `<rtti/naming.hpp>`
 
 由各文本适配器 `write_config` 携带、与格式无关的键命名策略:
@@ -220,12 +267,12 @@ main 运行之后可靠,静态初始化期内不可靠。
 
 ## 格式适配器
 
-JSON/XML/INI/TOML 是可选的编译门。开启时这四个文本适配器形态一致——持有的
-DOM(`document : value_io`)、`parse`/`serialize` 一对、类型桥 `parse_as<T>` /
-`serialize<T>(obj)`、流式 SAX `parse_stream`,以及 `write_config`(键命名 /
-rename / skip_empty)。protobuf 适配器(`<rtti/proto.hpp>`)同样以编译门控制,
-但通过 `parse_config` 配置(没有 `write_config`)。每个都是头文件式,且反射
-核心永不依赖它们。
+JSON/XML/INI/TOML/FlatBuffers 是可选的编译门。开启时四个文本适配器形态
+一致——持有的 DOM(`document : value_io`)、`parse`/`serialize` 一对、类型桥
+`parse_as<T>` / `serialize<T>(obj)`、流式 SAX `parse_stream`,以及
+`write_config`(键命名 / rename / skip_empty)。protobuf 与 flatbuffers 适配器
+(`<rtti/proto.hpp>`、`<rtti/flat.hpp>`)同样以编译门控制,但通过 `parse_config`
+配置(没有 `write_config`)。每个都是头文件式,且反射核心永不依赖它们。
 
 ### JSON — `<rtti/json.hpp>`
 
@@ -255,19 +302,27 @@ TOML v1.0 核心子集适配器:
   `[[数组表]]` section;重复键后者胜出;畸形输入返回 `error_code`,
   `parse_config::max_depth` 防护 `too_deep`。
 
-### protobuf — `<rtti/proto.hpp>`
+### protobuf — `<rtti/proto.hpp>`,`<rtti/proto_schema.hpp>`
 
-protobuf 2/3 线格式适配器(`.proto` 文件解析不在范围内):
+完整的 protobuf 2/3 适配器,以官方 `protoc` fixture 逐字节对拍验证:
 
-- 线格式编解码:varint(线 0)、固定 64 位(1)、长度前缀(2)、固定 32 位(5);
-  有界编解码,截断输入 → `proto_truncated`;
+- 线格式编解码:varint(线 0,`sint32`/`sint64` 走 zig-zag)、固定 64 位(1)、
+  长度前缀(2)、固定 32 位(5);有界编解码,截断输入 → `proto_truncated`;
 - 显式 `rtti::proto::schema<T>` 把每个反射字段映射为 `field_desc`
   (protobuf 字段号、`wire_type`、`field_mode` optional/required/repeated、
-  `packed`、proto2 `with_default_int/real/str`);
+  `packed`、proto2 `with_default_int/real/str`、`with_zigzag` 有符号
+  zig-zag varint);
 - 类型桥 `serialize<T>` / `parse_as<T>`:proto2 必填缺失 → `missing_key`,
   缺省字段套用显式默认值,proto3 标量默认值不写上线;repeated 字段同时接受
   packed 与非 packed 布局;
-- 支持 map、repeated 容器与嵌套消息;
+- **.proto 文本解析器** `<rtti/proto_schema.hpp>`:`parse_schema` +
+  `compile_schema` 覆盖完整 proto2/v3 语法——标量(全类型,含 `sint`)、
+  `map<K,V>`、`oneof`、`import`、`reserved`、枚举默认值、字节转义
+  (`\xNN` / `\uXXXX`)、嵌套消息与字段号校验(冲突/重用 →
+  `proto_bad_field`);
+- **extensions**:proto2 `extensions` 区间 + `extend` 声明注册进运行时
+  `rtti::proto::extension_registry`(`register_extension`);未知 wire 字段号
+  保留跳过,已注册的按具名字段解析(官方 `ExtensionRegistry` 语义);
 - 树桥 `wire_to_tree` / `tree_to_wire` 把任意 value_io 树与线格式互接;
   `parse`(无 schema 或有 schema)与 `parse_stream` 提供 SAX 事件
   (`message_start` / `message_end` / 类型化字段事件);
@@ -275,15 +330,35 @@ protobuf 2/3 线格式适配器(`.proto` 文件解析不在范围内):
   `proto_bad_field` 拒绝,schema/流线格式失配 → `proto_type_mismatch`(绝不
   崩溃)。
 
+### FlatBuffers — `<rtti/flat.hpp>`,`<rtti/flat_schema.hpp>`
+
+FlatBuffers 线格式适配器(spec §14),以官方 `flatc` fixture 对拍验证:
+
+- **线编解码**(非模板,在 `src/flat.cpp`):root uoffset、table vtable 遍历、
+  按 1/2/4/8 对齐的标量(带 schema 默认值)、字符串、向量、内联 struct、
+  union(U8 type 槽 + 配对的 variant 表)与可选 file identifier。畸形/截断/
+  越界输入返回 `error_code`,绝不崩溃;
+- `rtti::flat::schema<T>` 注册:每个反射字段 NAME 映射到 vtable SLOT 与 wire
+  `fkind`(标量、`string`、`vector`、`table`、struct、union);缺省的 vtable
+  槽填充 schema/通用默认值;
+- 类型桥 `flat::serialize<T>` / `flat::parse_as<T>` 走转换器反射链;
+  `flat::wire_to_tree` / `tree_to_wire` 互接任意 value_io 树;
+- **.fbs 文本解析器** `<rtti/flat_schema.hpp>`:`flat::parse_schema` +
+  `compile_schema` 把 `.fbs` 描述(namespace / `table` / `struct` / `enum` /
+  `union` / `root_type` / `file_identifier` / 属性 / 默认值)编译为运行时的
+  `schema_info`,驱动与 `schema<T>` 注册完全相同的编解码链路;
+- DoS 防护:`max_depth` 限制嵌套 table(`too_deep`);
+  `verify_file_identifier` 校验 4 字节 magic。
+
 ## 架构
 
 三个协作层,依赖方向严格单向——适配器只能 `#include` 核心,绝不允许反向。
 
 | 层 | 头文件 | 职责 |
 | --- | --- | --- |
-| 反射核心 | `reflection.hpp` `reflect.hpp` `convert.hpp` `memory.hpp` `error.hpp` `rtti_fwd.hpp` `date_time.hpp` `base_convert.hpp` `to_string.hpp` `naming.hpp` `ioc.hpp` | 字段表、宏、查询 API、递归转换、类型判断、特性、反射创建、迭代器、日期时间、进制转换、命名、IoC |
+| 反射核心 | `reflection.hpp` `reflect.hpp` `convert.hpp` `memory.hpp` `error.hpp` `rtti_fwd.hpp` `date_time.hpp` `base_convert.hpp` `to_string.hpp` `number_format.hpp` `string_ops.hpp` `node_io.hpp` `naming.hpp` `ioc.hpp` | 字段表、宏、查询 API、递归转换、类型判断、特性、反射创建、迭代器、日期时间、进制转换、统一 to_string + 格式串、字符串操作、节点级 locate/node_as/to_node、命名、IoC |
 | `value_io` 抽象 | `convert.hpp` | 格式无关的树接口(`kind`、`at`、`get_key`、`make_scalar`、…),由各适配器实现 |
-| 格式适配器 | `json.hpp` `xml.hpp` `ini.hpp` `toml.hpp` `proto.hpp` | JSON / XML / INI / TOML / protobuf DOM 与序列化器 |
+| 格式适配器 | `json.hpp` `xml.hpp` `ini.hpp` `toml.hpp` `proto.hpp` `proto_schema.hpp` `flat.hpp` `flat_schema.hpp` | JSON / XML / INI / TOML / protobuf / FlatBuffers DOM 与序列化器 |
 
 `fields_of<T>` 持有编译期字段表(count + 类型化访问器数组)。`RTTI_DEFINE_TYPE`
 宏特化它;侵入式变体在类内注册嵌套的 `rtti_registration`,`fields_of` 继承之。
@@ -329,6 +404,8 @@ protobuf 2/3 线格式适配器(`.proto` 文件解析不在范围内):
 | `ini_demo.cpp` | INI section 与点号键、parse / serialize |
 | `toml_demo.cpp` | TOML parse、DOM 构建、流式 SAX、key_case 策略、"加载 → 修改 → 回写"场景 |
 | `proto_demo.cpp` | protobuf 2/3 线格式、`schema<T>` 字段注册、线格式 ↔ 树、`parse_stream` |
+| `format_demo.cpp` | `date_time::format`、`format_number`、`to_string(v,spec)`、`node_to_string`、`format_reflected`、`rtti::str` 字符串操作 |
+| `flatbuffers_demo.cpp` | `.fbs` 文本解析(`parse_schema`/`compile_schema`)、`flat::schema<T>` 类型桥、wire parse/serialize |
 
 在仓库根目录的 x64 MSVC 开发者命令提示符下编译其中一个(把 `/LIBPATH`
 条目改成你本机的 SDK 版本):
@@ -349,7 +426,8 @@ cl /nologo /W4 /Zc:preprocessor /permissive- /std:c++17 /EHsc /MDd
 
 ## 构建配置与剥离矩阵
 
-`<rtti/rtti_fwd.hpp>` 中定义五个独立特性门(默认 `1`):
+在 `<rtti/rtti_fwd.hpp>` 中定义六个独立特性门(默认 `1`;flatbuffers 默认经
+`<rtti/flat.hpp>`):
 
 | 门 | 启用 |
 | --- | --- |
@@ -357,12 +435,34 @@ cl /nologo /W4 /Zc:preprocessor /permissive- /std:c++17 /EHsc /MDd
 | `RTTI_ENABLE_XML` | `<rtti/xml.hpp>` |
 | `RTTI_ENABLE_INI` | `<rtti/ini.hpp>` |
 | `RTTI_ENABLE_TOML` | `<rtti/toml.hpp>` |
-| `RTTI_ENABLE_PROTO` | `<rtti/proto.hpp>` |
+| `RTTI_ENABLE_PROTO` | `<rtti/proto.hpp>` `<rtti/proto_schema.hpp>` |
+| `RTTI_ENABLE_FLAT` | `<rtti/flat.hpp>` `<rtti/flat_schema.hpp>`(头文件剥离宏 `RTTI_ENABLE_FLATBUFFERS`) |
 
-反射核心零格式头依赖,因此全部五门关闭(`-DRTTI_ENABLE_*=0`)时仍可编译,
-剥离构建通过完整测试套件(`strip_matrix_test` 在源文件层强制验证核心零格式
-头依赖)。五个门构成 2^5 = 32 种组合的剥离矩阵;每一种组合均单独构建并
-通过完整测试(断言数随启用门数单调递增,从全关 30274 到全开 32266)。
+门是 CMake 选项(`-DRTTI_ENABLE_*=0/1`);编译期宏随 PUBLIC 定义传播到每个
+目标,并在头文件里默认 `1`。反射核心零格式头依赖,因此全部六门关闭时仍可
+编译,剥离构建通过完整测试套件(`strip_matrix_test` 在源文件层强制验证核心
+零格式头依赖)。
+
+六个门构成 2^6 = 64 种组合的剥离矩阵;**每一种组合均显式配置、单独构建并
+通过完整测试**(各自使用独立 scratch 目录,configure 后立即读回
+`CMakeCache.txt` 核验 `RTTI_ENABLE_*` 实际值)。断言数随门开单调递增——
+上一次完整 64 组合扫描实测从全关 `32778` 到全开 `55642`(全部组合
+`0 failures`,零警告)。扫描脚本(`.opencode/batch_strip.ps1` +
+`.opencode/strip_matrix.ps1`)按开启门数分组如下:
+
+| 开启门数 | 运行组合数 | rtti_tests 断言数范围 |
+| --- | --- | --- |
+| 0 | 1 | 32778 |
+| 1 | 6 | 32923 – 38048 |
+| 2 | 15 | 34151 – 43310 |
+| 3 | 20 | 39345 – 48562 |
+| 4 | 15 | 44580 – 54128 |
+| 5 | 6 | 49850 – 55497 |
+| 6 | 1 | 55642 |
+
+(此外,独立 exe `rtti_proto_extension_tests` / `rtti_flat_schema_tests` 在
+PROTO / FLAT 门开启时各增 `160` / `401` 条断言;二者也在扫描中被构建并
+运行。)
 
 ## 可移植性
 
@@ -373,7 +473,7 @@ cl /nologo /W4 /Zc:preprocessor /permissive- /std:c++17 /EHsc /MDd
   该实现。
 - 无 `__declspec`、无 GNU 扩展、无编译器私有内置函数。
 - 计时用 `std::chrono::steady_clock`,RAII 机制,仅用标准容器。
-- 库以头文件交付;反射核心在五个格式门全部关闭时仍可编译,剥离构建通过
+- 库以头文件交付;反射核心在六个格式门全部关闭时仍可编译,剥离构建通过
   完整测试套件。
 
 ## 文档

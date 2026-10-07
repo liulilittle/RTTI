@@ -19,6 +19,12 @@
 //                                        numbers formatted by the spec.
 //     (6) format_reflected<T>(obj, spec) a RTTI_DEFINE_TYPE object -> a compact
 //                                        object line driven by its field table.
+//     (7) rtti::str                       the full-type conversion shells
+//                                        (to_string/from_string + base bridges)
+//                                        and the string-op toolkit (split/join,
+//                                        trim family, case folds, starts/ends
+//                                        with, replace/replace_all, repeat, pad,
+//                                        reverse, quote/unquote, escape/unescape).
 //
 //   INTERFACE COVERAGE CHECKLIST (spec 7.6)
 //     [x] date_time::format(string_view)
@@ -32,6 +38,13 @@
 //     [x] to_string<T>(v, spec)      (integer, real, date_time)
 //     [x] node_to_string             (object tree, scalar nodes, spec, nullptr)
 //     [x] format_reflected<T>        (plain, with spec, nested struct)
+//     [x] rtti::str::to_string/from_string  (scalar, enum, date_time, container,
+//                                            optional, reflected struct)
+//     [x] rtti::str::to_base/from_base      (unsigned + signed, custom digits)
+//     [x] rtti::str::split/join/trim/ltrim/rtrim
+//     [x] rtti::str::to_lower/to_upper/starts_with/ends_with
+//     [x] rtti::str::replace/replace_all/repeat/pad_left/pad_right/reverse
+//     [x] rtti::str::quote/unquote + escape/unescape round-trip
 //
 // HOW TO COMPILE (MSVC; run from vcvars64.bat x64 prompt at repo root)
 //   The formatter translation units live in the static library after task 10
@@ -56,8 +69,10 @@
 #include <iostream>                    // std::cout : print demo sections.
 #include <string>                      // std::string : formatted output.
 #include <limits>                      // max()/infinity() : boundary values.
+#include <vector>                      // std::vector : split/join containers.
 #include <rtti/number_format.hpp>      // format_number / to_string(v,spec) /
                                        // node_to_string / format_reflected.
+#include <rtti/string_ops.hpp>         // rtti::str: conversion shells + toolkit.
 
 namespace rtti_demo_format {
 // A reflected struct so format_reflected<T> has a field table to walk.
@@ -67,7 +82,10 @@ struct FormatDemoPoint {
     std::string name;
     RTTI_DEFINE_TYPE_INTRUSIVE(FormatDemoPoint, x, y, name)
 };
+// A registered enum so str::to_string renders its label table.
+enum class DemoKind { fast = 0, slow = 1 };
 } // namespace rtti_demo_format
+RTTI_DEFINE_ENUM(rtti_demo_format::DemoKind, fast, slow)
 
 namespace {
 
@@ -218,6 +236,94 @@ int main() {
         // The spec is applied to every numeric field (int grouping here).
         show("format_reflected(pt, \"#,d\")", format_reflected(pt, "#,d"),
              "{\"x\":1,234,567,\"y\":42,\"name\":\"origin\"}");
+    }
+
+    // ---- (7) rtti::str CONVERSION SHELLS + STRING TOOLKIT ---------------------
+    std::cout << "=== (7) rtti::str: conversions + string ops ===\n";
+    {
+        namespace S = rtti::str;
+
+        // Conversion shells are using-aliases of the unified unified layer.
+        show("str::to_string(-42)", S::to_string(-42), "-42");
+        show("str::to_string(3.5)", S::to_string(3.5), "3.5");
+        {
+            // A registered enum converts through its label table.
+            show("str::to_string(enum)",
+                 S::to_string(rtti_demo_format::DemoKind::fast), "fast");
+        }
+        {   // date_time via the existing bridge.
+            const auto r = date_time::from_unix_seconds(0);
+            show("str::to_string(dt)", S::to_string(r.value),
+                 "1970-01-01T00:00:00Z");
+        }
+        {   // Containers / optional / reflected structs all convert.
+            show("str::to_string(vector)", S::to_string(std::vector<int>{1, 2}),
+                 "[1,2]");
+            show("str::to_string(optional)",
+                 S::to_string(std::optional<int>(7)), "7");
+            rtti_demo_format::FormatDemoPoint pt;  // reflected via RTTI_DEFINE_TYPE
+            pt.x = 1; pt.y = 2; pt.name = "n";
+            show("str::to_string(reflected)", S::to_string(pt),
+                 "{\"x\":1,\"y\":2,\"name\":\"n\"}");
+        }
+        // from_string<T>(s) returns std::optional<T>; empty on parse failure.
+        show("str::from_string<int>(\"-42\")", S::to_string(*S::from_string<int>("-42")), "-42");
+        {
+            const auto no = S::from_string<int>("nope");
+            std::cout << "    str::from_string<int>(\"nope\") -> "
+                      << (no ? S::to_string(*no) : std::string("<empty>"))
+                      << "  [empty on failure]\n";
+        }
+        // Base bridges (2..64).
+        show("str::to_base(255, 16)", S::to_base(255, 16), "ff");
+        show("str::to_base_signed(-255, 16)", S::to_base_signed(-255, 16), "-ff");
+        {
+            std::uint64_t v = 0;
+            const error_code ec = S::from_base("ff", 16, v);
+            show("str::from_base(\"ff\",16,out)", ec == error_code::ok ? S::to_base(v, 10) : "err", "255");
+        }
+
+        // Splitting / joining.
+        {
+            const auto toks = S::split("a,b,,c", ',');
+            std::cout << "    split(\"a,b,,c\", ',') -> ["
+                      << S::join(toks, " | ") << "]  [4 tokens incl. empty]\n";
+        }
+        show("join({\"a\",\"b\",\"c\"}, \"-\")", S::join({"a", "b", "c"}, "-"),
+             "a-b-c");
+        // Trimming, case folds, prefix/suffix.
+        show("trim(\"  hi  \")", S::trim("  hi  "), "hi");
+        show("ltrim(\"  hi  \")", S::ltrim("  hi  "), "hi  ");
+        show("rtrim(\"  hi  \")", S::rtrim("  hi  "), "  hi");
+        show("to_lower(\"AbC1\")", S::to_lower("AbC1"), "abc1");
+        show("to_upper(\"AbC1\")", S::to_upper("AbC1"), "ABC1");
+        {
+            const bool sw = S::starts_with("foobar", "foo");
+            const bool ew = S::ends_with("foobar", "bar");
+            std::cout << "    starts_with(\"foobar\",\"foo\")=" << sw
+                      << "  ends_with(\"foobar\",\"bar\")=" << ew << "\n";
+        }
+        // Replace / repeat / pad / reverse.
+        show("replace(\"abcabc\", \"ab\", \"X\")", S::replace("abcabc", "ab", "X"),
+             "Xcabc");
+        show("replace_all(\"abcabc\", \"ab\", \"X\")",
+             S::replace_all("abcabc", "ab", "X"), "XcXc");
+        show("repeat(\"ab\", 3)", S::repeat("ab", 3), "ababab");
+        show("pad_left(\"7\", 3, '0')", S::pad_left("7", 3, '0'), "007");
+        show("pad_right(\"7\", 3, '.')", S::pad_right("7", 3, '.'), "7..");
+        show("reverse(\"abc\")", S::reverse("abc"), "cba");
+        // Quote/unquote + escape/unescape round-trip.
+        {
+            const std::string q = S::quote("he said \"hi\"");
+            std::cout << "    quote -> " << q << "\n";
+            show("unquote(quote(s)) round-trip",
+                 S::unquote(q), "he said \"hi\"");
+        }
+        {
+            const std::string e = S::escape("a\nb\t");
+            std::cout << "    escape(\"a\\nb\\t\") -> " << e << "\n";
+            show("unescape(escape(s)) round-trip", S::unescape(e), "a\nb\t");
+        }
     }
 
     std::cout << "    format_demo done\n";

@@ -214,6 +214,60 @@ A value type holding Unix epoch nanoseconds (`int64`):
 - convenience wrappers `to_string_base` / `from_string_base` and signed
   variants over the base-convert layer.
 
+### String formatting — `<rtti/number_format.hpp>`, `<rtti/date_time.hpp>`
+
+Format-driven text rendering (spec §7), all fail-safe with `error_code`:
+
+- `format_number<T>(v, spec)` — Python-format-style specs for integers
+  (base `d/b/o/x/X`, thousands `,`, `#` alternate form, width, fill, align,
+  sign, zero-pad) and reals (`f/e/g` plus precision, grouping, width);
+  shortest round-trip text by default;
+- `to_string<T>(v, format_spec)` — thin overload that routes integers/reals
+  through `format_number` and `date_time` through its `format(pattern)`;
+- `date_time::format(pattern)` — strftime-style pattern
+  (`%Y %y %m %d %H %M %S %f %F %T %R %z %Z %%`); an unknown directive
+  reports `unexpected_token`;
+- `node_to_string(const value_io*, spec)` — any value_io node (object/array/
+  scalar) to one compact line, numbers formatted by the spec;
+- `format_reflected<T>(obj, spec)` — walk the `RTTI_DEFINE_TYPE` field table
+  and render a compact object line, applying the spec to every numeric field.
+  Malformed specs never throw: they return an empty string plus
+  `error_code::unexpected_token` through the optional `error_info*`.
+
+### Node-level conversion — `<rtti/node_io.hpp>`
+
+Format-independent path navigation over any `value_io` DOM:
+
+- `rtti::locate(root, "user.addresses[1].city")` — dot-separated keys plus
+  `[index]` groups; a missing key / out-of-range index / malformed path
+  reports `no_such_field` or `kind_mismatch` (never crashes). Both const
+  and mutable overloads are provided;
+- `rtti::node_as<T>(node)` — convert a located node to a C++ value through
+  the converter layer (`result<T>`);
+- `rtti::to_node(target, value)` — replace the target node's subtree from a
+  C++ value through `from_value`, so the owning document serializes the new
+  contents. `locate` is implemented in `src/reflect.cpp`; the two templates
+  are thin shells over `convert.hpp`.
+
+### `rtti::str` — full-type string conversion + string ops
+
+`<rtti/string_ops.hpp>` bundles conversion and manipulation under
+`namespace rtti::str`:
+
+- conversion shells `to_string` / `from_string` are using-aliases of the
+  unified `rtti::to_string` / `from_string` layer above, so scalars, enums,
+  `date_time`, containers, optional/variant/tuple/pair/array and reflected
+  structs all convert through the same implementation; `to_base` / `from_base`
+  (and signed twins) bridge the arbitrary-base helpers (bases 2..64);
+- string operations (non-template, in `src/string_ops.cpp`):
+  `split` / `join`, `trim` / `ltrim` / `rtrim`, `to_lower` / `to_upper`,
+  `starts_with` / `ends_with`, `replace` / `replace_all`, `repeat`,
+  `pad_left` / `pad_right`, `reverse`, `quote` / `unquote`,
+  `escape` / `unescape`;
+- pure string transforms are `noexcept`; parsing (`unquote` / `unescape` /
+  `from_base` / `from_string`) reports `error_code` and never crashes (spec
+  §0 fail-safe).
+
 ### `naming` — `<rtti/naming.hpp>`
 
 A format-agnostic key naming policy carried by each text adapter's `write_config`:
@@ -237,13 +291,14 @@ A format-agnostic key naming policy carried by each text adapter's `write_config
 
 ## Format Adapters
 
-JSON/XML/INI/TOML are optional build gates. When enabled the four text
-adapters share the same shape — an owned DOM (`document : value_io`), a
+JSON/XML/INI/TOML/FlatBuffers are optional build gates. When enabled the four
+text adapters share the same shape — an owned DOM (`document : value_io`), a
 `parse`/`serialize` pair, a typed bridge `parse_as<T>` / `serialize<T>(obj)`,
 a streaming SAX `parse_stream` and a `write_config` (key naming / rename /
-skip_empty). The protobuf adapter (`<rtti/proto.hpp>`) is gated the same way
-but configures itself through `parse_config` (it has no `write_config`). Each
-is header-only and never needed by the reflect core.
+skip_empty). The protobuf and flatbuffers adapters (`<rtti/proto.hpp>`,
+`<rtti/flat.hpp>`) are gated the same way but configure themselves through
+`parse_config` (they have no `write_config`). Each is header-only and never
+needed by the reflect core.
 
 ### JSON — `<rtti/json.hpp>`
 
@@ -276,27 +331,60 @@ A TOML v1.0 core-subset adapter:
   later-win; malformed input returns `error_code` and `parse_config::max_depth`
   guards against `too_deep`.
 
-### protobuf — `<rtti/proto.hpp>`
+### protobuf — `<rtti/proto.hpp>`, `<rtti/proto_schema.hpp>`
 
-A protobuf 2/3 wire-format adapter (`.proto` file parsing is out of scope):
+A full protobuf 2/3 adapter, official-`protoc`-fixture verified:
 
-- wire codecs: varint (wire 0), fixed 64-bit (1), length-delimited (2),
-  fixed 32-bit (5); bounded encode/decode, truncated input →
-  `proto_truncated`;
+- wire codecs: varint (wire 0, zig-zag for `sint32`/`sint64`), fixed 64-bit
+  (1), length-delimited (2), fixed 32-bit (5); bounded encode/decode,
+  truncated input → `proto_truncated`;
 - explicit `rtti::proto::schema<T>` maps each reflected field to a
   `field_desc` (protobuf field number, `wire_type`, `field_mode`
-  optional/required/repeated, `packed`, proto2 `with_default_int/real/str`);
+  optional/required/repeated, `packed`, proto2 `with_default_int/real/str`,
+  `with_zigzag` for signed zig-zag varints);
 - typed bridge `serialize<T>`/`parse_as<T>`: proto2 required-missing →
   `missing_key`, explicit defaults applied on absent optional fields, proto3
   scalar defaults omitted on the wire; repeated fields accept both packed
   and unpacked layout;
-- maps, repeated containers and nested messages supported;
+- **.proto text parser** `<rtti/proto_schema.hpp>`: `parse_schema` +
+  `compile_schema` handle the full proto2/v3 grammar — scalars (all types
+  incl. `sint`), `map<K,V>`, `oneof`, `import`, `reserved`, enum default
+  values, byte escapes (`\xNN` / `\uXXXX`), nested messages and field
+  number validation (`proto_bad_field` on conflicts/reuse);
+- **extensions**: proto2 `extensions` ranges + `extend` declarations register
+  into a runtime `rtti::proto::extension_registry` (`register_extension`);
+  unknown wire field numbers are preserved / skipped, registered ones parse
+  as named fields (official `ExtensionRegistry` semantics);
 - tree bridge `wire_to_tree` / `tree_to_wire` glues any value_io tree to the
   wire; `parse` (schema-less or schema-aware) and `parse_stream` provide SAX
   events (`message_start` / `message_end` / typed field events);
 - DoS guards: nesting `max_depth` and length-prefix bounds; field number 0
   and group wire types 3/4 are rejected with `proto_bad_field`, and a
   schema/stream wire mismatch yields `proto_type_mismatch` (never crashes).
+
+### FlatBuffers — `<rtti/flat.hpp>`, `<rtti/flat_schema.hpp>`
+
+A FlatBuffers wire-format adapter (spec §14), official-`flatc`-fixture
+verified:
+
+- **wire codec** (non-template, in `src/flat.cpp`): root uoffset, table vtable
+  walk, scalars aligned 1/2/4/8 with schema defaults, strings, vectors,
+  inline structs, unions (U8 type slot + paired variant table) and optional
+  file identifier. Malformed/truncated/out-of-range input returns an
+  `error_code` and never crashes;
+- `rtti::flat::schema<T>` registration: each reflected field NAME maps to a
+  vtable SLOT and wire `fkind` (scalars, `string`, `vector`, `table`, struct,
+  union); absent vtable slots fill schema/universal defaults;
+- typed bridge `flat::serialize<T>` / `flat::parse_as<T>` walk the converter
+  reflection chain; `flat::wire_to_tree` / `tree_to_wire` glue any value_io
+  tree;
+- **.fbs text parser** `<rtti/flat_schema.hpp>`: `flat::parse_schema` +
+  `compile_schema` compile a `.fbs` descriptor (namespace / `table` / `struct`
+  / `enum` / `union` / `root_type` / `file_identifier` / attributes /
+  defaults) into a runtime `schema_info` that drives the same codec chain as
+  a `schema<T>` registration;
+- DoS guards: `max_depth` caps nested tables (`too_deep`);
+  `verify_file_identifier` checks the 4-byte magic.
 
 ## Architecture
 
@@ -305,9 +393,9 @@ ever `#include` the core, never the reverse.
 
 | Layer | Headers | Responsibility |
 | --- | --- | --- |
-| Reflect core | `reflection.hpp` `reflect.hpp` `convert.hpp` `memory.hpp` `error.hpp` `rtti_fwd.hpp` `date_time.hpp` `base_convert.hpp` `to_string.hpp` `naming.hpp` `ioc.hpp` | field tables, macros, query API, recursive conversion, type judgement, attributes, reflective creation, iterators, date/time, base conversion, naming, IoC |
+| Reflect core | `reflection.hpp` `reflect.hpp` `convert.hpp` `memory.hpp` `error.hpp` `rtti_fwd.hpp` `date_time.hpp` `base_convert.hpp` `to_string.hpp` `number_format.hpp` `string_ops.hpp` `node_io.hpp` `naming.hpp` `ioc.hpp` | field tables, macros, query API, recursive conversion, type judgement, attributes, reflective creation, iterators, date/time, base conversion, unified to_string + format specs, string ops, node-level locate/node_as/to_node, naming, IoC |
 | `value_io` abstraction | `convert.hpp` | format-agnostic tree interface (`kind`, `at`, `get_key`, `make_scalar`, …) implemented by each adapter |
-| Format adapters | `json.hpp` `xml.hpp` `ini.hpp` `toml.hpp` `proto.hpp` | JSON / XML / INI / TOML / protobuf DOM + serializers |
+| Format adapters | `json.hpp` `xml.hpp` `ini.hpp` `toml.hpp` `proto.hpp` `proto_schema.hpp` `flat.hpp` `flat_schema.hpp` | JSON / XML / INI / TOML / protobuf / FlatBuffers DOM + serializers |
 
 `fields_of<T>` holds the compile-time field table (count + array of typed
 accessors). The `RTTI_DEFINE_TYPE` macro specializes it; intrusive variants
@@ -357,6 +445,8 @@ names are namespaced so all TUs link together without collisions.
 | `ini_demo.cpp` | INI sections and dotted keys, parse / serialize |
 | `toml_demo.cpp` | TOML parse, DOM build, streaming SAX, key-case policy, "load → tweak → write back" scenario |
 | `proto_demo.cpp` | protobuf 2/3 wire, `schema<T>` field registration, wire ↔ tree, `parse_stream` |
+| `format_demo.cpp` | `date_time::format`, `format_number`, `to_string(v,spec)`, `node_to_string`, `format_reflected`, `rtti::str` string ops |
+| `flatbuffers_demo.cpp` | `.fbs` text parse (`parse_schema`/`compile_schema`), `flat::schema<T>` typed bridge, wire parse/serialize |
 
 To compile one from an x64 MSVC developer prompt at the repo root (adjust the
 `/LIBPATH` entries to your own SDK versions):
@@ -378,8 +468,8 @@ ending in PASS markers, exit code 0.
 
 ## Build Configuration & Strip Matrix
 
-Five independent feature gates are defined (default `1`) in
-`<rtti/rtti_fwd.hpp>`:
+Six independent feature gates are defined (default `1`) in
+`<rtti/rtti_fwd.hpp>` (flatbuffers defaults through `<rtti/flat.hpp>`):
 
 | Gate | Enables |
 | --- | --- |
@@ -387,15 +477,37 @@ Five independent feature gates are defined (default `1`) in
 | `RTTI_ENABLE_XML` | `<rtti/xml.hpp>` |
 | `RTTI_ENABLE_INI` | `<rtti/ini.hpp>` |
 | `RTTI_ENABLE_TOML` | `<rtti/toml.hpp>` |
-| `RTTI_ENABLE_PROTO` | `<rtti/proto.hpp>` |
+| `RTTI_ENABLE_PROTO` | `<rtti/proto.hpp>` `<rtti/proto_schema.hpp>` |
+| `RTTI_ENABLE_FLAT` | `<rtti/flat.hpp>` `<rtti/flat_schema.hpp>` (header strip macro `RTTI_ENABLE_FLATBUFFERS`) |
 
-The reflect core has zero format-header dependencies, so it compiles with all
-five gates off (`-DRTTI_ENABLE_*=0`) and the stripped build passes the full
-test suite (`strip_matrix_test` verifies the core's zero format-header
-dependency at the source level). The five gates form a 2^5 = 32-combination
-strip matrix; every combination is configured, built and run against the full
-test suite independently (assertions grow monotonically with the enabled
-gates, from 30274 all-off to 32266 all-on).
+The gates are CMake options (`-DRTTI_ENABLE_*=0/1`); the compile-time macros
+are propagated to every target and default to `1` in the headers. The reflect
+core has zero format-header dependencies, so it compiles with all six gates
+off and the stripped build passes the full test suite (`strip_matrix_test`
+verifies the core's zero format-header dependency at the source level).
+
+The six gates form a 2^6 = 64-combination strip matrix; **every combination
+is explicitly configured, built and run against the full test suite
+independently** (each in its own scratch directory, with the `CMakeCache.txt`
+`RTTI_ENABLE_*` values verified right after configure). Assertions grow
+monotonically as gates are added — from `32778` all-off to `55642` all-on in
+the last full 64-combo sweep (all combinations `0 failures`, zero warnings).
+The sweep (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
+grouped by gate count:
+
+| Gates on | Combinations run | rtti_tests assertions span |
+| --- | --- | --- |
+| 0 | 1 | 32778 |
+| 1 | 6 | 32923 – 38048 |
+| 2 | 15 | 34151 – 43310 |
+| 3 | 20 | 39345 – 48562 |
+| 4 | 15 | 44580 – 54128 |
+| 5 | 6 | 49850 – 55497 |
+| 6 | 1 | 55642 |
+
+(In addition, the standalone `rtti_proto_extension_tests` / `rtti_flat_schema_tests`
+executables add `160` / `401` assertions whenever the PROTO / FLAT gate is on;
+they are built and run inside the sweep as well.)
 
 ## Portability
 
@@ -406,7 +518,7 @@ gates, from 30274 all-off to 32266 all-on).
   libc++ 14; earlier GCC/Clang lack them.
 - No `__declspec`, no GNU extensions, no compiler-private builtins.
 - `std::chrono::steady_clock` timers, RAII mechanics, standard containers only.
-- The library is header-delivered; the reflect core compiles with all five
+- The library is header-delivered; the reflect core compiles with all six
   format gates off and the stripped build passes the full test suite.
 
 ## Documentation
