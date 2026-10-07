@@ -272,7 +272,10 @@ JSON/XML/INI/TOML/FlatBuffers 是可选的编译门。开启时四个文本适�
 `parse_as<T>` / `serialize<T>(obj)`、流式 SAX `parse_stream`,以及
 `write_config`(键命名 / rename / skip_empty)。protobuf 与 flatbuffers 适配器
 (`<rtti/proto.hpp>`、`<rtti/flat.hpp>`)同样以编译门控制,但通过 `parse_config`
-配置(没有 `write_config`)。每个都是头文件式,且反射核心永不依赖它们。
+配置(没有 `write_config`)。四个文本适配器(JSON/XML/INI/TOML)与 protobuf 适配器
+为纯头文件模板;flatbuffers 适配器是例外——其 wire codec 与 `.fbs` 解析器为
+非模板实现,编入 `src/flat.cpp` / `src/flat_schema.cpp`(若干字符串/转换工具同样
+以 `src/*.cpp` 提供非模板实现)。这些适配器反射核心永不依赖。
 
 ### JSON — `<rtti/json.hpp>`
 
@@ -436,7 +439,14 @@ cl /nologo /W4 /Zc:preprocessor /permissive- /std:c++17 /EHsc /MDd
 | `RTTI_ENABLE_INI` | `<rtti/ini.hpp>` |
 | `RTTI_ENABLE_TOML` | `<rtti/toml.hpp>` |
 | `RTTI_ENABLE_PROTO` | `<rtti/proto.hpp>` `<rtti/proto_schema.hpp>` |
-| `RTTI_ENABLE_FLAT` | `<rtti/flat.hpp>` `<rtti/flat_schema.hpp>`(头文件剥离宏 `RTTI_ENABLE_FLATBUFFERS`) |
+| `RTTI_ENABLE_FLAT` | `<rtti/flat.hpp>` `<rtti/flat_schema.hpp>` ——头文件剥离宏 `RTTI_ENABLE_FLATBUFFERS`(不受 CMake 驱动,见下方注意) |
+
+**FLAT 门注意**:`RTTI_ENABLE_FLAT` 仅控制 flat 测试注册(`flat_test.cpp` 与
+`rtti_flat_schema_tests` 可执行)。`src/flat.cpp` / `src/flat_schema.cpp` 的
+wire codec 恒编入 `rtti` 静态库,`<rtti/flat.hpp>` 仍可 include——头文件剥离宏
+`RTTI_ENABLE_FLATBUFFERS` 默认启用,且从不被 CMake 设置;这与其余五门不同
+(其余五门 `OFF` 时适配器头 `#error`)。如需完全剥离 flat,须以
+`-DRTTI_ENABLE_FLAT=0` 配置 CMake,并额外传入 `-DRTTI_ENABLE_FLATBUFFERS=0`。
 
 门是 CMake 选项(`-DRTTI_ENABLE_*=0/1`);编译期宏随 PUBLIC 定义传播到每个
 目标,并在头文件里默认 `1`。反射核心零格式头依赖,因此全部六门关闭时仍可

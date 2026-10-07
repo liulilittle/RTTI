@@ -4,7 +4,7 @@
 // comments only.
 //
 // The format adapters are feature-gated; this file compiles to nothing when
-// any of the five gates is off (the adapter headers #error in stripped
+// any of the six gates is off (the adapter headers #error in stripped
 // builds, mirroring date_time_test.cpp / tests/CMakeLists.txt).
 
 #include "test_harness.hpp"
@@ -394,4 +394,4 @@ RTTI_TEST_CASE(NodeLocateAllFormatsSmoke) {
 
 } // namespace rtti_test_lib
 
-#endif // all five format gates enabled
+#endif // all six format gates enabled

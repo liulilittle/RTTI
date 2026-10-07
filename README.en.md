@@ -297,8 +297,13 @@ text adapters share the same shape — an owned DOM (`document : value_io`), a
 a streaming SAX `parse_stream` and a `write_config` (key naming / rename /
 skip_empty). The protobuf and flatbuffers adapters (`<rtti/proto.hpp>`,
 `<rtti/flat.hpp>`) are gated the same way but configure themselves through
-`parse_config` (they have no `write_config`). Each is header-only and never
-needed by the reflect core.
+`parse_config` (they have no `write_config`). The four text adapters
+(JSON/XML/INI/TOML) and the protobuf adapter are header-only templates; the
+flatbuffers adapter is the exception — its wire codec and `.fbs` parser are
+non-template implementations compiled from `src/flat.cpp` /
+`src/flat_schema.cpp` (several string/conversion tools likewise have
+non-template bodies under `src/*.cpp`). None of these adapters is ever needed
+by the reflect core.
 
 ### JSON — `<rtti/json.hpp>`
 
@@ -478,7 +483,16 @@ Six independent feature gates are defined (default `1`) in
 | `RTTI_ENABLE_INI` | `<rtti/ini.hpp>` |
 | `RTTI_ENABLE_TOML` | `<rtti/toml.hpp>` |
 | `RTTI_ENABLE_PROTO` | `<rtti/proto.hpp>` `<rtti/proto_schema.hpp>` |
-| `RTTI_ENABLE_FLAT` | `<rtti/flat.hpp>` `<rtti/flat_schema.hpp>` (header strip macro `RTTI_ENABLE_FLATBUFFERS`) |
+| `RTTI_ENABLE_FLAT` | `<rtti/flat.hpp>` `<rtti/flat_schema.hpp>` — header strip macro `RTTI_ENABLE_FLATBUFFERS` (not driven by CMake, see caveat below) |
+
+**FLAT gate caveat**: `RTTI_ENABLE_FLAT` only controls registration of the
+flat tests (`flat_test.cpp`, the `rtti_flat_schema_tests` executable). The
+`src/flat.cpp` / `src/flat_schema.cpp` wire codecs are always compiled into the
+`rtti` static library and `<rtti/flat.hpp>` remains includable — the header
+strip macro `RTTI_ENABLE_FLATBUFFERS` simply defaults to enabled and is never
+set by CMake, unlike the other five gates where `OFF` makes the adapter header
+`#error`. To fully strip FlatBuffers, configure CMake with
+`-DRTTI_ENABLE_FLAT=0` and also pass `-DRTTI_ENABLE_FLATBUFFERS=0`.
 
 The gates are CMake options (`-DRTTI_ENABLE_*=0/1`); the compile-time macros
 are propagated to every target and default to `1` in the headers. The reflect
