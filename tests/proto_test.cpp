@@ -909,4 +909,25 @@ RTTI_TEST_CASE(ProtoOneofTypedMutexLastWins) {
     RTTI_CHECK(!(*r2).s.has_value());
 }
 
+RTTI_TEST_CASE(ProtoMapDuplicateKeyLastWins) {
+    // Two map entries sharing one key are legal wire data; protoc merges them
+    // with the LAST value winning (like a repeated map merge). Two "a" entries
+    // (1 then 300):
+    static const unsigned char w[] = {
+        0x0A, 0x05, 0x0A, 0x01, 'a', 0x10, 0x01,       // {"a":1}
+        0x0A, 0x06, 0x0A, 0x01, 'a', 0x10, 0xAC, 0x02, // {"a":300}
+    };
+    const auto r = rtti::proto::parse_as<ProtoMap>(
+        rtti::string_view(reinterpret_cast<const char*>(w), sizeof(w)));
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK_EQ((*r).attrs.size(), size_t(1));
+    RTTI_CHECK_EQ((*r).attrs.at("a"), 300); // last wins
+
+    // Re-encoding emits a single entry for the surviving key.
+    const std::string re = rtti::proto::serialize(*r);
+    static const unsigned char one[] = {0x0A, 0x06, 0x0A, 0x01, 'a', 0x10, 0xAC, 0x02};
+    RTTI_CHECK_EQ(re.size(), size_t(sizeof(one)));
+    RTTI_CHECK_EQ(std::memcmp(re.data(), one, sizeof(one)), 0);
+}
+
 } // namespace rtti_test_lib

@@ -68,6 +68,7 @@ RTTI_DEFINE_ENUM(rtti_test_lib::EmptyColor)
 RTTI_DEFINE_TYPE(rtti_test_lib::Point, x, y)
 RTTI_TEMPLATE_INFO(rtti_test_lib::TplSingle, (std::pair<int, int>))
 RTTI_TEMPLATE_INFO(rtti_test_lib::TplDuo, (std::pair<int, int>), std::string)
+RTTI_TEMPLATE_INFO(rtti_test_lib::TplDuo, int, (std::pair<int, int>))
 
 namespace rtti_test_lib {
 
@@ -153,6 +154,19 @@ RTTI_TEST_CASE(paren_wrapped_template_arg_not_swallowed) {
     // Truly empty registrations still yield count 0 / an empty tuple.
     using T0 = rtti_test_lib::TplSingle<int>;
     RTTI_CHECK_EQ(rtti::template_arg_count<T0>(), size_t(0));
+}
+
+// The documentation promises that any comma-bearing argument can be
+// paren-wrapped regardless of its position in the list. A wrapped element in a
+// non-first position must be unwrapped by the per-element stripper too, not
+// only when the list begins with '(' (A2 residual I-1).
+RTTI_TEST_CASE(paren_wrapped_template_arg_non_head) {
+    using T = rtti_test_lib::TplDuo<int, std::pair<int, int>>;
+    RTTI_CHECK_EQ(rtti::template_arg_count<T>(), size_t(2));
+    RTTI_CHECK((std::is_same<rtti::template_args<T>,
+                             std::tuple<int, std::pair<int, int>>>::value));
+    RTTI_CHECK((std::is_same<rtti::template_arg_at<T, 1>,
+                             std::pair<int, int>>::value));
 }
 
 } // namespace rtti_test_lib

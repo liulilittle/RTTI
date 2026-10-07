@@ -152,6 +152,9 @@ struct schema_message {
     // names. A field reusing a reserved number or name is rejected by parse.
     std::vector<std::pair<std::uint32_t, std::uint32_t>> reserved_numbers;
     std::vector<std::string> reserved_names;
+    // `extensions 100 to 199;` (proto2): the field-number range the message
+    // reserves for extensions. Declared fields colliding with it are rejected.
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> extension_ranges;
     // Next oneof group id handed out by parse_oneof (starts at 1).
     std::uint32_t oneof_counter = 0;
 };
@@ -167,6 +170,14 @@ struct schema_enum {
     std::vector<schema_enum_value> values;
 };
 
+// One `extend <target> { ... }` field: the extended message plus the field
+// descriptor. The field carries the same name/number/type/options data as a
+// regular schema_field; wire semantics derive from field.type in the same way.
+struct schema_extension {
+    std::string extendee; // target message (dotted; resolved by resolve_types)
+    schema_field field;
+};
+
 struct schema_desc {
     syntax syn = syntax::proto2;
     std::vector<schema_message> messages; // top-level first, then nested
@@ -174,6 +185,9 @@ struct schema_desc {
     std::vector<schema_enum> enum_defs;   // full enum tables (values)
     // import "file.proto"; declarations (dependency table; files not loaded).
     std::vector<std::string> imports;
+    // `extend Target { ... }` declarations (proto2 extensions). compile-time
+    // registration turns them into extension_desc into the ExtensionRegistry.
+    std::vector<schema_extension> extensions;
 };
 
 namespace detail {
@@ -445,10 +459,6 @@ struct scanner {
                                 tmp.push_back('\v');
                                 p += 2;
                                 break;
-                            case '0':
-                                tmp.push_back('\0');
-                                p += 2;
-                                break;
                             case '\\':
                                 tmp.push_back('\\');
                                 p += 2;
@@ -478,7 +488,8 @@ struct scanner {
                                     ++digits;
                                 }
                                 if (digits == 0) {
-                                    tmp.push_back('x');
+                                    fail = error_code::unexpected_token;
+                                    fail_pos = t.begin;
                                     break;
                                 }
                                 tmp.push_back(static_cast<char>(
@@ -537,6 +548,11 @@ struct scanner {
                                     ++digits;
                                 }
                                 if (digits < 8) {
+                                    fail = error_code::unexpected_token;
+                                    fail_pos = t.begin;
+                                }
+                                if (cp > 0x10FFFFu) {
+                                    // Outside the Unicode scalar range.
                                     fail = error_code::unexpected_token;
                                     fail_pos = t.begin;
                                 }
@@ -683,6 +699,9 @@ struct parser {
     bool parse_oneof(schema_desc& d, schema_message& sm,
                      const std::vector<std::string>& stack);
     bool parse_reserved(schema_message& sm);
+    bool parse_extensions_range(schema_message& sm);
+    bool parse_extend(schema_desc& d, std::vector<std::string>& stack,
+                      int depth);
     bool parse_field(schema_desc& d, schema_message& sm,
                      const std::vector<std::string>& stack);
     bool parse_map_type(schema_desc& d, schema_field& f,
@@ -754,6 +773,12 @@ inline bool parser::parse_file(schema_desc& d) {
         }
         if (have_ident("import")) {
             if (!parse_import(d)) {
+                return false;
+            }
+            continue;
+        }
+        if (have_ident("extend")) {
+            if (!parse_extend(d, stack, 0)) {
                 return false;
             }
             continue;
@@ -839,6 +864,20 @@ inline bool parser::parse_message(schema_desc& d,
         }
         if (have_ident("reserved")) {
             if (!parse_reserved(sm)) {
+                stack.pop_back();
+                return false;
+            }
+            continue;
+        }
+        if (have_ident("extensions")) {
+            if (!parse_extensions_range(sm)) {
+                stack.pop_back();
+                return false;
+            }
+            continue;
+        }
+        if (have_ident("extend")) {
+            if (!parse_extend(d, stack, depth + 1)) {
                 stack.pop_back();
                 return false;
             }
@@ -1078,6 +1117,13 @@ inline bool parser::parse_map_type(schema_desc& d, schema_field& f,
         set_error(error_code::unexpected_token, key_pos);
         return false;
     }
+    // Map keys are limited to integral types, bool and string (protoc rule:
+    // no float/double/bytes, no message/enum).
+    if (kst == scalar_type::float_val || kst == scalar_type::double_val ||
+        kst == scalar_type::bytes_val) {
+        set_error(error_code::unexpected_token, key_pos);
+        return false;
+    }
     kf.type = kst;
 
     schema_field vf;
@@ -1245,6 +1291,139 @@ inline bool parser::parse_reserved(schema_message& sm) {
         }
         return true;
     }
+}
+
+inline bool parser::parse_extensions_range(schema_message& sm) {
+    if (failed()) {
+        return false;
+    }
+    adv(); // 'extensions'
+    for (;;) {
+        if (failed()) {
+            return false;
+        }
+        if (cur.k != token::kind::number || cur.is_real) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        const std::uint64_t lo = cur.ival;
+        if (lo == 0 || lo > 0x1FFFFFFFull) {
+            set_error(error_code::proto_bad_field, cur.begin);
+            return false;
+        }
+        adv();
+        std::uint64_t hi = lo;
+        if (have_ident("to")) {
+            adv();
+            if (cur.k == token::kind::ident &&
+                cur.text == rtti::string_view("max")) {
+                hi = 0x1FFFFFFFull;
+                adv();
+            } else if (cur.k == token::kind::number && !cur.is_real) {
+                hi = cur.ival;
+                if (hi == 0 || hi > 0x1FFFFFFFull || hi < lo) {
+                    set_error(error_code::proto_bad_field, cur.begin);
+                    return false;
+                }
+                adv();
+            } else {
+                set_error(error_code::unexpected_token, cur.begin);
+                return false;
+            }
+        }
+        sm.extension_ranges.emplace_back(
+            static_cast<std::uint32_t>(lo), static_cast<std::uint32_t>(hi));
+        if (cur.k == token::kind::comma) {
+            adv();
+            continue;
+        }
+        if (!expect_kind(token::kind::semi)) {
+            return false;
+        }
+        return true;
+    }
+}
+
+inline bool parser::parse_extend(schema_desc& d,
+                                 std::vector<std::string>& stack,
+                                 int depth) {
+    if (failed()) {
+        return false;
+    }
+    if (depth >= kMaxNesting) {
+        set_error(error_code::too_deep, cur.begin);
+        return false;
+    }
+    adv(); // 'extend'
+    // The extendee message type: a dotted name, resolved relative to the
+    // current scope by the type-resolution pass (like a normal type ref).
+    std::string target;
+    if (cur.k == token::kind::dot) {
+        target.push_back('.');
+        adv();
+    }
+    if (cur.k != token::kind::ident) {
+        set_error(error_code::unexpected_token, cur.begin);
+        return false;
+    }
+    target += std::string(cur.text);
+    adv();
+    while (cur.k == token::kind::dot) {
+        adv();
+        if (cur.k != token::kind::ident) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        target.push_back('.');
+        target += std::string(cur.text);
+        adv();
+    }
+    if (!expect_kind(token::kind::lbrace)) {
+        return false;
+    }
+    for (;;) {
+        if (failed()) {
+            return false;
+        }
+        if (cur.k == token::kind::rbrace) {
+            adv();
+            break;
+        }
+        if (cur.k == token::kind::eof) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        if (cur.k == token::kind::semi) {
+            adv();
+            continue;
+        }
+        // Extension fields reuse the ordinary field parser; map/oneof members
+        // are rejected (protoc forbids them inside extend blocks). Field
+        // numbers colliding with the extendee's extension range are validated
+        // by the range bookkeeping in compile (field-range checks happen in
+        // the compile step against the recorded ranges).
+        schema_message tmp;
+        const std::size_t before = tmp.fields.size();
+        if (!parse_field(d, tmp, stack)) {
+            return false;
+        }
+        if (tmp.fields.size() == before) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        schema_extension se;
+        se.extendee = target;
+        se.field = std::move(tmp.fields.back());
+        if (se.field.is_map) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        d.extensions.push_back(std::move(se));
+    }
+    if (cur.k == token::kind::semi) {
+        adv();
+    }
+    return true;
 }
 
 inline bool parser::parse_import(schema_desc& d) {
@@ -1579,6 +1758,26 @@ inline bool parser::parse_enum(schema_desc& d,
             ev.name = vname;
             ev.value = static_cast<std::int32_t>(
                 static_cast<std::int64_t>(static_cast<std::int32_t>(v)));
+            // proto3 requires the first enum value to be zero.
+            if (syn_ == syntax::proto3 && ed.values.empty() && ev.value != 0) {
+                set_error(error_code::unexpected_token, num_pos);
+                return false;
+            }
+            // Duplicate numeric values are rejected (option allow_alias is not
+            // implemented; protoc forbids them without it).
+            for (const schema_enum_value& prior : ed.values) {
+                if (prior.value == ev.value) {
+                    set_error(error_code::proto_bad_field, num_pos);
+                    return false;
+                }
+            }
+            // Duplicate value names are rejected.
+            for (const schema_enum_value& prior : ed.values) {
+                if (prior.name == ev.name) {
+                    set_error(error_code::proto_bad_field, num_pos);
+                    return false;
+                }
+            }
             ed.values.push_back(std::move(ev));
             if (cur.k == token::kind::semi) {
                 adv();
@@ -1765,6 +1964,20 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
     }
     for (std::size_t i = 0; i < d.messages.size(); ++i) {
         for (auto& f : d.messages[i].fields) {
+            // Already-resolved enum fields (is_enum) keep their tabulated
+            // default and are never re-examined.
+            if (f.is_enum) {
+                continue;
+            }
+            // A symbol default can only be valid on a field that resolves to
+            // an enum; on a plain scalar it is a malformed (or misquoted)
+            // declaration and is rejected instead of being silently dropped.
+            if (!f.dflt_enum_name.empty() &&
+                (!f.is_message || f.type_ref.empty())) {
+                err.code = error_code::unexpected_token;
+                err.offset = f.type_offset;
+                return false;
+            }
             if (!f.is_message || f.type_ref.empty()) {
                 continue;
             }
@@ -1774,6 +1987,13 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
             }
             std::size_t target = 0;
             if (resolve_message_ref(d, full, simple, norm, target)) {
+                // A message-typed field carrying a symbol default is rejected
+                // (protoc forbids defaults on message fields).
+                if (!f.dflt_enum_name.empty()) {
+                    err.code = error_code::unexpected_token;
+                    err.offset = f.type_offset;
+                    return false;
+                }
                 f.type = scalar_type::message_val;
                 f.type_index = target;
                 f.is_enum = false;
@@ -1807,6 +2027,47 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
             err.offset = f.type_offset;
             return false;
         }
+    }
+    // Resolve `extend` block field types the same way (message refs stay
+    // message_val, enum refs become enum_val; unresolved names are opaque when
+    // the file imports, a hard error otherwise).
+    for (auto& se : d.extensions) {
+        schema_field& f = se.field;
+        if (!f.is_message || f.type_ref.empty()) {
+            continue;
+        }
+        std::string norm = f.type_ref;
+        if (!norm.empty() && norm.front() == '.') {
+            norm.erase(0, 1);
+        }
+        std::size_t target = 0;
+        if (resolve_message_ref(d, full, simple, norm, target)) {
+            f.type = scalar_type::message_val;
+            f.type_index = target;
+            f.is_enum = false;
+            continue;
+        }
+        const std::size_t eidx = resolve_enum_ref(d, norm);
+        if (eidx != static_cast<std::size_t>(-1)) {
+            f.type = scalar_type::enum_val;
+            f.type_index = static_cast<std::size_t>(-1);
+            f.is_message = false;
+            f.is_enum = true;
+            if (!resolve_enum_defaults(d, d.enum_defs[eidx].full_name, f,
+                                       err)) {
+                return false;
+            }
+            continue;
+        }
+        if (!d.imports.empty()) {
+            f.type = scalar_type::message_val;
+            f.type_index = static_cast<std::size_t>(-1);
+            f.is_enum = false;
+            continue;
+        }
+        err.code = error_code::unexpected_token;
+        err.offset = f.type_offset;
+        return false;
     }
     return true;
 }
@@ -1862,6 +2123,9 @@ inline result<schema_desc> parse_schema(rtti::string_view src) {
             detail::finalize_packed(f, d.syn);
         }
     }
+    for (auto& se : d.extensions) {
+        detail::finalize_packed(se.field, d.syn);
+    }
     r.value = std::move(d);
     return r;
 }
@@ -1912,7 +2176,69 @@ inline void merge_schemas(schema_desc& dst, const schema_desc& src) {
 // Public: compile a schema_desc into a codec-ready schema_info
 // ---------------------------------------------------------------------------
 
+// Register the `extend` blocks recorded in a resolved descriptor into the
+// process-wide ExtensionRegistry (proto.hpp) under the global semantics: the
+// lookup keys are the field number (decode) and the field name (encode). A
+// conflict (same number or same name with a different layout) yields
+// error_code::proto_bad_field; re-registering identical descriptors is a
+// no-op. Returns error_code::ok on success.
+inline error_code register_schema_extensions(const schema_desc& d) {
+    for (const schema_extension& se : d.extensions) {
+        const schema_field& f = se.field;
+        extension_desc ed;
+        ed.number = f.number;
+        ed.name = f.name;
+        ed.wire = wire_of_scalar(f.type);
+        ed.mode = f.mode;
+        ed.packed = f.packed;
+        ed.zigzag = (f.type == scalar_type::sint32 ||
+                     f.type == scalar_type::sint64);
+        ed.is_message = f.is_message;
+        ed.is_enum = f.is_enum;
+        ed.as_bool = (f.type == scalar_type::bool_val);
+        ed.as_float = (f.type == scalar_type::float_val);
+        ed.as_double = (f.type == scalar_type::double_val);
+        ed.extendee = se.extendee;
+        if (f.has_default) {
+            ed.has_default = true;
+            ed.dflt_int = f.dflt_int;
+            ed.dflt_real = f.dflt_real;
+            ed.dflt_str = f.dflt_str;
+        }
+        const error_code e = extension_registry::global().add(ed);
+        if (e != error_code::ok) {
+            return e;
+        }
+    }
+    return error_code::ok;
+}
+
 namespace detail {
+
+// Compare two map-entry "key" scalar nodes (string / integer / boolean). The
+// map-key merge (last-wins) uses this to drop earlier duplicate entries.
+inline bool proto_node_keys_equal(const rtti::value_io* a,
+                                  const rtti::value_io* b) noexcept {
+    if (a == nullptr || b == nullptr || a->type() != b->type()) {
+        return false;
+    }
+    if (a->type() == rtti::value_io::kind::string) {
+        rtti::string_view sa;
+        rtti::string_view sb;
+        return a->as_string(sa) && b->as_string(sb) && sa == sb;
+    }
+    if (a->type() == rtti::value_io::kind::integer) {
+        std::int64_t ia = 0;
+        std::int64_t ib = 0;
+        return a->as_integer(ia) && b->as_integer(ib) && ia == ib;
+    }
+    if (a->type() == rtti::value_io::kind::boolean) {
+        bool ba = false;
+        bool bb = false;
+        return a->as_bool(ba) && b->as_bool(bb) && ba == bb;
+    }
+    return false;
+}
 
 struct compiled_message;
 struct dynamic_field;
@@ -2287,6 +2613,25 @@ struct dynamic_field : field_base {
         if (e != error_code::ok) {
             return e;
         }
+        if (is_map && child != nullptr) {
+            // Merge duplicate map keys like protoc (last value wins): drop any
+            // earlier array entry whose "key" node equals the new entry's key
+            // before appending. The array holds proto document nodes, so
+            // detail::node::remove_at is safe here.
+            rtti::value_io* new_key = nullptr;
+            (void)el->get_key("key", new_key);
+            rtti::value_io* const base = arr;
+            for (std::size_t i = arr->size(); i > 0; --i) {
+                rtti::value_io* existing = arr->at(i - 1);
+                rtti::value_io* ek = nullptr;
+                if (existing != nullptr &&
+                    existing->get_key("key", ek) && ek != nullptr &&
+                    new_key != nullptr &&
+                    proto_node_keys_equal(ek, new_key)) {
+                    static_cast<detail::node*>(base)->remove_at(i - 1);
+                }
+            }
+        }
         arr->push_back(el);
         return error_code::ok;
     }
@@ -2575,6 +2920,19 @@ inline result<compiled_schema> compile_schema(
     }
     if (!compiled_schema::build(resolved, cfg, r.value, err)) {
         r.err = err;
+    }
+    // Compiling a descriptor with `extend` blocks registers the extensions in
+    // the process-wide ExtensionRegistry, so wire decode of the extended
+    // message(s) recognizes them as named fields (re-registering an identical
+    // extension is an idempotent no-op; a conflicting duplicate fails).
+    if (r.ok()) {
+        const error_code ec = register_schema_extensions(resolved);
+        if (ec != error_code::ok) {
+            r.err.code = ec;
+            r.err.src = err.src;
+            r.err.src_len = err.src_len;
+            r.err.offset = 0;
+        }
     }
     return r;
 }

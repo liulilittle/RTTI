@@ -1377,12 +1377,115 @@ RTTI_TEST_CASE(ProtoSchemaEscapeSequences) {
     RTTI_CHECK_EQ(u, eu);
 }
 
+RTTI_TEST_CASE(ProtoSchemaMapDuplicateKeyLastWins) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // The dynamic path mirrors protoc for duplicate map keys too: merging two
+    // entries with the same key keeps only the last one (mirrors the typed
+    // insert_or_assign behaviour, I-2).
+    const result<compiled_schema> cs = compile_schema(
+        "syntax = \"proto3\"; message M { map<string, int32> m = 1; }\n");
+    RTTI_CHECK(cs.ok());
+    const schema_info* si = cs.value.info();
+    static const unsigned char w[] = {
+        0x0A, 0x05, 0x0A, 0x01, 'a', 0x10, 0x01,       // {"a":1}
+        0x0A, 0x06, 0x0A, 0x01, 'a', 0x10, 0xAC, 0x02, // {"a":300}
+    };
+    document out;
+    RTTI_CHECK_EQ(wire_to_tree(
+                      rtti::string_view(reinterpret_cast<const char*>(w),
+                                        sizeof(w)),
+                      si, out),
+                  error_code::ok);
+    rtti::value_io* nm = nullptr;
+    RTTI_CHECK(out.get_key("m", nm));
+    RTTI_CHECK_EQ(nm->size(), size_t(1)); // merged, not two entries
+    rtti::value_io* e = nm->at(0);
+    RTTI_CHECK(e != nullptr);
+    rtti::value_io* v = nullptr;
+    RTTI_CHECK(e->get_key("value", v));
+    std::int64_t val = 0;
+    RTTI_CHECK(ps_get_int(v, val));
+    RTTI_CHECK_EQ(val, int64_t(300)); // last wins
+
+    // Re-encoding emits the single surviving entry.
+    std::string w2;
+    RTTI_CHECK_EQ(tree_to_wire(&out, si, w2), error_code::ok);
+    static const unsigned char one[] = {0x0A, 0x06, 0x0A, 0x01, 'a', 0x10, 0xAC, 0x02};
+    RTTI_CHECK_EQ(w2.size(), size_t(sizeof(one)));
+    RTTI_CHECK_EQ(std::memcmp(w2.data(), one, sizeof(one)), 0);
+}
+
+RTTI_TEST_CASE(ProtoSchemaMinorGuardTests) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // Octal \0NN: greedy 1-3 octal digits; "\01" is one byte 0x01, not
+    // NUL followed by '1'.
+    {
+        const result<schema_desc> r = parse_schema(
+            "message S { bytes b = 1 [default = \"\\01\"]; }\n");
+        RTTI_CHECK(r.ok());
+        const std::string b(r.value.messages[0].fields[0].dflt_str.data(),
+                            r.value.messages[0].fields[0].dflt_str.size());
+        RTTI_CHECK_EQ(b, std::string("\x01", 1));
+    }
+    // \x with no hex digit is an error.
+    {
+        const result<schema_desc> r = parse_schema(
+            "message S { bytes b = 1 [default = \"\\x\"]; }\n");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::unexpected_token);
+    }
+    // \U beyond the Unicode range is an error.
+    {
+        const result<schema_desc> r = parse_schema(
+            "message S { string s = 1 [default = \"\\UFFFFFFFF\"]; }\n");
+        RTTI_CHECK(!r.ok());
+    }
+    // A default symbol on a non-enum scalar is an error.
+    {
+        const result<schema_desc> r = parse_schema(
+            "message M { int32 x = 1 [default = FOO]; }\n");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::unexpected_token);
+    }
+    // proto3 requires the first enum value to be zero.
+    {
+        const result<schema_desc> r = parse_schema(
+            "syntax = \"proto3\"; enum E { A = 5; } message M { E e = 1; }\n");
+        RTTI_CHECK(!r.ok());
+    }
+    // map keys must be integral / bool / string (float and bytes rejected).
+    {
+        const result<schema_desc> r = parse_schema(
+            "message M { map<float, int32> m = 1; }\n");
+        RTTI_CHECK(!r.ok());
+    }
+    {
+        const result<schema_desc> r = parse_schema(
+            "message M { map<bytes, int32> m = 1; }\n");
+        RTTI_CHECK(!r.ok());
+    }
+    // Duplicate enum value numbers (no allow_alias support) are rejected.
+    {
+        const result<schema_desc> r = parse_schema(
+            "enum E { A = 0; B = 0; } message M { E e = 1; }\n");
+        RTTI_CHECK(!r.ok());
+    }
+    // Duplicate enum value names are rejected.
+    {
+        const result<schema_desc> r = parse_schema(
+            "enum E { A = 0; A = 1; } message M { E e = 1; }\n");
+        RTTI_CHECK(!r.ok());
+    }
+}
+
 RTTI_TEST_CASE(ProtoSchemaAdvancedOfficialFixtureRoundTrip) {
     using namespace rtti;
     using namespace rtti::proto;
     // The official protoc 36.2 fixture tests/fixtures/proto/advanced.All.wire
     // exercises map<string,int32> + map<string,string> + oneof scalar zero +
-    // bytes + enum + packed in one message. Pin the full 50-byte buffer.
+    // bytes + enum + packed in one message. Pin the full 49-byte buffer.
     static const unsigned char official[] = {
         0x0A, 0x09, 0x0A, 0x05, 0x61, 0x6C, 0x70, 0x68, 0x61, 0x10, 0x01, // a:1
         0x0A, 0x09, 0x0A, 0x04, 0x62, 0x65, 0x74, 0x61, 0x10, 0xAC, 0x02, // beta:300

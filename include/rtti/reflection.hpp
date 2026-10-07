@@ -3402,12 +3402,14 @@ inline const method_info* methods() noexcept {
     a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16
 
 // Empty-aware selector: the empty argument list yields no arguments (forming
-// T<>, valid for a template with all-defaulted parameters), otherwise the
-// per-count comma-joining macro for the real argument count. The selector base
-// is reused by the paren-wrapped guard below (RTTI_TAO_OPT_SEL_0).
+// T<>, valid for a template with all-defaulted parameters); any non-empty list
+// (including one whose wrapped, comma-bearing argument sits at a non-first
+// position) is expanded element-wise through the paren stripper, so
+// `RTTI_TEMPLATE_INFO(Fn, int, (std::pair<int,int>))` yields
+// `Fn<int, std::pair<int,int>>`. The selector base is reused by the
+// begin-with-paren guard below (RTTI_TAO_OPT_SEL_0).
 #define RTTI_TEMPLATE_ARGS_OPT_SEL_1(T, ...)
-#define RTTI_TEMPLATE_ARGS_OPT_SEL_0(T, ...) \
-    RTTI_CAT(RTTI_TEMPLATE_ARGS_, RTTI_NARG(__VA_ARGS__))(__VA_ARGS__)
+#define RTTI_TEMPLATE_ARGS_OPT_SEL_0(T, ...) RTTI_TAO_STRIP(__VA_ARGS__)
 
 // --- Paren-wrapped template arguments (A2 residual) ---
 //

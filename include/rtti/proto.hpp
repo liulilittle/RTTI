@@ -58,6 +58,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -1179,7 +1180,10 @@ struct field : field_base {
                 return e;
             }
         }
-        member(obj).emplace(std::move(key), std::move(value));
+        // Protoc merges duplicate map keys with the LAST value winning (like a
+        // repeated map entry); insert_or_assign reproduces that instead of
+        // std::map::emplace's first-wins no-op.
+        member(obj).insert_or_assign(std::move(key), std::move(value));
         return error_code::ok;
     }
 
@@ -1687,6 +1691,121 @@ inline field_base* make_field(const field_desc& d) {
 }
 
 // ---------------------------------------------------------------------------
+// Proto2 extensions (untagged/registry side)
+// ---------------------------------------------------------------------------
+
+// One registered proto2 extension: the field number, name, wire type, mode
+// (optional/required/repeated), packing, zig-zag flag and scalar class needed
+// by the tree codec, plus the extended message's name. Extensions are the
+// protobuf mechanism to add fields to a message you do not own: the extended
+// message declares `extensions 100 to 199;` and a separate `extend` block
+// defines the field. On the wire an extension is an ordinary field whose number
+// falls in the extension range; a reader that has the extension registered (via
+// the ExtensionRegistry) decodes it as a NAMED field, while an unregistered
+// number is tolerated as an unknown field and skipped (spec section 3.2 item 9,
+// protoc ExtensionRegistry semantics).
+struct extension_desc {
+    std::uint32_t number = 0;
+    std::string name;
+    wire_type wire = wire_type::varint;
+    field_mode mode = field_mode::optional;
+    bool packed = false;
+    bool zigzag = false;     // sint32/sint64 scalar: zig-zag the signed value
+    bool is_message = false; // message-typed: payload kept as raw bytes
+    bool is_enum = false;
+    bool as_bool = false;    // bool scalar decodes to a boolean node
+    bool as_float = false;   // float scalar (fixed32) decodes to a real node
+    bool as_double = false;  // double scalar (fixed64) decodes to a real node
+    bool has_default = false;
+    std::int64_t dflt_int = 0;
+    double dflt_real = 0.0;
+    std::string dflt_str;
+    // The extended message's fully-qualified name (scope/diagnostics; the
+    // registry keeps extensions globally unique by number and name).
+    std::string extendee;
+};
+
+// Runtime ExtensionRegistry mirroring protoc's: a process-wide table of
+// registered extensions queried by field number on decode and by name on
+// encode. `add` rejects a field number or a name that already exists with a
+// DIFFERENT descriptor (duplicate conflict -> error_code::proto_bad_field);
+// re-registering an identical descriptor is an idempotent no-op. Reads and
+// writes are mutex-protected; stored descriptors live in stable nodes so
+// pointers returned by find/find_by_name stay valid until clear().
+class extension_registry {
+public:
+    static extension_registry& global() noexcept {
+        static extension_registry inst;
+        return inst;
+    }
+
+    // Register `e`. Returns error_code::ok (also when an identical descriptor is
+    // already registered), or error_code::proto_bad_field on a field-number /
+    // field-name conflict or an out-of-range number.
+    error_code add(const extension_desc& e) {
+        if (e.number == 0 || e.number > 0x1FFFFFFFu) {
+            return error_code::proto_bad_field;
+        }
+        std::lock_guard<std::mutex> lk(mtx_);
+        for (const std::unique_ptr<extension_desc>& x : exts_) {
+            if (x->number == e.number || x->name == e.name) {
+                if (x->number == e.number && x->name == e.name) {
+                    return error_code::ok; // identical re-registration
+                }
+                return error_code::proto_bad_field;
+            }
+        }
+        exts_.push_back(std::unique_ptr<extension_desc>(new extension_desc(e)));
+        return error_code::ok;
+    }
+
+    // Look up an extension by its wire field number, or nullptr when unknown.
+    const extension_desc* find(std::uint32_t number) const noexcept {
+        std::lock_guard<std::mutex> lk(mtx_);
+        for (const std::unique_ptr<extension_desc>& x : exts_) {
+            if (x != nullptr && x->number == number) {
+                return x.get();
+            }
+        }
+        return nullptr;
+    }
+
+    // Look up an extension by its field name (encode side), or nullptr.
+    const extension_desc* find_by_name(rtti::string_view name) const noexcept {
+        std::lock_guard<std::mutex> lk(mtx_);
+        for (const std::unique_ptr<extension_desc>& x : exts_) {
+            if (x != nullptr &&
+                rtti::string_view(x->name.data(), x->name.size()) == name) {
+                return x.get();
+            }
+        }
+        return nullptr;
+    }
+
+    std::size_t size() const noexcept {
+        std::lock_guard<std::mutex> lk(mtx_);
+        return exts_.size();
+    }
+
+    // Remove every registered extension (test isolation).
+    void clear() noexcept {
+        std::lock_guard<std::mutex> lk(mtx_);
+        exts_.clear();
+    }
+
+private:
+    extension_registry() = default;
+    mutable std::mutex mtx_;
+    std::vector<std::unique_ptr<extension_desc>> exts_;
+};
+
+// Convenience accessors for the process-wide registry.
+inline error_code register_extension(const extension_desc& e) {
+    return extension_registry::global().add(e);
+}
+inline void clear_extensions() noexcept { extension_registry::global().clear(); }
+
+// ---------------------------------------------------------------------------
 // value_io document (owned tree)
 // ---------------------------------------------------------------------------
 
@@ -1843,6 +1962,14 @@ struct node : public rtti::value_io {
         }
     }
 
+    // Remove the index-th array element (no-op for non-array / out of range).
+    // Used by the map-entry decoder to merge duplicate keys (last-wins).
+    void remove_at(std::size_t index) {
+        if (k == rtti::value_io::kind::array && index < arr.size()) {
+            arr.erase(arr.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+    }
+
 private:
     bool get_key_impl(rtti::string_view key, rtti::value_io*& out) const {
         if (k != rtti::value_io::kind::object) {
@@ -1947,6 +2074,285 @@ inline rtti::value_io* node::make_node() {
     return owner->alloc_node();
 }
 
+// ---------------------------------------------------------------------------
+// Extension codec (tree path)
+// ---------------------------------------------------------------------------
+
+// Read one extension scalar/message payload of wire type `wt` into `node` using
+// the scalar class carried by `ex` (bool -> boolean node, sint -> zig-zag,
+// float/double -> real node, everything else -> integer/raw string node).
+inline error_code ext_read_value(detail::wire_reader& r, wire_type wt,
+                                 const extension_desc& ex,
+                                 rtti::value_io* node) {
+    switch (wt) {
+        case wire_type::varint: {
+            std::uint64_t v = 0;
+            if (!r.read_varint(v)) {
+                return error_code::proto_truncated;
+            }
+            if (ex.as_bool) {
+                node->make_scalar(rtti::field_value::of(v != 0));
+            } else if (ex.zigzag) {
+                node->make_scalar(rtti::field_value::of(zigzag_decode(v)));
+            } else {
+                node->make_scalar(
+                    rtti::field_value::of(static_cast<std::int64_t>(v)));
+            }
+            return error_code::ok;
+        }
+        case wire_type::fixed64: {
+            std::uint64_t v = 0;
+            if (!r.read_fixed64(v)) {
+                return error_code::proto_truncated;
+            }
+            if (ex.as_double) {
+                double d = 0.0;
+                std::memcpy(&d, &v, sizeof(double));
+                node->make_scalar(rtti::field_value::of(d));
+            } else {
+                node->make_scalar(
+                    rtti::field_value::of(static_cast<std::int64_t>(v)));
+            }
+            return error_code::ok;
+        }
+        case wire_type::fixed32: {
+            std::uint32_t v = 0;
+            if (!r.read_fixed32(v)) {
+                return error_code::proto_truncated;
+            }
+            if (ex.as_float) {
+                float f = 0.0f;
+                std::memcpy(&f, &v, sizeof(float));
+                node->make_scalar(
+                    rtti::field_value::of(static_cast<double>(f)));
+            } else {
+                node->make_scalar(
+                    rtti::field_value::of(static_cast<std::int64_t>(v)));
+            }
+            return error_code::ok;
+        }
+        case wire_type::length: {
+            std::uint64_t len = 0;
+            if (!r.read_length(len)) {
+                return error_code::proto_truncated;
+            }
+            const rtti::string_view data = r.take(len);
+            // string/bytes/message extensions all carry their raw payload.
+            node->make_scalar(rtti::field_value::of(data));
+            return error_code::ok;
+        }
+        default:
+            return error_code::proto_bad_field;
+    }
+}
+
+// Write one extension value held by `node` onto the wire with wire type `wt`.
+inline error_code ext_write_value(const rtti::value_io* node,
+                                  detail::wire_writer& w, wire_type wt,
+                                  const extension_desc& ex) {
+    if (node == nullptr || node->type() == rtti::value_io::kind::null) {
+        return error_code::ok;
+    }
+    switch (wt) {
+        case wire_type::varint: {
+            if (node->type() == rtti::value_io::kind::boolean) {
+                bool b = false;
+                if (!node->as_bool(b)) {
+                    return error_code::kind_mismatch;
+                }
+                w.varint(b ? 1 : 0);
+                return error_code::ok;
+            }
+            std::int64_t i = 0;
+            if (!node->as_integer(i)) {
+                return error_code::kind_mismatch;
+            }
+            w.varint(ex.zigzag ? zigzag_encode(i)
+                               : static_cast<std::uint64_t>(i));
+            return error_code::ok;
+        }
+        case wire_type::fixed64: {
+            if (ex.as_double) {
+                double d = 0.0;
+                if (node->type() == rtti::value_io::kind::integer) {
+                    std::int64_t i = 0;
+                    if (!node->as_integer(i)) {
+                        return error_code::kind_mismatch;
+                    }
+                    d = static_cast<double>(i);
+                } else if (node->type() == rtti::value_io::kind::real) {
+                    if (!node->as_real(d)) {
+                        return error_code::kind_mismatch;
+                    }
+                } else {
+                    return error_code::kind_mismatch;
+                }
+                std::uint64_t bits = 0;
+                std::memcpy(&bits, &d, sizeof(double));
+                w.fixed64(bits);
+                return error_code::ok;
+            }
+            std::int64_t i = 0;
+            if (!node->as_integer(i)) {
+                return error_code::kind_mismatch;
+            }
+            w.fixed64(static_cast<std::uint64_t>(i));
+            return error_code::ok;
+        }
+        case wire_type::fixed32: {
+            if (ex.as_float) {
+                double d = 0.0;
+                if (node->type() == rtti::value_io::kind::integer) {
+                    std::int64_t i = 0;
+                    if (!node->as_integer(i)) {
+                        return error_code::kind_mismatch;
+                    }
+                    d = static_cast<double>(i);
+                } else if (node->type() == rtti::value_io::kind::real) {
+                    if (!node->as_real(d)) {
+                        return error_code::kind_mismatch;
+                    }
+                } else {
+                    return error_code::kind_mismatch;
+                }
+                const float f = static_cast<float>(d);
+                std::uint32_t bits = 0;
+                std::memcpy(&bits, &f, sizeof(float));
+                w.fixed32(bits);
+                return error_code::ok;
+            }
+            std::int64_t i = 0;
+            if (!node->as_integer(i)) {
+                return error_code::kind_mismatch;
+            }
+            w.fixed32(static_cast<std::uint32_t>(i));
+            return error_code::ok;
+        }
+        case wire_type::length: {
+            rtti::string_view s;
+            if (node->type() != rtti::value_io::kind::string ||
+                !node->as_string(s)) {
+                return error_code::kind_mismatch;
+            }
+            w.varint(s.size());
+            w.bytes(s.data(), s.size());
+            return error_code::ok;
+        }
+        default:
+            return error_code::proto_bad_field;
+    }
+}
+
+// Decode one (set of) registered-extension payload(s) into `obj` under the
+// extension's field name. Returns error_code::ok when the payload(s) were
+// consumed, error_code::no_such_field when the wire type does not match the
+// registered layout (the caller then tolerates the field as unknown, protoc
+// semantics), and any other code on a malformed payload (§0: never crashes).
+inline error_code decode_extension_field(rtti::value_io* obj,
+                                         detail::wire_reader& r, wire_type wt,
+                                         const extension_desc& ex,
+                                         std::size_t depth,
+                                         std::size_t max_depth) {
+    (void)depth;
+    (void)max_depth;
+    if (ex.mode == field_mode::repeated) {
+        if (wt == wire_type::length && is_numeric_wire(ex.wire)) {
+            std::uint64_t len = 0;
+            if (!r.read_length(len)) {
+                return error_code::proto_truncated;
+            }
+            const rtti::string_view payload = r.take(len);
+            detail::wire_reader sub(payload);
+            rtti::value_io* const arr = ensure_array(obj, ex.name.c_str());
+            while (sub.remaining() > 0) {
+                rtti::value_io* el = obj->make_node();
+                const error_code e = ext_read_value(sub, ex.wire, ex, el);
+                if (e != error_code::ok) {
+                    return e;
+                }
+                arr->push_back(el);
+            }
+            return error_code::ok;
+        }
+        if (wt != ex.wire) {
+            return error_code::no_such_field;
+        }
+        rtti::value_io* const arr = ensure_array(obj, ex.name.c_str());
+        rtti::value_io* el = obj->make_node();
+        const error_code e = ext_read_value(r, wt, ex, el);
+        if (e != error_code::ok) {
+            return e;
+        }
+        arr->push_back(el);
+        return error_code::ok;
+    }
+    if (wt != ex.wire) {
+        return error_code::no_such_field;
+    }
+    rtti::value_io* child = obj->make_node();
+    const error_code e = ext_read_value(r, wt, ex, child);
+    if (e != error_code::ok) {
+        return e;
+    }
+    obj->set_key(rtti::string_view(ex.name.data(), ex.name.size()), child);
+    return error_code::ok;
+}
+
+// Encode a value_io extension value (single or repeated) named by `ex`. Null
+// nodes are skipped; packed repeated numeric extensions are packed like schema
+// fields (§0: unknown layout returns an error, never a crash).
+inline error_code encode_extension_field(const rtti::value_io* node,
+                                         detail::wire_writer& w,
+                                         const extension_desc& ex,
+                                         std::size_t depth,
+                                         std::size_t max_depth) {
+    (void)depth;
+    (void)max_depth;
+    if (node == nullptr || node->type() == rtti::value_io::kind::null) {
+        return error_code::ok;
+    }
+    if (ex.mode == field_mode::repeated) {
+        if (node->type() != rtti::value_io::kind::array) {
+            return error_code::kind_mismatch;
+        }
+        const std::size_t n = node->size();
+        if (n == 0) {
+            return error_code::ok;
+        }
+        if (ex.packed && is_numeric_wire(ex.wire)) {
+            std::string payload;
+            detail::wire_writer pw(payload);
+            for (std::size_t j = 0; j < n; ++j) {
+                const error_code e =
+                    ext_write_value(node->at(j), pw, ex.wire, ex);
+                if (e != error_code::ok) {
+                    return e;
+                }
+            }
+            if (!w.tag(ex.number, wire_type::length)) {
+                return error_code::proto_bad_field;
+            }
+            w.varint(payload.size());
+            w.bytes(payload.data(), payload.size());
+            return error_code::ok;
+        }
+        for (std::size_t j = 0; j < n; ++j) {
+            if (!w.tag(ex.number, ex.wire)) {
+                return error_code::proto_bad_field;
+            }
+            const error_code e = ext_write_value(node->at(j), w, ex.wire, ex);
+            if (e != error_code::ok) {
+                return e;
+            }
+        }
+        return error_code::ok;
+    }
+    if (!w.tag(ex.number, ex.wire)) {
+        return error_code::proto_bad_field;
+    }
+    return ext_write_value(node, w, ex.wire, ex);
+}
+
 // Encode a value_io message node (object) into `w`, applying proto2/proto3
 // default-omission and repeated packing rules.
 inline error_code encode_message_tree(const rtti::value_io* obj,
@@ -1970,6 +2376,17 @@ inline error_code encode_message_tree(const rtti::value_io* obj,
         }
         const field_base* f = find_field_by_name(si, key);
         if (f == nullptr) {
+            // A key with no schema field may name a registered extension; encode
+            // it under its extension number. Otherwise the key is ignored.
+            const extension_desc* ex = extension_registry::global().find_by_name(key);
+            if (ex != nullptr) {
+                const error_code ee =
+                    detail::encode_extension_field(child, w, *ex, depth,
+                                                   max_depth);
+                if (ee != error_code::ok) {
+                    return ee;
+                }
+            }
             continue; // unknown key: ignored
         }
         if (f->info.mode == field_mode::repeated) {
@@ -2052,6 +2469,23 @@ inline error_code decode_message_tree(rtti::value_io* obj, detail::wire_reader& 
         }
         const field_base* f = find_field(si, field_no);
         if (f == nullptr) {
+            // An unknown field number may be a registered extension: decode it
+            // as a NAMED field under the registry's name. An unregistered (or
+            // wire-type-mismatched) number is tolerated as an ordinary unknown
+            // field and skipped (protoc ExtensionRegistry semantics, §0).
+            const extension_desc* ex =
+                extension_registry::global().find(field_no);
+            if (ex != nullptr) {
+                const error_code ee = detail::decode_extension_field(
+                    obj, r, wt, *ex, depth, max_depth);
+                if (ee == error_code::ok) {
+                    continue; // decoded as a named extension field
+                }
+                if (ee != error_code::no_such_field) {
+                    return ee; // malformed registered extension payload
+                }
+                // wire type mismatch -> fall through to the unknown-field skip
+            }
             const error_code e = skip_field(r, wt);
             if (e != error_code::ok) {
                 return e;
