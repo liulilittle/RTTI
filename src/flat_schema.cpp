@@ -536,14 +536,25 @@ bool fbs_parser::parse_file(fbs_schema_desc& d) {
             }
             continue;
         }
-        if (have_ident("root_type")) {
+if (have_ident("root_type")) {
             adv();
             if (cur.k != fbs_token::kind::ident) {
                 set_error(error_code::unexpected_token, cur.begin);
                 return false;
             }
-            d.root_type = std::string(cur.text);
+            std::string rt(std::string(cur.text));
             adv();
+            while (cur.k == fbs_token::kind::dot) {
+                adv();
+                if (cur.k != fbs_token::kind::ident) {
+                    set_error(error_code::unexpected_token, cur.begin);
+                    return false;
+                }
+                rt.push_back('.');
+                rt += std::string(cur.text);
+                adv();
+            }
+            d.root_type = rt;
             if (!expect_kind(fbs_token::kind::semi)) {
                 return false;
             }
@@ -696,34 +707,60 @@ adv(); // '['
             return false;
         }
         f.type = fbs_type::vector;
-        const std::string ename(cur.text);
+        std::string ename(std::string(cur.text));
         f.type_offset = sync_offset(cur.begin);
-        if (ename == "string") {
+        adv();
+        bool edotted = false;
+        while (cur.k == fbs_token::kind::dot) {
+            edotted = true;
+            adv();
+            if (cur.k != fbs_token::kind::ident) {
+                set_error(error_code::unexpected_token, cur.begin);
+                return false;
+            }
+            ename.push_back('.');
+            ename += std::string(cur.text);
+            adv();
+        }
+        if (!edotted && ename == "string") {
             f.elem = fkind::string;
-        } else if (!scalar_kind_from_name(ename, f.elem)) {
-            f.elem = fkind::table; // reference element; fixed up in resolve
+        } else if (!edotted && scalar_kind_from_name(ename, f.elem)) {
+            // scalar element
+        } else {
+            f.elem = fkind::table; // reference element (incl. enum); resolved
             f.ref = ename;
         }
-        adv();
         if (!expect_kind(fbs_token::kind::rbracket)) {
             return false;
         }
     } else if (cur.k == fbs_token::kind::ident) {
-        const std::string tn(cur.text);
+        std::string tn(std::string(cur.text));
         f.type_offset = sync_offset(cur.begin);
-        if (tn == "string") {
+        adv();
+        bool dotted = false;
+        while (cur.k == fbs_token::kind::dot) {
+            dotted = true;
+            adv();
+            if (cur.k != fbs_token::kind::ident) {
+                set_error(error_code::unexpected_token, cur.begin);
+                return false;
+            }
+            tn.push_back('.');
+            tn += std::string(cur.text);
+            adv();
+        }
+        if (!dotted && tn == "string") {
             f.type = fbs_type::string;
             if (stct) {
                 set_error(error_code::proto_bad_field, cur.begin);
                 return false;
             }
-        } else if (scalar_kind_from_name(tn, f.kind)) {
+        } else if (!dotted && scalar_kind_from_name(tn, f.kind)) {
             f.type = fbs_type::scalar;
         } else {
-            f.type = fbs_type::table; // placeholder ref; set by resolve
+            f.type = fbs_type::table; // placeholder ref (dotted or not)
             f.ref = tn;
         }
-        adv();
     } else {
         set_error(error_code::unexpected_token, cur.begin);
         return false;
@@ -1419,15 +1456,23 @@ inline bool resolve_schema(fbs_schema_desc& d, error_info& err) {
             const bool vec_ref =
                 f.type == fbs_type::vector && f.elem == fkind::table;
             const bool plain_ref = f.type == fbs_type::table;
-            if (vec_ref) {
+if (vec_ref) {
                 const std::size_t idx = resolve_agg(ns, f.ref);
-                if (idx == kNoIndex) {
-                    fail(error_code::unexpected_token, f.type_offset);
-                    return false;
+                if (idx != kNoIndex) {
+                    f.type_index = idx;
+                    f.elem = d.types[idx].stct ? fkind::stct : fkind::table;
+                    continue;
                 }
-                f.type_index = idx;
-                f.elem = d.types[idx].stct ? fkind::stct : fkind::table;
-                continue;
+                // A vector element may also be an enum type: the wire element
+                // kind is the enum's underlying scalar (flatc `[Color]`).
+                const std::size_t eidx = resolve_enum(ns, f.ref);
+                if (eidx != kNoIndex) {
+                    f.enum_index = eidx;
+                    f.elem = d.enums[eidx].underlying;
+                    continue;
+                }
+                fail(error_code::unexpected_token, f.type_offset);
+                return false;
             }
             if (!plain_ref) {
                 continue;
@@ -1834,11 +1879,25 @@ result<compiled_schema> compile_schema(const fbs_schema_desc& desc,
         out.types_.back()->title = t.full_name;
     }
 
-    for (std::size_t i = 0; i < desc.types.size(); ++i) {
+for (std::size_t i = 0; i < desc.types.size(); ++i) {
         compiled_schema::compiled_type& ct = *out.types_[i];
         const fbs_agg_desc& agg = desc.types[i];
-        ct.fields.reserve(agg.fields.size() + 1);
-        ct.names.reserve(agg.fields.size() + 1);
+        // Reserve exactly up front (review C-1): every field_desc.name is a
+        // c_str() into ct.names and every union field_desc stores a pointer
+        // into ct.variants; those addresses must not dangle when the vectors
+        // grow past a capacity boundary with 2+ union fields.
+        std::size_t n_names = 0;
+        std::size_t n_variants = 0;
+        for (const fbs_field_desc& f : agg.fields) {
+            const bool uni = f.type == fbs_type::unionref;
+            n_names += uni ? 2 : 1;
+            if (uni && f.type_index < desc.unions.size()) {
+                n_variants += desc.unions[f.type_index].variants.size();
+            }
+        }
+        ct.fields.reserve(n_names);
+        ct.names.reserve(n_names);
+        ct.variants.reserve(n_variants);
         std::uint16_t seq = 0;
         for (const fbs_field_desc& f : agg.fields) {
             const char* name_ptr = nullptr;

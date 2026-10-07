@@ -15,8 +15,11 @@
 //
 // The golden bytes below match tests/fixtures/flat/monster.bin and the union
 // buffer from flat_test.cpp (both produced by flatc 25.12.19); the schema text
-// is read from the committed fixtures with an embedded fallback, so assertions
-// stay deterministic from any working directory.
+// is read from the committed fixtures. The disk assertions are deliberate:
+// they prove the committed official fixture is really the parse target, so the
+// test must be run from the repository root (the verification command does).
+// The embedded copies only back the runtime if pick_path() cannot locate the
+// working directory.
 
 #include "test_harness.hpp"
 #include <rtti/flat_schema.hpp>
@@ -833,6 +836,223 @@ RTTI_TEST_CASE(FbsErrorInfoLineColumn) {
     RTTI_CHECK_EQ(r.err.line(), size_t(3));
     RTTI_CHECK_EQ(r.err.column(), size_t(5));
     RTTI_CHECK(r.err.message() != nullptr);
+}
+
+RTTI_TEST_CASE(FbsTwoUnionsStableMemory) {
+    // Regression for review C-1: two union fields in one table force several
+    // vector reallocations of the compiled name/variant storage. Every
+    // field_desc.name (const char*) and union variants pointer must remain
+    // valid after all of the allocation has settled.
+    const char schema[] =
+        "table Leaf { tag:int; label:string; }\n"
+        "table Stem { n:int; }\n"
+        "union U1 { Leaf, Stem }\n"
+        "union U2 { Stem, Leaf }\n"
+        "table Two { u1:U1; u2:U2; }\n"
+        "root_type Two;\n";
+    const auto cr = rtti::flat::compile_schema(
+        rtti::string_view(schema, sizeof(schema) - 1));
+    RTTI_CHECK(cr.ok());
+    if (!cr.ok()) {
+        return;
+    }
+    const rtti::flat::schema_info* si = cr.value.info();
+    RTTI_CHECK_EQ(si->count, size_t(4)); // u1_type,u1,u2_type,u2
+    RTTI_CHECK(std::string(si->fields[0].name) == std::string("u1_type"));
+    RTTI_CHECK(std::string(si->fields[1].name) == std::string("u1"));
+    RTTI_CHECK(std::string(si->fields[2].name) == std::string("u2_type"));
+    RTTI_CHECK(std::string(si->fields[3].name) == std::string("u2"));
+    // Variant tables must still point at the definitive schemas (Leaf has two
+    // fields, Stem one), i.e. the variants array did not dangle on regrow.
+    RTTI_CHECK_EQ(si->fields[1].variant_count, size_t(2));
+    RTTI_CHECK(si->fields[1].variants != nullptr);
+    RTTI_CHECK(si->fields[1].variants[0].schema != nullptr);
+    RTTI_CHECK_EQ(si->fields[1].variants[0].schema->count, size_t(2)); // Leaf
+    RTTI_CHECK(si->fields[1].variants[1].schema != nullptr);
+    RTTI_CHECK_EQ(si->fields[1].variants[1].schema->count, size_t(1)); // Stem
+    RTTI_CHECK_EQ(si->fields[3].variant_count, size_t(2));
+    RTTI_CHECK(si->fields[3].variants[0].schema != nullptr);
+    RTTI_CHECK_EQ(si->fields[3].variants[0].schema->count, size_t(1)); // Stem
+    RTTI_CHECK(si->fields[3].variants[1].schema != nullptr);
+    RTTI_CHECK_EQ(si->fields[3].variants[1].schema->count, size_t(2)); // Leaf
+}
+
+RTTI_TEST_CASE(FbsTwoUnionsWireRoundtrip) {
+    // C-1 continuation: encode a buffer with both union fields populated through
+    // the compiled (potentially dangling) descriptors and prove the data
+    // survives the wire round trip -- silent loss would fail the decode checks.
+    const char schema[] =
+        "table Leaf { tag:int; }\n"
+        "table Stem { n:int; }\n"
+        "union U1 { Leaf, Stem }\n"
+        "union U2 { Stem, Leaf }\n"
+        "table Two { u1:U1; u2:U2; }\n"
+        "root_type Two;\n";
+    const auto cr = rtti::flat::compile_schema(
+        rtti::string_view(schema, sizeof(schema) - 1));
+    RTTI_CHECK(cr.ok());
+    if (!cr.ok()) {
+        return;
+    }
+    const rtti::flat::schema_info* si = cr.value.info();
+    rtti::flat::document doc;
+    // u1 = Leaf { tag:5 }; u2 = Stem { n:9 } (U1: NONE=0,Leaf=1,Stem=2;
+    // U2: NONE=0,Stem=1,Leaf=2).
+    {
+        rtti::value_io* t1 = doc.make_node();
+        t1->make_scalar(rtti::field_value::of(std::int64_t(1)));
+        doc.set_key("u1_type", t1);
+        rtti::value_io* leaf = doc.make_node();
+        leaf->make_object();
+        rtti::value_io* tt = leaf->make_node();
+        tt->make_scalar(rtti::field_value::of(std::int64_t(5)));
+        leaf->set_key("tag", tt);
+        doc.set_key("u1", leaf);
+    }
+    {
+        rtti::value_io* t2 = doc.make_node();
+        t2->make_scalar(rtti::field_value::of(std::int64_t(1)));
+        doc.set_key("u2_type", t2);
+        rtti::value_io* stem = doc.make_node();
+        stem->make_object();
+        rtti::value_io* nn = stem->make_node();
+        nn->make_scalar(rtti::field_value::of(std::int64_t(9)));
+        stem->set_key("n", nn);
+        doc.set_key("u2", stem);
+    }
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::tree_to_wire(&doc, si, wire,
+                                           rtti::flat::parse_config{}),
+                  rtti::error_code::ok);
+    rtti::flat::document back;
+    RTTI_CHECK_EQ(rtti::flat::wire_to_tree(
+                      rtti::string_view(wire.data(), wire.size()), si, back,
+                      rtti::flat::parse_config{}),
+                  rtti::error_code::ok);
+    bool found = false;
+    RTTI_CHECK_EQ(get_int(&back, "u1_type", found), 1);
+    {
+        rtti::value_io* p = nullptr;
+        RTTI_CHECK(back.get_key("u1", p));
+        p = nullptr;
+        RTTI_CHECK(back.get_key("u1", p));
+        RTTI_CHECK(p != nullptr);
+        RTTI_CHECK_EQ(get_int(p, "tag", found), 5);
+    }
+    RTTI_CHECK_EQ(get_int(&back, "u2_type", found), 1);
+    {
+        rtti::value_io* p = nullptr;
+        RTTI_CHECK(back.get_key("u2", p));
+        RTTI_CHECK(p != nullptr);
+        RTTI_CHECK_EQ(get_int(p, "n", found), 9);
+    }
+}
+
+RTTI_TEST_CASE(FbsVectorOfEnum) {
+    // flatc accepts vectors of enum types (`[Color]`; review I-1): the element
+    // kind is the enum's underlying scalar, not a table reference.
+    const char schema[] =
+        "enum Color:byte { Red=0, Green=1, Blue=2 }\n"
+        "table P { colors:[Color]; }\n"
+        "root_type P;\n";
+    const auto pr = rtti::flat::parse_schema(
+        rtti::string_view(schema, sizeof(schema) - 1));
+    RTTI_CHECK(pr.ok());
+    if (!pr.ok()) {
+        return;
+    }
+    const rtti::flat::fbs_agg_desc* p = rtti::flat::find_type(pr.value, "P");
+    RTTI_CHECK(p != nullptr);
+    RTTI_CHECK_EQ(p->fields[0].type, rtti::flat::fbs_type::vector);
+    RTTI_CHECK_EQ(static_cast<int>(p->fields[0].elem),
+                  static_cast<int>(rtti::flat::fkind::i8));
+    RTTI_CHECK(p->fields[0].enum_index != kNoIndex); // the enum resolved
+    const auto cr = rtti::flat::compile_schema(pr.value);
+    RTTI_CHECK(cr.ok());
+    if (!cr.ok()) {
+        return;
+    }
+    const rtti::flat::schema_info* si = cr.value.info();
+    RTTI_CHECK_EQ(static_cast<int>(si->fields[0].kind),
+                  static_cast<int>(rtti::flat::fkind::vector));
+    RTTI_CHECK_EQ(static_cast<int>(si->fields[0].elem),
+                  static_cast<int>(rtti::flat::fkind::i8));
+    // Round trip [0,1,2] through the wire layer.
+    rtti::flat::document doc;
+    rtti::value_io* colors = doc.make_node();
+    colors->make_array();
+    for (std::int64_t i = 0; i < 3; ++i) {
+        rtti::value_io* el = colors->make_node();
+        el->make_scalar(rtti::field_value::of(i));
+        colors->push_back(el);
+    }
+    doc.set_key("colors", colors);
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::tree_to_wire(&doc, si, wire,
+                                           rtti::flat::parse_config{}),
+                  rtti::error_code::ok);
+    rtti::flat::document back;
+    RTTI_CHECK_EQ(rtti::flat::wire_to_tree(
+                      rtti::string_view(wire.data(), wire.size()), si, back,
+                      rtti::flat::parse_config{}),
+                  rtti::error_code::ok);
+    rtti::value_io* c = nullptr;
+    RTTI_CHECK(back.get_key("colors", c));
+    RTTI_CHECK(c != nullptr);
+    RTTI_CHECK_EQ(c->size(), size_t(3));
+    for (std::size_t i = 0; i < 3; ++i) {
+        std::int64_t v = 0;
+        RTTI_CHECK(c->at(i)->as_integer(v));
+        RTTI_CHECK_EQ(v, std::int64_t(i));
+    }
+}
+
+RTTI_TEST_CASE(FbsQualifiedIdentifiers) {
+    // flatc resolves dotted field/vector/root_type references across
+    // namespaces (`foo.T1`, `bar.T2`; review I-2).
+    const char schema[] =
+        "namespace foo;\n"
+        "table T1 { n:int; }\n"
+        "namespace bar;\n"
+        "table T2 { t:foo.T1; v:[foo.T1]; }\n"
+        "root_type bar.T2;\n";
+    const auto pr = rtti::flat::parse_schema(
+        rtti::string_view(schema, sizeof(schema) - 1));
+    RTTI_CHECK(pr.ok());
+    if (!pr.ok()) {
+        return;
+    }
+    RTTI_CHECK_EQ(pr.value.root_type, std::string("bar.T2"));
+    const rtti::flat::fbs_agg_desc* t2 = rtti::flat::find_type(pr.value, "bar.T2");
+    RTTI_CHECK(t2 != nullptr);
+    RTTI_CHECK_EQ(t2->fields[0].type, rtti::flat::fbs_type::table);
+    RTTI_CHECK_EQ(t2->fields[0].ref, std::string("foo.T1"));
+    RTTI_CHECK(t2->fields[0].type_index != kNoIndex);
+    RTTI_CHECK_EQ(t2->fields[1].type, rtti::flat::fbs_type::vector);
+    RTTI_CHECK_EQ(t2->fields[1].elem, rtti::flat::fkind::table);
+    RTTI_CHECK_EQ(t2->fields[1].ref, std::string("foo.T1"));
+    RTTI_CHECK(t2->fields[1].type_index != kNoIndex);
+    RTTI_CHECK_EQ(t2->fields[1].type_index, t2->fields[0].type_index);
+    const auto cr = rtti::flat::compile_schema(pr.value);
+    RTTI_CHECK(cr.ok());
+    if (!cr.ok()) {
+        return;
+    }
+    RTTI_CHECK_EQ(cr.value.root_name(), rtti::string_view("bar.T2"));
+    const rtti::flat::schema_info* si = cr.value.info();
+    RTTI_CHECK_EQ(static_cast<int>(si->fields[0].kind),
+                  static_cast<int>(rtti::flat::fkind::table));
+    RTTI_CHECK(si->fields[0].sub != nullptr);
+    RTTI_CHECK_EQ(si->fields[0].sub->count, size_t(1));
+    RTTI_CHECK_EQ(static_cast<int>(si->fields[1].elem),
+                  static_cast<int>(rtti::flat::fkind::table));
+    RTTI_CHECK(si->fields[1].sub == si->fields[0].sub);
+    // A dotted root_type can also select the compiled root.
+    rtti::flat::compile_config cfg;
+    cfg.root_name = "foo.T1";
+    const auto c2 = rtti::flat::compile_schema(pr.value, cfg);
+    RTTI_CHECK(c2.ok());
+    RTTI_CHECK_EQ(c2.value.root_name(), rtti::string_view("foo.T1"));
 }
 
 } // namespace rtti_test_lib

@@ -15,9 +15,12 @@
 //   * `include "file.fbs";`       -- recorded dependency; not loaded.
 //   * `table Name { ... }` / `struct Name { ... }` with fields
 //       `name:type [= default] [(attrs)];`
-//       type := scalar | "string" | "[" (scalar|string|ref) "]" | table/struct/
-//               enum/union reference. Nested and forward references resolve by
-//               simple name within the namespace chain or fully-qualified.
+//       type := scalar | "string" | "[" (scalar|string|enum|ref) "]" |
+//               table/struct/enum/union reference. References may be bare or
+//               dot-qualified (`foo.Inner`) and resolve relative to the current
+//               namespace chain, then absolutely; forward references are
+//               allowed. A vector of an enum type reads as a vector of the
+//               enum's underlying scalar.
 //   * scalar types bool/byte/ubyte/short/ushort/int/uint/long/ulong/float/
 //       double; `[T]` vectors; `string`.
 //   * defaults: integral (decimal/hex/negative), real (e-notation), inf/-inf,
