@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -83,6 +84,23 @@ struct ProtoMap {
     RTTI_DEFINE_TYPE_INTRUSIVE(ProtoMap, attrs)
 };
 
+// protobuf map with string values.
+struct ProtoStrMap {
+    std::map<std::string, std::string> labels;
+
+    RTTI_DEFINE_TYPE_INTRUSIVE(ProtoStrMap, labels)
+};
+
+// A protobuf `oneof` group modelled as two std::optional members. The schema
+// marks both with the same oneof group id so the decoder enforces the
+// single-active-field rule (a later member clears the earlier one).
+struct ProtoOneof {
+    std::optional<std::int32_t> n;
+    std::optional<std::string> s;
+
+    RTTI_DEFINE_TYPE_INTRUSIVE(ProtoOneof, n, s)
+};
+
 // sint32/sint64 (zig-zag) varint members plus a plain int64 control.
 struct ProtoZigzag {
     std::int64_t z = 0;     // sint64, field 2
@@ -107,6 +125,15 @@ bool operator==(const ProtoNested& a, const ProtoNested& b) {
 bool operator==(const ProtoReq& a, const ProtoReq& b) {
     return a.id == b.id && a.name == b.name && a.age == b.age &&
            a.active == b.active && a.weight == b.weight;
+}
+bool operator==(const ProtoMap& a, const ProtoMap& b) {
+    return a.attrs == b.attrs;
+}
+bool operator==(const ProtoStrMap& a, const ProtoStrMap& b) {
+    return a.labels == b.labels;
+}
+bool operator==(const ProtoOneof& a, const ProtoOneof& b) {
+    return a.n == b.n && a.s == b.s;
 }
 bool operator==(const ProtoZigzag& a, const ProtoZigzag& b) {
     return a.z == b.z && a.s == b.s && a.plain == b.plain;
@@ -240,6 +267,31 @@ struct schema<rtti_test_lib::ProtoMap> {
         make_field<rtti_test_lib::ProtoMap, &rtti_test_lib::ProtoMap::attrs>(
             make_field_desc("attrs", 1, wire_type::length,
                             field_mode::repeated)),
+    };
+};
+
+template <>
+struct schema<rtti_test_lib::ProtoStrMap> {
+    static constexpr std::size_t count = 1;
+    static constexpr syntax syn = syntax::proto3;
+    static inline const field_base* const array[count] = {
+        make_field<rtti_test_lib::ProtoStrMap,
+                   &rtti_test_lib::ProtoStrMap::labels>(
+            make_field_desc("labels", 1, wire_type::length,
+                            field_mode::repeated)),
+    };
+};
+
+template <>
+struct schema<rtti_test_lib::ProtoOneof> {
+    static constexpr std::size_t count = 2;
+    static constexpr syntax syn = syntax::proto3;
+    static inline const field_base* const array[count] = {
+        // oneof choice { int32 n = 3; string s = 4; } -- group id 1 on both.
+        make_field<rtti_test_lib::ProtoOneof, &rtti_test_lib::ProtoOneof::n>(
+            in_oneof(make_field_desc("n", 3, wire_type::varint), 1)),
+        make_field<rtti_test_lib::ProtoOneof, &rtti_test_lib::ProtoOneof::s>(
+            in_oneof(make_field_desc("s", 4, wire_type::length), 1)),
     };
 };
 
@@ -789,6 +841,72 @@ RTTI_TEST_CASE(ProtoZigzagTreeBridge) {
     RTTI_CHECK_EQ(rtti::proto::tree_to_wire<ProtoZigzag>(&out, w2),
                   rtti::error_code::ok);
     RTTI_CHECK_EQ(w2, w);
+}
+
+RTTI_TEST_CASE(ProtoMapStringStringRoundTrip) {
+    // std::map<std::string,std::string> member: the typed map bridge (entry
+    // key=1 len / value=2 len) with explicit empty-string presence intact.
+    ProtoStrMap m;
+    m.labels["en"] = "bob";
+    m.labels["de"] = "";
+    const std::string w = rtti::proto::serialize(m);
+    // std::map iterates in key order: de/"" first (0A 06 0A 02 64 65 12 00),
+    // then en/bob (0A 09 0A 02 65 6E 12 03 62 6F 62); the wire layout matches
+    // official protoc 36.2 per-entry encoding.
+    static const unsigned char exp[] = {
+        0x0A, 0x06, 0x0A, 0x02, 'd', 'e', 0x12, 0x00,
+        0x0A, 0x09, 0x0A, 0x02, 'e', 'n', 0x12, 0x03, 'b', 'o', 'b',
+    };
+    RTTI_CHECK_EQ(w.size(), size_t(sizeof(exp)));
+    RTTI_CHECK_EQ(std::memcmp(w.data(), exp, sizeof(exp)), 0);
+    const auto r = rtti::proto::parse_as<ProtoStrMap>(to_sv(w));
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK(*r == m);
+    RTTI_CHECK_EQ(rtti::proto::serialize(*r), w);
+}
+
+RTTI_TEST_CASE(ProtoOneofTypedSingleActive) {
+    ProtoOneof a;
+    a.n = 0; // zero-value member is still emitted (explicit presence)
+    const std::string w = rtti::proto::serialize(a);
+    static const unsigned char exp[] = {0x18, 0x00}; // field 3 varint 0
+    RTTI_CHECK_EQ(w.size(), size_t(sizeof(exp)));
+    RTTI_CHECK_EQ(std::memcmp(w.data(), exp, sizeof(exp)), 0);
+    const auto r = rtti::proto::parse_as<ProtoOneof>(to_sv(w));
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK((*r).n.has_value());
+    RTTI_CHECK_EQ((*r).n.value(), 0);
+    RTTI_CHECK(!(*r).s.has_value());
+
+    ProtoOneof b;
+    b.s = "hi";
+    const auto r2 = rtti::proto::parse_as<ProtoOneof>(to_sv(rtti::proto::serialize(b)));
+    RTTI_CHECK(r2.ok());
+    RTTI_CHECK(*r2 == b);
+}
+
+RTTI_TEST_CASE(ProtoOneofTypedMutexLastWins) {
+    // Wire carrying both oneof members: the later member clears the earlier
+    // (protoc semantics). `18 05 22 01 78` => n=5 then s="x" survives.
+    static const unsigned char both[] = {0x18, 0x05, 0x22, 0x01, 'x'};
+    const auto r = rtti::proto::parse_as<ProtoOneof>(
+        rtti::string_view(reinterpret_cast<const char*>(both), sizeof(both)));
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK(!(*r).n.has_value()); // cleared by the later s
+    RTTI_CHECK((*r).s.has_value());
+    RTTI_CHECK_EQ((*r).s.value(), std::string("x"));
+
+    // Re-encoding the surviving member emits only that member's wire bytes.
+    RTTI_CHECK_EQ(rtti::proto::serialize(*r), std::string("\x22\x01\x78", 3));
+
+    // Reverse stream order: n survives.
+    static const unsigned char rev[] = {0x22, 0x01, 'x', 0x18, 0x05};
+    const auto r2 = rtti::proto::parse_as<ProtoOneof>(
+        rtti::string_view(reinterpret_cast<const char*>(rev), sizeof(rev)));
+    RTTI_CHECK(r2.ok());
+    RTTI_CHECK((*r2).n.has_value());
+    RTTI_CHECK_EQ((*r2).n.value(), 5);
+    RTTI_CHECK(!(*r2).s.has_value());
 }
 
 } // namespace rtti_test_lib

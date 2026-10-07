@@ -1,0 +1,9 @@
+counters { key: "alpha" value: 1 }
+counters { key: "beta" value: 300 }
+labels { key: "en" value: "hello" }
+n: 0
+blob: "\x01\x02\xff"
+kind: KIND_TWO
+packed: 1
+packed: 2
+packed: 3

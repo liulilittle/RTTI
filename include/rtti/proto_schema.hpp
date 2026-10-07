@@ -124,18 +124,56 @@ struct schema_field {
     std::int64_t dflt_int = 0;
     double dflt_real = 0.0;
     std::string dflt_str;
+    // Unresolved enum default name captured from `[default = NAME]`; resolved
+    // to dflt_int by the type-resolution pass (see resolve_types).
+    std::string dflt_enum_name;
+    // A numeric [default = N] on a type-reference field (a message/enum
+    // candidate) is captured here until the pass knows it is an enum; symbol
+    // defaults ride in dflt_enum_name.
+    bool dflt_pending_set = false;
+    std::int64_t dflt_pending_int = 0;
+
+    // `map<K,V>` field: expanded to a synthetic entry message
+    // (key = 1 / value = 2) referenced as a repeated message field.
+    bool is_map = false;
+    // Explicit-presence scalar (map-entry key/value): encode even when the
+    // value equals the default, matching protoc's map-entry presence tracking.
+    bool emit_present = false;
+    // Non-zero when the field is a member of a `oneof` group; every member of
+    // the same group shares the id (single active field on the wire).
+    std::uint32_t oneof_group = 0;
 };
 
 struct schema_message {
     std::string name;      // last path component
     std::string full_name; // dotted, e.g. "Outer.Inner"
     std::vector<schema_field> fields;
+    // `reserved 1, 5 to 8;` numbers (inclusive ranges) and `reserved "x";`
+    // names. A field reusing a reserved number or name is rejected by parse.
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> reserved_numbers;
+    std::vector<std::string> reserved_names;
+    // Next oneof group id handed out by parse_oneof (starts at 1).
+    std::uint32_t oneof_counter = 0;
+};
+
+// One `enum` definition: ordered value entries (name -> number).
+struct schema_enum_value {
+    std::string name;
+    std::int32_t value = 0;
+};
+
+struct schema_enum {
+    std::string full_name; // dotted, e.g. "Outer.Color"
+    std::vector<schema_enum_value> values;
 };
 
 struct schema_desc {
     syntax syn = syntax::proto2;
     std::vector<schema_message> messages; // top-level first, then nested
     std::vector<std::string> enums;       // dotted enum full names
+    std::vector<schema_enum> enum_defs;   // full enum tables (values)
+    // import "file.proto"; declarations (dependency table; files not loaded).
+    std::vector<std::string> imports;
 };
 
 namespace detail {
@@ -160,7 +198,9 @@ struct token {
         semi,
         dot,
         comma,
-        minus
+        minus,
+        less,
+        greater
     };
     kind k = kind::eof;
     rtti::string_view text; // ident
@@ -330,6 +370,14 @@ struct scanner {
                 t.k = token::kind::minus;
                 ++p;
                 break;
+            case '<':
+                t.k = token::kind::less;
+                ++p;
+                break;
+            case '>':
+                t.k = token::kind::greater;
+                ++p;
+                break;
             case '"': {
                 ++p;
                 std::string tmp;
@@ -347,33 +395,200 @@ struct scanner {
                             break;
                         }
                         const char esc = p[1];
+                        auto is_hex = [](char c) noexcept -> bool {
+                            return (c >= '0' && c <= '9') ||
+                                   (c >= 'a' && c <= 'f') ||
+                                   (c >= 'A' && c <= 'F');
+                        };
+                        auto hex_val = [](char c) noexcept -> unsigned {
+                            if (c >= '0' && c <= '9') {
+                                return static_cast<unsigned>(c - '0');
+                            }
+                            if (c >= 'a' && c <= 'f') {
+                                return static_cast<unsigned>(c - 'a' + 10);
+                            }
+                            return static_cast<unsigned>(c - 'A' + 10);
+                        };
+                        auto is_oct = [](char c) noexcept -> bool {
+                            return c >= '0' && c <= '7';
+                        };
                         switch (esc) {
+                            case 'a':
+                                tmp.push_back('\a');
+                                p += 2;
+                                break;
+                            case 'b':
+                                tmp.push_back('\b');
+                                p += 2;
+                                break;
+                            case 'e':
+                                tmp.push_back('\x1B');
+                                p += 2;
+                                break;
+                            case 'f':
+                                tmp.push_back('\f');
+                                p += 2;
+                                break;
                             case 'n':
                                 tmp.push_back('\n');
+                                p += 2;
                                 break;
                             case 'r':
                                 tmp.push_back('\r');
+                                p += 2;
                                 break;
                             case 't':
                                 tmp.push_back('\t');
+                                p += 2;
+                                break;
+                            case 'v':
+                                tmp.push_back('\v');
+                                p += 2;
                                 break;
                             case '0':
                                 tmp.push_back('\0');
+                                p += 2;
                                 break;
                             case '\\':
                                 tmp.push_back('\\');
+                                p += 2;
                                 break;
                             case '"':
                                 tmp.push_back('"');
+                                p += 2;
                                 break;
                             case '\'':
                                 tmp.push_back('\'');
+                                p += 2;
                                 break;
-                            default:
-                                tmp.push_back(esc);
+                            case '?':
+                                tmp.push_back('?');
+                                p += 2;
                                 break;
+                            case 'x': {
+                                // \xHH: up to two hex digits (proto byte
+                                // literal; the value must fit in a byte).
+                                p += 2;
+                                unsigned v = 0;
+                                int digits = 0;
+                                while (p != e && digits < 2 &&
+                                       is_hex(*p)) {
+                                    v = (v << 4) | hex_val(*p);
+                                    ++p;
+                                    ++digits;
+                                }
+                                if (digits == 0) {
+                                    tmp.push_back('x');
+                                    break;
+                                }
+                                tmp.push_back(static_cast<char>(
+                                    static_cast<unsigned char>(v & 0xFFu)));
+                                break;
+                            }
+                            case 'u': {
+                                // \uXXXX: 4 hex digits; the code point is
+                                // UTF-8 encoded into the string payload.
+                                p += 2;
+                                std::uint32_t cp = 0;
+                                int digits = 0;
+                                while (p != e && digits < 4 && is_hex(*p)) {
+                                    cp = (cp << 4) | hex_val(*p);
+                                    ++p;
+                                    ++digits;
+                                }
+                                if (digits < 4) {
+                                    fail = error_code::unexpected_token;
+                                    fail_pos = t.begin;
+                                }
+                                if (cp <= 0x7Fu) {
+                                    tmp.push_back(static_cast<char>(cp));
+                                } else if (cp <= 0x7FFu) {
+                                    tmp.push_back(static_cast<char>(
+                                        0xC0u | (cp >> 6)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | (cp & 0x3Fu)));
+                                } else if (cp <= 0xFFFFu) {
+                                    tmp.push_back(static_cast<char>(
+                                        0xE0u | (cp >> 12)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | ((cp >> 6) & 0x3Fu)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | (cp & 0x3Fu)));
+                                } else {
+                                    tmp.push_back(static_cast<char>(
+                                        0xF0u | (cp >> 18)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | ((cp >> 12) & 0x3Fu)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | ((cp >> 6) & 0x3Fu)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | (cp & 0x3Fu)));
+                                }
+                                break;
+                            }
+                            case 'U': {
+                                // \UXXXXXXXX: 8 hex digits, UTF-8 encoded.
+                                p += 2;
+                                std::uint32_t cp = 0;
+                                int digits = 0;
+                                while (p != e && digits < 8 && is_hex(*p)) {
+                                    cp = (cp << 4) | hex_val(*p);
+                                    ++p;
+                                    ++digits;
+                                }
+                                if (digits < 8) {
+                                    fail = error_code::unexpected_token;
+                                    fail_pos = t.begin;
+                                }
+                                if (cp <= 0x7Fu) {
+                                    tmp.push_back(static_cast<char>(cp));
+                                } else if (cp <= 0x7FFu) {
+                                    tmp.push_back(static_cast<char>(
+                                        0xC0u | (cp >> 6)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | (cp & 0x3Fu)));
+                                } else if (cp <= 0xFFFFu) {
+                                    tmp.push_back(static_cast<char>(
+                                        0xE0u | (cp >> 12)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | ((cp >> 6) & 0x3Fu)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | (cp & 0x3Fu)));
+                                } else {
+                                    tmp.push_back(static_cast<char>(
+                                        0xF0u | (cp >> 18)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | ((cp >> 12) & 0x3Fu)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | ((cp >> 6) & 0x3Fu)));
+                                    tmp.push_back(static_cast<char>(
+                                        0x80u | (cp & 0x3Fu)));
+                                }
+                                break;
+                            }
+                            default: {
+                                // 1-3 octal digits \NNN (proto octal escape)
+                                // when the next char is octal; otherwise the
+                                // escaped character pass through verbatim.
+                                if (is_oct(esc)) {
+                                    unsigned v = static_cast<unsigned>(esc - '0');
+                                    p += 2;
+                                    int digits = 1;
+                                    while (p != e && digits < 3 && is_oct(*p)) {
+                                        v = (v << 3) |
+                                            static_cast<unsigned>(*p - '0');
+                                        ++p;
+                                        ++digits;
+                                    }
+                                    tmp.push_back(static_cast<char>(
+                                        static_cast<unsigned char>(v & 0xFFu)));
+                                } else {
+                                    tmp.push_back(esc);
+                                    p += 2;
+                                }
+                                break;
+                            }
                         }
-                        p += 2;
                     } else {
                         tmp.push_back(ch);
                         ++p;
@@ -465,12 +680,20 @@ struct parser {
     bool parse_file(schema_desc& d);
     bool parse_message(schema_desc& d, std::vector<std::string>& stack,
                        int depth);
-    bool parse_field(schema_message& sm);
+    bool parse_oneof(schema_desc& d, schema_message& sm,
+                     const std::vector<std::string>& stack);
+    bool parse_reserved(schema_message& sm);
+    bool parse_field(schema_desc& d, schema_message& sm,
+                     const std::vector<std::string>& stack);
+    bool parse_map_type(schema_desc& d, schema_field& f,
+                        schema_message& sm,
+                        const std::vector<std::string>& stack);
     bool parse_type_ref(schema_field& f);
     bool parse_options(schema_field& f);
     bool parse_option_value(schema_field& f, const std::string& name,
                             const char* pos);
     bool parse_enum(schema_desc& d, std::vector<std::string>& stack);
+    bool parse_import(schema_desc& d);
     bool skip_statement();
     bool skip_paren_group();
 };
@@ -529,8 +752,14 @@ inline bool parser::parse_file(schema_desc& d) {
             }
             continue;
         }
-        if (have_ident("import") || have_ident("package") ||
-            have_ident("option") || have_ident("syntax")) {
+        if (have_ident("import")) {
+            if (!parse_import(d)) {
+                return false;
+            }
+            continue;
+        }
+        if (have_ident("package") || have_ident("option") ||
+            have_ident("syntax")) {
             if (!skip_statement()) {
                 return false;
             }
@@ -601,6 +830,20 @@ inline bool parser::parse_message(schema_desc& d,
             }
             continue;
         }
+        if (have_ident("oneof")) {
+            if (!parse_oneof(d, sm, stack)) {
+                stack.pop_back();
+                return false;
+            }
+            continue;
+        }
+        if (have_ident("reserved")) {
+            if (!parse_reserved(sm)) {
+                stack.pop_back();
+                return false;
+            }
+            continue;
+        }
         if (cur.k == token::kind::semi) {
             adv();
             continue;
@@ -612,7 +855,7 @@ inline bool parser::parse_message(schema_desc& d,
             }
             continue;
         }
-        if (!parse_field(sm)) {
+        if (!parse_field(d, sm, stack)) {
             stack.pop_back();
             return false;
         }
@@ -622,7 +865,8 @@ inline bool parser::parse_message(schema_desc& d,
     return true;
 }
 
-inline bool parser::parse_field(schema_message& sm) {
+inline bool parser::parse_field(schema_desc& d, schema_message& sm,
+                                const std::vector<std::string>& stack) {
     if (failed()) {
         return false;
     }
@@ -644,9 +888,163 @@ inline bool parser::parse_field(schema_message& sm) {
         set_error(error_code::unexpected_token, cur.begin);
         return false;
     }
-    if (!parse_type_ref(f)) {
+    if (have_ident("map") && look.k == token::kind::less) {
+        if (f.mode == field_mode::repeated ||
+            f.mode == field_mode::required) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        // parse_map_type consumes `map<K,V> name = N [options] ;` in full (the
+        // entry-message name depends on the field name).
+        if (!parse_map_type(d, f, sm, stack)) {
+            return false;
+        }
+        if (!expect_kind(token::kind::semi)) {
+            return false;
+        }
+    } else {
+        if (!parse_type_ref(f)) {
+            return false;
+        }
+        if (cur.k != token::kind::ident) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        f.name = std::string(cur.text);
+        adv();
+        if (!expect_kind(token::kind::eq)) {
+            return false;
+        }
+        if (cur.k != token::kind::number || cur.is_real) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        if (cur.ival == 0 || cur.ival > 0x1FFFFFFFull) {
+            set_error(error_code::proto_bad_field, cur.begin);
+            return false;
+        }
+        f.number = static_cast<std::uint32_t>(cur.ival);
+        adv();
+        if (cur.k == token::kind::lbracket) {
+            if (!parse_options(f)) {
+                return false;
+            }
+        }
+        if (!expect_kind(token::kind::semi)) {
+            return false;
+        }
+    }
+    // A field reusing a reserved field number or name is rejected by parse
+    // (protoc semantics), so a later wire writer can never collide with a
+    // reserved slot.
+    for (const auto& rng : sm.reserved_numbers) {
+        if (f.number >= rng.first && f.number <= rng.second) {
+            set_error(error_code::proto_bad_field, cur.begin);
+            return false;
+        }
+    }
+    for (const std::string& rn : sm.reserved_names) {
+        if (f.name == rn) {
+            set_error(error_code::proto_bad_field, cur.begin);
+            return false;
+        }
+    }
+    sm.fields.push_back(std::move(f));
+    return true;
+}
+
+// Recognize the 15 protobuf scalar type names. Returns false for a type that
+// is not a built-in scalar (a message/enum reference instead).
+inline bool scalar_type_from_name(const std::string& ref,
+                                  scalar_type& st) noexcept {
+    if (ref == "int32") {
+        st = scalar_type::int32;
+    } else if (ref == "int64") {
+        st = scalar_type::int64;
+    } else if (ref == "uint32") {
+        st = scalar_type::uint32;
+    } else if (ref == "uint64") {
+        st = scalar_type::uint64;
+    } else if (ref == "sint32") {
+        st = scalar_type::sint32;
+    } else if (ref == "sint64") {
+        st = scalar_type::sint64;
+    } else if (ref == "bool") {
+        st = scalar_type::bool_val;
+    } else if (ref == "float") {
+        st = scalar_type::float_val;
+    } else if (ref == "double") {
+        st = scalar_type::double_val;
+    } else if (ref == "string") {
+        st = scalar_type::string_val;
+    } else if (ref == "bytes") {
+        st = scalar_type::bytes_val;
+    } else if (ref == "fixed32") {
+        st = scalar_type::fixed32;
+    } else if (ref == "fixed64") {
+        st = scalar_type::fixed64;
+    } else if (ref == "sfixed32") {
+        st = scalar_type::sfixed32;
+    } else if (ref == "sfixed64") {
+        st = scalar_type::sfixed64;
+    } else {
         return false;
     }
+    return true;
+}
+
+inline bool parser::parse_map_type(schema_desc& d, schema_field& f,
+                                   schema_message& sm,
+                                   const std::vector<std::string>& stack) {
+    // map<K,V> => synthetic entry message { K key = 1; V value = 2; } whose
+    // full name lives under the enclosing message. The field itself becomes a
+    // repeated message-typed field referencing that entry.
+    adv(); // 'map'
+    if (!expect_kind(token::kind::less)) {
+        return false;
+    }
+    const char* const key_pos = cur.begin;
+    std::string kref;
+    std::string vref;
+    if (cur.k == token::kind::dot) {
+        kref.push_back('.');
+        adv();
+    }
+    if (cur.k != token::kind::ident) {
+        set_error(error_code::unexpected_token, cur.begin);
+        return false;
+    }
+    kref += std::string(cur.text);
+    adv();
+    if (!expect_kind(token::kind::comma)) {
+        return false;
+    }
+    const char* const value_pos = cur.begin;
+    if (cur.k == token::kind::dot) {
+        vref.push_back('.');
+        adv();
+    }
+    if (cur.k != token::kind::ident) {
+        set_error(error_code::unexpected_token, cur.begin);
+        return false;
+    }
+    vref += std::string(cur.text);
+    adv();
+    while (cur.k == token::kind::dot) {
+        adv();
+        if (cur.k != token::kind::ident) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        vref.push_back('.');
+        vref += std::string(cur.text);
+        adv();
+    }
+    if (!expect_kind(token::kind::greater)) {
+        return false;
+    }
+    // The entry-message full name derives from the field name, so the map
+    // field's own `name = <number> [options]` is consumed here.
     if (cur.k != token::kind::ident) {
         set_error(error_code::unexpected_token, cur.begin);
         return false;
@@ -671,13 +1069,210 @@ inline bool parser::parse_field(schema_message& sm) {
             return false;
         }
     }
-    if (!expect_kind(token::kind::semi)) {
+    scalar_type kst = scalar_type::message_val;
+    schema_field kf;
+    kf.name = "key";
+    kf.number = 1;
+    kf.emit_present = true;
+    if (!scalar_type_from_name(kref, kst)) {
+        set_error(error_code::unexpected_token, key_pos);
         return false;
     }
-    sm.fields.push_back(std::move(f));
+    kf.type = kst;
+
+    schema_field vf;
+    vf.name = "value";
+    vf.number = 2;
+    vf.emit_present = true;
+    scalar_type vst = scalar_type::message_val;
+    if (!scalar_type_from_name(vref, vst)) {
+        // value reference: a message or enum type (resolved later).
+        vf.type = scalar_type::message_val;
+        vf.is_message = true;
+        vf.type_ref = vref;
+        if (src_begin != nullptr) {
+            vf.type_offset =
+                static_cast<std::size_t>(value_pos - src_begin);
+        }
+    } else {
+        vf.type = vst;
+    }
+
+    f.is_map = true;
+    f.mode = field_mode::repeated;
+    f.type = scalar_type::message_val;
+    f.is_message = true;
+
+    const std::string entry_component = f.name + "_entry";
+    schema_message entry;
+    entry.name = entry_component;
+    entry.full_name = (stack.empty() ? sm.name : stack.back()) + "." +
+                      entry_component;
+    // Ensure the entry name is unique: append a numbered suffix when the
+    // enclosing message already produced this name (multiple maps in one
+    // message share the field-scoped name otherwise).
+    bool dup = false;
+    do {
+        dup = false;
+        for (const auto& m : d.messages) {
+            if (m.full_name == entry.full_name) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup) {
+            entry.full_name += "x";
+            entry.name += "x";
+        }
+    } while (dup);
+    f.type_ref = entry.full_name;
+    f.type_offset = 0;
+    entry.fields.push_back(std::move(kf));
+    entry.fields.push_back(std::move(vf));
+    d.messages.push_back(std::move(entry));
     return true;
 }
 
+inline bool parser::parse_oneof(schema_desc& d, schema_message& sm,
+                                const std::vector<std::string>& stack) {
+    if (failed()) {
+        return false;
+    }
+    adv(); // 'oneof'
+    if (cur.k != token::kind::ident) {
+        set_error(error_code::unexpected_token, cur.begin);
+        return false;
+    }
+    // oneof name (unused further: members carry their own names/numbers)
+    adv();
+    if (!expect_kind(token::kind::lbrace)) {
+        return false;
+    }
+    const std::uint32_t group = ++sm.oneof_counter;
+    for (;;) {
+        if (failed()) {
+            return false;
+        }
+        if (cur.k == token::kind::rbrace) {
+            adv();
+            break;
+        }
+        if (cur.k == token::kind::eof) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        if (cur.k == token::kind::semi) {
+            adv();
+            continue;
+        }
+        const std::size_t before = sm.fields.size();
+        if (!parse_field(d, sm, stack)) {
+            return false;
+        }
+        if (sm.fields.size() == before) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        schema_field& member = sm.fields.back();
+        if (member.mode == field_mode::repeated) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        if (member.mode == field_mode::required) {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        member.oneof_group = group;
+    }
+    // A trailing ';' after the oneof block is tolerated.
+    if (cur.k == token::kind::semi) {
+        adv();
+    }
+    return true;
+}
+
+inline bool parser::parse_reserved(schema_message& sm) {
+    if (failed()) {
+        return false;
+    }
+    adv(); // 'reserved'
+    for (;;) {
+        if (failed()) {
+            return false;
+        }
+        if (cur.k == token::kind::number && !cur.is_real) {
+            const std::uint64_t lo = cur.ival;
+            if (lo == 0 || lo > 0x1FFFFFFFull) {
+                set_error(error_code::proto_bad_field, cur.begin);
+                return false;
+            }
+            adv();
+            std::uint64_t hi = lo;
+            if (have_ident("to")) {
+                adv();
+                if (cur.k == token::kind::ident &&
+                    cur.text == rtti::string_view("max")) {
+                    hi = 0x1FFFFFFFull;
+                    adv();
+                } else if (cur.k == token::kind::number && !cur.is_real) {
+                    hi = cur.ival;
+                    if (hi == 0 || hi > 0x1FFFFFFFull || hi < lo) {
+                        set_error(error_code::proto_bad_field, cur.begin);
+                        return false;
+                    }
+                    adv();
+                } else {
+                    set_error(error_code::unexpected_token, cur.begin);
+                    return false;
+                }
+            }
+            sm.reserved_numbers.emplace_back(
+                static_cast<std::uint32_t>(lo),
+                static_cast<std::uint32_t>(hi));
+        } else if (cur.k == token::kind::str) {
+            sm.reserved_names.push_back(cur.sval);
+            adv();
+        } else {
+            set_error(error_code::unexpected_token, cur.begin);
+            return false;
+        }
+        if (cur.k == token::kind::comma) {
+            adv();
+            continue;
+        }
+        if (!expect_kind(token::kind::semi)) {
+            return false;
+        }
+        return true;
+    }
+}
+
+inline bool parser::parse_import(schema_desc& d) {
+    if (failed()) {
+        return false;
+    }
+    adv(); // 'import'
+    // protoc allows `import public "..."` / `import weak "..."`; consume a
+    // modifier identifier if present.
+    if (cur.k == token::kind::ident &&
+        (cur.text == rtti::string_view("public") ||
+         cur.text == rtti::string_view("weak"))) {
+        adv();
+    }
+    if (cur.k != token::kind::str) {
+        set_error(error_code::unexpected_token, cur.begin);
+        return false;
+    }
+    d.imports.push_back(cur.sval);
+    adv();
+    if (!expect_kind(token::kind::semi)) {
+        return false;
+    }
+    return true;
+}
+
+// Recognize the 15 protobuf scalar type names. Returns false for a type that
+// is not a built-in scalar (a message/enum reference instead).
 inline bool parser::parse_type_ref(schema_field& f) {
     if (failed()) {
         return false;
@@ -709,38 +1304,7 @@ inline bool parser::parse_type_ref(schema_field& f) {
     }
     if (!ref.empty() && ref.front() != '.') {
         scalar_type st = scalar_type::message_val;
-        if (ref == "int32") {
-            st = scalar_type::int32;
-        } else if (ref == "int64") {
-            st = scalar_type::int64;
-        } else if (ref == "uint32") {
-            st = scalar_type::uint32;
-        } else if (ref == "uint64") {
-            st = scalar_type::uint64;
-        } else if (ref == "sint32") {
-            st = scalar_type::sint32;
-        } else if (ref == "sint64") {
-            st = scalar_type::sint64;
-        } else if (ref == "bool") {
-            st = scalar_type::bool_val;
-        } else if (ref == "float") {
-            st = scalar_type::float_val;
-        } else if (ref == "double") {
-            st = scalar_type::double_val;
-        } else if (ref == "string") {
-            st = scalar_type::string_val;
-        } else if (ref == "bytes") {
-            st = scalar_type::bytes_val;
-        } else if (ref == "fixed32") {
-            st = scalar_type::fixed32;
-        } else if (ref == "fixed64") {
-            st = scalar_type::fixed64;
-        } else if (ref == "sfixed32") {
-            st = scalar_type::sfixed32;
-        } else if (ref == "sfixed64") {
-            st = scalar_type::sfixed64;
-        }
-        if (st != scalar_type::message_val) {
+        if (scalar_type_from_name(ref, st) && !ref.empty()) {
             f.type = st;
             return true;
         }
@@ -856,19 +1420,21 @@ inline bool parser::parse_option_value(schema_field& f,
             f.packed_explicit = true;
             f.packed = (v != 0);
         } else if (name == "default") {
+            std::int64_t nv = 0;
             if (neg) {
-                const std::int64_t nv =
-                    (v == 0x8000000000000000ull)
-                        ? (std::numeric_limits<std::int64_t>::min)()
-                        : -static_cast<std::int64_t>(v);
-                apply_default_int(f, nv);
+                nv = (v == 0x8000000000000000ull)
+                         ? (std::numeric_limits<std::int64_t>::min)()
+                         : -static_cast<std::int64_t>(v);
             } else {
                 if (v > 0x7FFFFFFFFFFFFFFFull) {
                     set_error(error_code::invalid_number, pos);
                     return false;
                 }
-                apply_default_int(f, static_cast<std::int64_t>(v));
+                nv = static_cast<std::int64_t>(v);
             }
+            f.dflt_pending_set = true;
+            f.dflt_pending_int = nv;
+            apply_default_int(f, nv);
         }
         return !failed();
     }
@@ -898,8 +1464,12 @@ inline bool parser::parse_option_value(schema_field& f,
                 apply_default_real(
                     f, neg ? -std::numeric_limits<double>::infinity()
                            : std::numeric_limits<double>::infinity());
+            } else {
+                // An enum value name: keep the symbol so the resolution pass
+                // can compute its numeric value via the enum table.
+                f.dflt_enum_name = id;
+                f.has_default = true;
             }
-            // other identifiers are enum value names; ignored.
         }
         return !failed();
     }
@@ -922,7 +1492,11 @@ inline bool parser::parse_enum(schema_desc& d,
     if (!stack.empty()) {
         full = stack.back() + "." + name;
     }
-    d.enums.push_back(std::move(full));
+    d.enums.push_back(full);
+    schema_enum ed;
+    ed.full_name = full;
+    // First value defaults to 0; each later value defaults to (prev + 1).
+    std::int64_t next_default = 0;
     adv();
     if (!expect_kind(token::kind::lbrace)) {
         return false;
@@ -952,14 +1526,69 @@ inline bool parser::parse_enum(schema_desc& d,
         if (cur.k == token::kind::rbrace) {
             if (depth == 0) {
                 adv();
-                return true;
+                break;
             }
             --depth;
             adv();
             continue;
         }
+        if (cur.k == token::kind::semi) {
+            adv();
+            continue;
+        }
+        if (have_ident("option")) {
+            if (depth == 0 && !skip_statement()) {
+                return false;
+            }
+            continue;
+        }
+        if (cur.k == token::kind::ident) {
+            const std::string vname(cur.text);
+            adv();
+            std::int64_t v = next_default;
+            const char* num_pos = cur.begin;
+            if (cur.k == token::kind::eq) {
+                adv();
+                if (cur.k == token::kind::minus) {
+                    adv();
+                    if (cur.k != token::kind::number || cur.is_real) {
+                        set_error(error_code::unexpected_token, cur.begin);
+                        return false;
+                    }
+                    const std::uint64_t uv = cur.ival;
+                    v = (uv == 0x8000000000000000ull)
+                            ? (std::numeric_limits<std::int64_t>::min)()
+                            : -static_cast<std::int64_t>(uv);
+                    num_pos = cur.begin;
+                    adv();
+                } else if (cur.k == token::kind::number && !cur.is_real) {
+                    const std::uint64_t uv = cur.ival;
+                    if (uv > 0x7FFFFFFFFFFFFFFFull) {
+                        set_error(error_code::invalid_number, num_pos);
+                        return false;
+                    }
+                    v = static_cast<std::int64_t>(uv);
+                    adv();
+                } else {
+                    set_error(error_code::unexpected_token, cur.begin);
+                    return false;
+                }
+            }
+            next_default = v + 1;
+            schema_enum_value ev;
+            ev.name = vname;
+            ev.value = static_cast<std::int32_t>(
+                static_cast<std::int64_t>(static_cast<std::int32_t>(v)));
+            ed.values.push_back(std::move(ev));
+            if (cur.k == token::kind::semi) {
+                adv();
+            }
+            continue;
+        }
         adv();
     }
+    d.enum_defs.push_back(std::move(ed));
+    return true;
 }
 
 inline bool parser::skip_statement() {
@@ -1068,14 +1697,61 @@ inline bool resolve_message_ref(
     return false;
 }
 
-inline bool resolve_enum_ref(const schema_desc& d, const std::string& ref) {
+inline std::size_t resolve_enum_ref(const schema_desc& d,
+                                    const std::string& ref) {
     const std::string dotref = "." + ref;
-    for (const auto& e : d.enums) {
+    for (std::size_t i = 0; i < d.enum_defs.size(); ++i) {
+        const std::string& e = d.enum_defs[i].full_name;
         if (e == ref || nends_with(e, dotref)) {
-            return true;
+            return i;
         }
     }
-    return false;
+    return static_cast<std::size_t>(-1);
+}
+
+// Apply enum default semantics to a field the resolution pass has confirmed as
+// an enum reference: an explicit `[default = NAME]` / `[default = N]` wins,
+// otherwise the implicit default is the enum's first value (protoc semantics --
+// proto2 uses the first listed value, proto3 requires it to be zero).
+inline bool resolve_enum_defaults(schema_desc& d,
+                                  const std::string& enum_full,
+                                  schema_field& f, error_info& err) {
+    std::size_t idx = static_cast<std::size_t>(-1);
+    for (std::size_t i = 0; i < d.enum_defs.size(); ++i) {
+        if (d.enum_defs[i].full_name == enum_full) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx == static_cast<std::size_t>(-1)) {
+        err.code = error_code::unexpected_token;
+        err.offset = f.type_offset;
+        return false;
+    }
+    const schema_enum& ed = d.enum_defs[idx];
+    if (!f.dflt_enum_name.empty()) {
+        for (const schema_enum_value& ev : ed.values) {
+            if (ev.name == f.dflt_enum_name) {
+                f.dflt_int = ev.value;
+                f.has_default = true;
+                return true;
+            }
+        }
+        // Unknown enum value name in [default = NAME].
+        err.code = error_code::unexpected_token;
+        err.offset = f.type_offset;
+        return false;
+    }
+    if (f.dflt_pending_set) {
+        f.dflt_int = f.dflt_pending_int;
+        f.has_default = true;
+        return true;
+    }
+    if (!f.has_default && !ed.values.empty()) {
+        f.dflt_int = ed.values.front().value;
+        f.has_default = true;
+    }
+    return true;
 }
 
 inline bool resolve_types(schema_desc& d, error_info& err) {
@@ -1103,11 +1779,28 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
                 f.is_enum = false;
                 continue;
             }
-            if (resolve_enum_ref(d, norm)) {
+            const std::size_t eidx = resolve_enum_ref(d, norm);
+            if (eidx != static_cast<std::size_t>(-1)) {
                 f.type = scalar_type::enum_val;
                 f.type_index = static_cast<std::size_t>(-1);
                 f.is_message = false;
                 f.is_enum = true;
+                if (!resolve_enum_defaults(d, d.enum_defs[eidx].full_name, f,
+                                           err)) {
+                    return false;
+                }
+                continue;
+            }
+            // A type reference that resolves to neither a local message nor a
+            // local enum. When the file declares imports, the reference may
+            // come from an imported (not yet merged) schema: keep it as an
+            // opaque external message -- length-delimited, byte-preserving at
+            // encode/decode time, with no field table of its own. Without any
+            // import, an unresolved name stays a hard parse error.
+            if (!d.imports.empty()) {
+                f.type = scalar_type::message_val;
+                f.type_index = static_cast<std::size_t>(-1);
+                f.is_enum = false;
                 continue;
             }
             err.code = error_code::unexpected_token;
@@ -1173,6 +1866,49 @@ inline result<schema_desc> parse_schema(rtti::string_view src) {
     return r;
 }
 // ---------------------------------------------------------------------------
+// Public: multi-file dependency merging
+// ---------------------------------------------------------------------------
+
+// Merge `src` into `dst` for a multi-file build: messages are appended when
+// their full name is not already present, enum tables deduplicated the same
+// way, and import paths unioned. After merging, compile_schema sees types from
+// every file. Nothing is loaded or resolved here -- merging is a pure data
+// operation (import file paths are the caller's dependency table).
+inline void merge_schemas(schema_desc& dst, const schema_desc& src) {
+    for (const std::string& f : src.imports) {
+        if (std::find(dst.imports.begin(), dst.imports.end(), f) ==
+            dst.imports.end()) {
+            dst.imports.push_back(f);
+        }
+    }
+    for (const schema_enum& e : src.enum_defs) {
+        bool dup = false;
+        for (const schema_enum& de : dst.enum_defs) {
+            if (de.full_name == e.full_name) {
+                dup = true;
+                break;
+            }
+        }
+        if (!dup) {
+            dst.enum_defs.push_back(e);
+            dst.enums.push_back(e.full_name);
+        }
+    }
+    for (const schema_message& m : src.messages) {
+        bool dup = false;
+        for (const schema_message& dm : dst.messages) {
+            if (dm.full_name == m.full_name) {
+                dup = true;
+                break;
+            }
+        }
+        if (!dup) {
+            dst.messages.push_back(m);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public: compile a schema_desc into a codec-ready schema_info
 // ---------------------------------------------------------------------------
 
@@ -1202,6 +1938,7 @@ struct dynamic_field : field_base {
     scalar_type st = scalar_type::int32;
     bool is_message = false;
     bool is_enum = false;
+    bool is_map = false;
     const compiled_message* child = nullptr; // for message-typed fields
     std::string name_storage;
     std::string dflt_storage;
@@ -1214,10 +1951,13 @@ struct dynamic_field : field_base {
         info.wire = wire_of_scalar(f.type);
         info.mode = f.mode;
         info.packed = f.packed;
+        info.oneof_group = f.oneof_group;
+        info.emit_present = f.emit_present;
         st = f.type;
         is_message = f.is_message;
         is_enum = f.is_enum;
         type_ref = f.type_ref;
+        is_map = f.is_map;
         if (f.has_default) {
             info.has_default = true;
             info.dflt_int = f.dflt_int;
@@ -1343,11 +2083,21 @@ struct dynamic_field : field_base {
                                  detail::wire_writer& w, std::size_t depth,
                                  std::size_t max_depth) const {
         if (is_message) {
+            if (child == nullptr) {
+                // Opaque external message (a type from an imported file whose
+                // schema was not merged in): the tree carries its raw payload
+                // verbatim, so the bytes pass through untouched.
+                rtti::string_view raw;
+                if (node->type() != rtti::value_io::kind::string ||
+                    !node->as_string(raw)) {
+                    return error_code::kind_mismatch;
+                }
+                w.varint(raw.size());
+                w.bytes(raw.data(), raw.size());
+                return error_code::ok;
+            }
             if (node->type() != rtti::value_io::kind::object) {
                 return error_code::kind_mismatch;
-            }
-            if (child == nullptr) {
-                return error_code::unexpected_token;
             }
             std::string payload;
             detail::wire_writer pw(payload);
@@ -1375,7 +2125,10 @@ struct dynamic_field : field_base {
                                std::size_t max_depth) const {
         if (is_message) {
             if (child == nullptr) {
-                return error_code::unexpected_token;
+                // Opaque external message: keep the raw payload so a later
+                // encode reproduces the exact imported-file bytes.
+                node->make_scalar(rtti::field_value::of(data));
+                return error_code::ok;
             }
             detail::wire_reader sub(data);
             node->make_object();
@@ -1769,14 +2522,18 @@ public:
             rm.fields.reserve(sm.fields.size());
             rm.field_ptrs.reserve(sm.fields.size());
             for (const schema_field& f : sm.fields) {
+                // An opaque external message (an unresolved type from an
+                // imported file) keeps type_index == -1 and no child schema.
                 if (f.is_message &&
+                    f.type_index != static_cast<std::size_t>(-1) &&
                     f.type_index >= desc.messages.size()) {
                     err.code = error_code::unexpected_token;
                     return false;
                 }
                 std::unique_ptr<detail::dynamic_field> df(
                     new detail::dynamic_field(f));
-                if (f.is_message) {
+                if (f.is_message &&
+                    f.type_index != static_cast<std::size_t>(-1)) {
                     df->child = out.messages_[f.type_index].get();
                 }
                 rm.field_ptrs.push_back(df.get());
@@ -1804,7 +2561,19 @@ inline result<compiled_schema> compile_schema(
     error_info err;
     err.src = nullptr;
     err.src_len = 0;
-    if (!compiled_schema::build(desc, cfg, r.value, err)) {
+    // Re-run type resolution on a copy: after multi-file merge_schemas a
+    // reference may have been opaque (unresolved at its own parse time) and
+    // now binds to a message introduced by another file; it also normalizes
+    // enum defaults. Idempotent for already-resolved descriptors.
+    schema_desc resolved = desc;
+    error_info rerr;
+    rerr.src = nullptr;
+    rerr.src_len = 0;
+    if (!detail::resolve_types(resolved, rerr)) {
+        r.err = rerr;
+        return r;
+    }
+    if (!compiled_schema::build(resolved, cfg, r.value, err)) {
         r.err = err;
     }
     return r;

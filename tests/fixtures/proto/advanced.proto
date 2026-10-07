@@ -1,0 +1,12 @@
+syntax = "proto3";
+package rtti.fixt;
+enum Kind { KIND_ZERO = 0; KIND_ONE = 1; KIND_TWO = 2; }
+message Inner { string label = 1; }
+message All {
+  map<string, int32> counters = 1;
+  map<string, string> labels = 2;
+  oneof choice { int32 n = 3; string s = 4; Inner msg = 5; }
+  bytes blob = 6;
+  Kind kind = 7;
+  repeated int32 packed = 8 [packed = true];
+}

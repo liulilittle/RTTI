@@ -303,6 +303,16 @@ struct field_desc {
     double dflt_real = 0.0;
     const char* dflt_str = nullptr;
     std::size_t dflt_str_len = 0;
+    // Members of one protobuf `oneof` group share a non-zero group id; at most
+    // one member is active. The wire format treats them as ordinary optional
+    // fields, but a later occurrence in a stream clears earlier members of the
+    // same group (protoc single-active-field semantics). 0 = not in a oneof.
+    std::uint32_t oneof_group = 0;
+    // Scalar fields with explicit presence (protobuf map-entry key/value and
+    // proto2 explicit-optional semantics): a value equal to the default is
+    // still written when the tree holds the node. Off for ordinary proto3
+    // scalar fields, which omit default values.
+    bool emit_present = false;
 };
 
 inline field_desc make_field_desc(const char* name, std::uint32_t number,
@@ -326,6 +336,12 @@ inline field_desc with_default_int(field_desc d, std::int64_t v) {
 // zig-zag encoded (x -> (x<<1)^(x>>63)) before the varint on the wire.
 inline field_desc with_zigzag(field_desc d) {
     d.zigzag = true;
+    return d;
+}
+// Mark the field as a member of the oneof group `g` (non-zero). See
+// field_desc::oneof_group for the single-active-field semantics.
+inline field_desc in_oneof(field_desc d, std::uint32_t g) {
+    d.oneof_group = g;
     return d;
 }
 inline field_desc with_default_real(field_desc d, double v) {
@@ -543,6 +559,23 @@ error_code decode_message(T& obj, detail::wire_reader& r,
                 return e;
             }
             continue;
+        }
+        if (f->info.oneof_group != 0) {
+            // Single-active-field semantics: a new occurrence of any member of
+            // a oneof group clears every earlier member of that group (drops
+            // them back to their defaults), exactly like protoc's
+            // oneof-switch on read.
+            for (std::size_t j = 0; j < si.count; ++j) {
+                const field_base* g = si.fields[j];
+                if (g == nullptr || g == f ||
+                    g->info.oneof_group != f->info.oneof_group) {
+                    continue;
+                }
+                const error_code e = g->set_default(&obj);
+                if (e != error_code::ok) {
+                    return e;
+                }
+            }
         }
         error_code e = error_code::ok;
         if (f->info.mode == field_mode::repeated) {
@@ -1794,6 +1827,22 @@ struct node : public rtti::value_io {
     }
     rtti::value_io* make_node() override;
 
+    // Remove the object entry named `key` (no-op when absent). Used by the wire
+    // decoder to enforce oneof single-active-field semantics: a later member
+    // of a group clears an earlier member already written into the tree.
+    void remove_key(rtti::string_view key) {
+        if (k != rtti::value_io::kind::object) {
+            return;
+        }
+        for (std::size_t ix = 0; ix < obj.size(); ++ix) {
+            if (rtti::string_view(obj[ix].first.data(),
+                                  obj[ix].first.size()) == key) {
+                obj.erase(obj.begin() + static_cast<std::ptrdiff_t>(ix));
+                return;
+            }
+        }
+    }
+
 private:
     bool get_key_impl(rtti::string_view key, rtti::value_io*& out) const {
         if (k != rtti::value_io::kind::object) {
@@ -1867,6 +1916,10 @@ public:
     rtti::value_io* make_node() override { return root_->make_node(); }
 
     friend struct detail::node;
+
+    // The underlying owning object node (the tree decoders operate directly
+    // on it). The document itself is a thin value_io view over this node.
+    detail::node* node_root() noexcept { return root_; }
 
 private:
     detail::node* alloc_node() {
@@ -1955,7 +2008,13 @@ inline error_code encode_message_tree(const rtti::value_io* obj,
                 }
             }
         } else {
-            if (f->info.mode != field_mode::required &&
+            // Oneof members have explicit presence even when their value is
+            // the default (protoc emits a set-to-zero scalar member), so they
+            // are never omitted by the default-equality rule. Scalar fields
+            // with emit_present (map-entry key/value) behave the same way:
+            // presence comes from the tree holding the node, not the value.
+            if (f->info.oneof_group == 0 && !f->info.emit_present &&
+                f->info.mode != field_mode::required &&
                 f->tree_equals_default(child)) {
                 continue;
             }
@@ -1999,6 +2058,30 @@ inline error_code decode_message_tree(rtti::value_io* obj, detail::wire_reader& 
             }
             continue;
         }
+        if (f->info.oneof_group != 0) {
+            // Single-active-field semantics: a later member of a oneof group
+            // replaces an earlier member already written into the tree (protoc
+            // emits only the last occurrence on read). The tree path always
+            // materializes proto nodes (a detail::node, or the document root
+            // wrapping one), so resolve the real node before removing keys.
+            detail::node* nd = dynamic_cast<detail::node*>(obj);
+            if (nd == nullptr) {
+                if (auto* dv = dynamic_cast<document*>(obj)) {
+                    nd = dv->node_root();
+                }
+            }
+            if (nd != nullptr) {
+                for (std::size_t j = 0; j < si.count; ++j) {
+                    const field_base* g = si.fields[j];
+                    if (g == nullptr || g == f ||
+                        g->info.oneof_group != f->info.oneof_group ||
+                        g->info.name == nullptr) {
+                        continue;
+                    }
+                    nd->remove_key(rtti::string_view(g->info.name));
+                }
+            }
+        }
         error_code e = error_code::ok;
         if (f->info.mode == field_mode::repeated) {
             if (wt == wire_type::length && is_numeric_wire(f->info.wire)) {
@@ -2037,6 +2120,12 @@ inline error_code decode_message_tree(rtti::value_io* obj, detail::wire_reader& 
             obj->set_key(f->info.name, arr);
         } else if (f->info.mode == field_mode::required) {
             return error_code::missing_key;
+        } else if (f->info.oneof_group != 0 || f->info.emit_present) {
+            // Presence-tracked members are not materialized when absent: a
+            // oneof group with no active member, or an explicit-presence
+            // scalar (map-entry key/value) the wire never carried, must not
+            // re-emit on encode. Consumers read an absent node as the default.
+            continue;
         } else {
             rtti::value_io* child = obj->make_node();
             const error_code e = f->tree_set_default(child);
