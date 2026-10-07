@@ -1,0 +1,8 @@
+inner {
+  a: -123
+  z: -456
+  m { key: "alpha" value: 7 }
+  s: "hello proto"
+  packed: 1
+  packed: 2
+}

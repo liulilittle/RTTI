@@ -1,0 +1,8 @@
+a: -123
+z: -456
+m { key: "alpha" value: 7 }
+m { key: "beta" value: 9 }
+s: "hello proto"
+packed: 1
+packed: 2
+packed: 3

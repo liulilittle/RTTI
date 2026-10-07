@@ -1,0 +1,10 @@
+syntax = "proto3";
+package rtti.fixt;
+message Scalars {
+  int32 a = 1;
+  sint64 z = 2;           // zigzag
+  map<string, int32> m = 3;
+  oneof choice { string s = 4; int64 n = 5; }
+  repeated int32 packed = 6 [packed = true];
+}
+message Outer { Scalars inner = 1; }

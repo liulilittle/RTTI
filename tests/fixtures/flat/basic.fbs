@@ -1,0 +1,6 @@
+namespace rtti.fixt;
+enum Color:byte { Red=0, Green=1 }
+table Weapon { name:string; damage:short; }
+table Monster { pos:Vec3; mana:short=150; hp:short=200; name:string; friendly:bool=false; inventory:[byte]; weapons:[Weapon]; path:[Vec3]; }
+struct Vec3 { x:float; y:float; z:float; }
+root_type Monster;

@@ -1,0 +1,16 @@
+{
+  "pos": { "x": 1.0, "y": 2.0, "z": 3.0 },
+  "mana": 150,
+  "hp": 200,
+  "name": "Orc",
+  "friendly": false,
+  "inventory": [ 0, 1, 2, 3 ],
+  "weapons": [
+    { "name": "Axe", "damage": 5 },
+    { "name": "Sword", "damage": 10 }
+  ],
+  "path": [
+    { "x": 0.0, "y": 0.0, "z": 0.0 },
+    { "x": 1.0, "y": 2.0, "z": 3.0 }
+  ]
+}
