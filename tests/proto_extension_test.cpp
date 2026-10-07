@@ -611,6 +611,107 @@ RTTI_TEST_CASE(ProtoExtOfficialFixtureRoundtrip) {
     extension_registry::global().clear();
 }
 
+RTTI_TEST_CASE(ProtoExtFieldInExtensionRangeRejected) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // protoc: "Extension range 100 to 199 includes field 'own' (150)." The
+    // range is declared BEFORE the field (caught by parse_field).
+    const char* t1 =
+        "syntax = \"proto2\"; message Base { extensions 100 to 199; "
+        "optional int32 own = 150; }\n";
+    const result<schema_desc> r1 = parse_schema(t1);
+    RTTI_CHECK(!r1.ok());
+    RTTI_CHECK_EQ(r1.err.code, error_code::proto_bad_field);
+    // The range declared AFTER the field must still be enforced (order
+    // independent, caught by the post-parse pass).
+    const char* t2 =
+        "syntax = \"proto2\"; message Base { optional int32 own = 150; "
+        "extensions 100 to 199; }\n";
+    const result<schema_desc> r2 = parse_schema(t2);
+    RTTI_CHECK(!r2.ok());
+    RTTI_CHECK_EQ(r2.err.code, error_code::proto_bad_field);
+    // A field outside the extension range parses fine.
+    const char* t3 =
+        "syntax = \"proto2\"; message Base { extensions 100 to 199; "
+        "optional int32 own = 1; }\n";
+    const result<schema_desc> r3 = parse_schema(t3);
+    RTTI_CHECK(r3.ok());
+}
+
+RTTI_TEST_CASE(ProtoExtExtensionNumberOutOfRangeRejected) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    extension_registry::global().clear();
+    // protoc: "'Base' does not declare 500 as an extension number."
+    const char* text =
+        "syntax = \"proto2\";\n"
+        "message Base { extensions 100 to 199; }\n"
+        "extend Base { optional int32 x = 500; }\n";
+    const result<schema_desc> p = parse_schema(text);
+    RTTI_CHECK(p.ok()); // the extend block is recorded at parse time
+    const auto cs = compile_schema(p.value);
+    RTTI_CHECK(!cs.ok());
+    RTTI_CHECK_EQ(cs.err.code, error_code::proto_bad_field);
+    // Nothing is registered for the rejected extension.
+    RTTI_CHECK_EQ(extension_registry::global().size(), size_t(0));
+    extension_registry::global().clear();
+}
+
+RTTI_TEST_CASE(ProtoExtExtendeeUndefinedOrNoRangeRejected) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    extension_registry::global().clear();
+    // protoc: "\"Undefined\" is not defined."
+    const char* t1 =
+        "syntax = \"proto2\";\n"
+        "message Dummy { }\n"
+        "extend Undefined { optional int32 x = 100; }\n";
+    const result<schema_desc> p1 = parse_schema(t1);
+    RTTI_CHECK(p1.ok());
+    const auto c1 = compile_schema(p1.value);
+    RTTI_CHECK(!c1.ok());
+    RTTI_CHECK_EQ(c1.err.code, error_code::proto_bad_field);
+    // protoc: extending a defined message without extension ranges is also
+    // rejected ("does not declare 100 as an extension number").
+    const char* t2 =
+        "syntax = \"proto2\";\n"
+        "message Base { optional int32 own = 1; }\n"
+        "extend Base { optional int32 x = 100; }\n";
+    const result<schema_desc> p2 = parse_schema(t2);
+    RTTI_CHECK(p2.ok());
+    const auto c2 = compile_schema(p2.value);
+    RTTI_CHECK(!c2.ok());
+    RTTI_CHECK_EQ(c2.err.code, error_code::proto_bad_field);
+    // Neither rejected case reached the registry.
+    RTTI_CHECK_EQ(extension_registry::global().size(), size_t(0));
+    extension_registry::global().clear();
+}
+
+RTTI_TEST_CASE(ProtoExtRegistryRejectsSameNumberNameDifferentLayout) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    extension_registry::global().clear();
+    extension_desc a;
+    a.number = 100;
+    a.name = "extra";
+    a.wire = wire_type::varint;
+    RTTI_CHECK_EQ(register_extension(a), error_code::ok);
+    // Identical descriptor -> idempotent ok.
+    RTTI_CHECK_EQ(register_extension(a), error_code::ok);
+    RTTI_CHECK_EQ(extension_registry::global().size(), size_t(1));
+    // Same number AND same name but a different wire layout -> conflict, not
+    // silent "identical" acceptance.
+    extension_desc b = a;
+    b.wire = wire_type::length;
+    RTTI_CHECK_EQ(register_extension(b), error_code::proto_bad_field);
+    // Same number/name but different mode -> conflict too.
+    extension_desc c = a;
+    c.mode = field_mode::repeated;
+    RTTI_CHECK_EQ(register_extension(c), error_code::proto_bad_field);
+    RTTI_CHECK_EQ(extension_registry::global().size(), size_t(1));
+    extension_registry::global().clear();
+}
+
 } // namespace rtti_test_lib
 
 RTTI_TEST_MAIN()

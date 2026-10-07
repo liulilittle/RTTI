@@ -152,8 +152,11 @@ struct schema_message {
     // names. A field reusing a reserved number or name is rejected by parse.
     std::vector<std::pair<std::uint32_t, std::uint32_t>> reserved_numbers;
     std::vector<std::string> reserved_names;
-    // `extensions 100 to 199;` (proto2): the field-number range the message
-    // reserves for extensions. Declared fields colliding with it are rejected.
+    // `extensions 100 to 199;` (proto2): the field-number ranges the message
+    // reserves for extensions. A regular field whose number falls inside one of
+    // them is rejected by parse (proto2/proto3 protoc semantics); `extend`
+    // blocks must use numbers from these ranges, which is validated when the
+    // descriptor is compiled.
     std::vector<std::pair<std::uint32_t, std::uint32_t>> extension_ranges;
     // Next oneof group id handed out by parse_oneof (starts at 1).
     std::uint32_t oneof_counter = 0;
@@ -988,6 +991,16 @@ inline bool parser::parse_field(schema_desc& d, schema_message& sm,
             return false;
         }
     }
+    // A field number inside the message's own extension range is rejected
+    // (protoc message -- extension ranges belong to extensions, not to regular
+    // fields). Only ranges declared BEFORE the field are visible to parse_field;
+    // the order-independent full pass in parse_schema catches the rest.
+    for (const auto& rng : sm.extension_ranges) {
+        if (f.number >= rng.first && f.number <= rng.second) {
+            set_error(error_code::proto_bad_field, cur.begin);
+            return false;
+        }
+    }
     sm.fields.push_back(std::move(f));
     return true;
 }
@@ -1397,11 +1410,12 @@ inline bool parser::parse_extend(schema_desc& d,
             adv();
             continue;
         }
-        // Extension fields reuse the ordinary field parser; map/oneof members
-        // are rejected (protoc forbids them inside extend blocks). Field
-        // numbers colliding with the extendee's extension range are validated
-        // by the range bookkeeping in compile (field-range checks happen in
-        // the compile step against the recorded ranges).
+        // Extension fields reuse the ordinary field parser; map/oneof members are
+        // rejected (protoc forbids them inside extend blocks). The extendee and
+        // the field number are validated when the schema is compiled:
+        // register_schema_extensions requires the extendee to exist in the
+        // descriptor and the number to fall inside one of its declared
+        // extension ranges, otherwise proto_bad_field.
         schema_message tmp;
         const std::size_t before = tmp.fields.size();
         if (!parse_field(d, tmp, stack)) {
@@ -2126,6 +2140,23 @@ inline result<schema_desc> parse_schema(rtti::string_view src) {
     for (auto& se : d.extensions) {
         detail::finalize_packed(se.field, d.syn);
     }
+    // Order-independent extension-range check: every regular field of a message
+    // must lie outside its own `extensions` ranges (protoc rejects a collision
+    // regardless of whether the range is declared before or after the field).
+    for (const schema_message& m : d.messages) {
+        for (const schema_field& f : m.fields) {
+            for (const auto& rng : m.extension_ranges) {
+                if (f.number >= rng.first && f.number <= rng.second) {
+                    err.code = error_code::proto_bad_field;
+                    err.offset = f.type_offset;
+                    r.err = err;
+                    r.err.src = src.data();
+                    r.err.src_len = src.size();
+                    return r;
+                }
+            }
+        }
+    }
     r.value = std::move(d);
     return r;
 }
@@ -2181,9 +2212,46 @@ inline void merge_schemas(schema_desc& dst, const schema_desc& src) {
 // lookup keys are the field number (decode) and the field name (encode). A
 // conflict (same number or same name with a different layout) yields
 // error_code::proto_bad_field; re-registering identical descriptors is a
-// no-op. Returns error_code::ok on success.
+// no-op. Every extension is validated against its extendee first (protoc
+// semantics): the extendee must resolve to a message in the descriptor and the
+// extension field number must fall inside one of that message's declared
+// `extensions` ranges, otherwise error_code::proto_bad_field and nothing is
+// registered. Returns error_code::ok on success.
 inline error_code register_schema_extensions(const schema_desc& d) {
+    // Extendee name resolution maps (simple + fully-qualified + dotted-suffix),
+    // mirroring the regular type-reference resolver.
+    std::unordered_map<std::string, std::size_t> full;
+    std::unordered_map<std::string, std::size_t> simple;
+    for (std::size_t i = 0; i < d.messages.size(); ++i) {
+        full.emplace(d.messages[i].full_name, i);
+        if (simple.find(d.messages[i].name) == simple.end()) {
+            simple.emplace(d.messages[i].name, i);
+        }
+    }
     for (const schema_extension& se : d.extensions) {
+        std::string norm = se.extendee;
+        if (!norm.empty() && norm.front() == '.') {
+            norm.erase(0, 1);
+        }
+        std::size_t target = static_cast<std::size_t>(-1);
+        if (!detail::resolve_message_ref(d, full, simple, norm, target)) {
+            // protoc: "<extendee> is not defined."
+            return error_code::proto_bad_field;
+        }
+        const schema_message& extendee = d.messages[target];
+        bool in_range = false;
+        for (const auto& rng : extendee.extension_ranges) {
+            if (se.field.number >= rng.first &&
+                se.field.number <= rng.second) {
+                in_range = true;
+                break;
+            }
+        }
+        if (!in_range) {
+            // protoc: "<extendee> does not declare <number> as an extension
+            // number." (covers missing extension ranges as well).
+            return error_code::proto_bad_field;
+        }
         const schema_field& f = se.field;
         extension_desc ed;
         ed.number = f.number;

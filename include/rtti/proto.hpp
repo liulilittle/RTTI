@@ -1704,6 +1704,15 @@ inline field_base* make_field(const field_desc& d) {
 // the ExtensionRegistry) decodes it as a NAMED field, while an unregistered
 // number is tolerated as an unknown field and skipped (spec section 3.2 item 9,
 // protoc ExtensionRegistry semantics).
+//
+// Notes / known scope:
+//   * Extension default values ([default = ...]) are carried in has_default /
+//     dflt_* for inspection, but the tree codec never applies them on decode
+//     (an absent extension is simply absent from the tree) -- minimal support.
+//   * The registry is keyed globally by field number and by name; `extendee`
+//     is stored for diagnostics and schema validation. protoc scopes extension
+//     lookup per extended message (extendee + number); this implementation
+//     documents that global-keying decision as a limitation of minimal support.
 struct extension_desc {
     std::uint32_t number = 0;
     std::string name;
@@ -1739,20 +1748,26 @@ public:
         return inst;
     }
 
-    // Register `e`. Returns error_code::ok (also when an identical descriptor is
-    // already registered), or error_code::proto_bad_field on a field-number /
-    // field-name conflict or an out-of-range number.
+    // Register `e`. Returns error_code::ok (also when an identical descriptor --
+    // same number, name, wire type, mode and packing/layout flags -- is already
+    // registered, an idempotent re-registration), or error_code::proto_bad_field
+    // on a field-number / field-name conflict or an out-of-range number. A
+    // descriptor that reuses an existing number OR name with a DIFFERENT layout
+    // is a conflict, never silently accepted.
     error_code add(const extension_desc& e) {
         if (e.number == 0 || e.number > 0x1FFFFFFFu) {
             return error_code::proto_bad_field;
         }
         std::lock_guard<std::mutex> lk(mtx_);
         for (const std::unique_ptr<extension_desc>& x : exts_) {
-            if (x->number == e.number || x->name == e.name) {
-                if (x->number == e.number && x->name == e.name) {
+            if (x->number == e.number) {
+                if (same_layout(*x, e)) {
                     return error_code::ok; // identical re-registration
                 }
-                return error_code::proto_bad_field;
+                return error_code::proto_bad_field; // same number, different layout
+            }
+            if (x->name == e.name) {
+                return error_code::proto_bad_field; // same name, different number
             }
         }
         exts_.push_back(std::unique_ptr<extension_desc>(new extension_desc(e)));
@@ -1794,6 +1809,17 @@ public:
     }
 
 private:
+    // Two descriptors agree on layout when every wire-affecting field matches.
+    // Used to distinguish an idempotent re-registration from a conflict.
+    static bool same_layout(const extension_desc& a,
+                            const extension_desc& b) noexcept {
+        return a.number == b.number && a.name == b.name &&
+               a.wire == b.wire && a.mode == b.mode && a.packed == b.packed &&
+               a.zigzag == b.zigzag && a.is_message == b.is_message &&
+               a.is_enum == b.is_enum && a.as_bool == b.as_bool &&
+               a.as_float == b.as_float && a.as_double == b.as_double;
+    }
+
     extension_registry() = default;
     mutable std::mutex mtx_;
     std::vector<std::unique_ptr<extension_desc>> exts_;
