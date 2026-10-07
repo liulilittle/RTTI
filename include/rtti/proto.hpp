@@ -35,8 +35,10 @@
 //                        schema/stream wire mismatch (proto_type_mismatch).
 //
 // Known limits (documented):
-//   * sint32/sint64 zig-zag and importer .proto file parsing are out of scope;
+//   * sint32/sint64 use zig-zag varints (field_desc::zigzag / with_zigzag);
 //     int32/int64/uint32/uint64/bool/enum map to plain varint.
+//   * .proto text parsing is NOT in this header: it lives in
+//     <rtti/proto_schema.hpp> (parse_schema -> compile_schema).
 //   * Nested message members are encoded whenever structurally present (plain
 //     C++ structs carry no presence bit); absent nested fields in a decoded
 //     value_io tree are omitted (use the typed parse_as<T> path or a
