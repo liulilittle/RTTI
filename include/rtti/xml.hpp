@@ -522,9 +522,16 @@ private:
 
 } // namespace detail
 
-// An XML document. Owns its entire tree (arena-backed strings plus nodes);
-// implements rtti::value_io so it can be both parsed into and serialized from
-// through the generic converters. Move-only; not copyable.
+// An XML document. Implements rtti::value_io so it can be both parsed into
+// and serialized from through the generic converters. Move-only; not
+// copyable.
+//
+// Zero-copy contract: the document owns its nodes and any arena-interned
+// strings, but element/attribute names, attribute values, text and CDATA are
+// string_views into the parse source buffer. The caller must keep that source
+// buffer alive for the whole document lifetime, exactly like json.hpp's
+// document; destroying it first leaves the document referencing freed memory
+// (C-2).
 class document : public rtti::value_io {
 public:
     document() = default;
@@ -1249,11 +1256,23 @@ private:
             return error_code::bad_entity;
         }
         if (name[0] == '#') {
+            // At least one digit is required after '#' (or 'x' for hex).
+            if (name.size() < 2) {
+                return error_code::bad_entity;
+            }
             unsigned cp = 0;
             if (name.size() >= 2 && (name[1] == 'x' || name[1] == 'X')) {
+                if (name.size() < 3) {
+                    return error_code::bad_entity;
+                }
                 for (std::size_t i = 2; i < name.size(); ++i) {
                     const unsigned d = hexval(name[i]);
                     if (d == 0xFFu) {
+                        return error_code::bad_entity;
+                    }
+                    // Reject before the multiply-add so cp stays <= 0x10FFFF:
+                    // a 32-bit wrap can never alias a valid code point (C-1).
+                    if (cp > 0x10FFFFu) {
                         return error_code::bad_entity;
                     }
                     cp = cp * 16u + d;
@@ -1262,6 +1281,9 @@ private:
                 for (std::size_t i = 1; i < name.size(); ++i) {
                     const char c = name[i];
                     if (c < '0' || c > '9') {
+                        return error_code::bad_entity;
+                    }
+                    if (cp > 0x10FFFFu) {
                         return error_code::bad_entity;
                     }
                     cp = cp * 10u + static_cast<unsigned>(c - '0');
@@ -1864,9 +1886,9 @@ inline void render_misc(const std::vector<node*>& misc, std::string& out, bool p
 namespace detail {
 
 // Appends the serialized form of `doc` to `out` under the given config.
-// Append (rather than overwrite) semantics keeps this usable as the
-// preallocated-buffer entry point: callers that want an overwrite call
-// out.clear() first, and repeated calls concatenate into the same buffer.
+// Internal append primitive used by both serialization entries; the public
+// serialize(doc, out, cfg) overload clears `out` first so callers get the
+// overwrite contract shared by json/ini/toml (C-3).
 inline void serialize_into(const document& doc, const write_config& cfg,
                            std::string& out) {
     const bool pretty = cfg.indent > 0;
@@ -1898,11 +1920,14 @@ inline std::string serialize(const document& doc, const write_config& cfg = {}) 
     return out;
 }
 
-// Preallocated-buffer entry point: appends the serialized form to `out`
-// (repeated calls concatenate; call out.clear() first to overwrite). The
-// appended bytes are byte-for-byte identical to the std::string overload.
+// Serialize into a preallocated user buffer. The buffer's content is replaced
+// (not appended): each call leaves `out` holding exactly this document's text,
+// identical to what serialize(doc, cfg) returns, matching the json/ini/toml
+// serialize(doc, out, cfg) contract (C-3). Previously reserved capacity is
+// kept, so callers can reserve() once and reuse the buffer.
 inline void serialize(const document& doc, std::string& out,
                       const write_config& cfg = {}) {
+    out.clear();
     detail::serialize_into(doc, cfg, out);
 }
 

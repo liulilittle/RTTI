@@ -37,7 +37,8 @@ public:
     memory_arena& operator=(const memory_arena&) = delete;
 
     // Allocate raw memory with the requested alignment.
-    // Returns nullptr only if the size is zero.
+    // Returns nullptr when the size is zero and on allocation failure (the
+    // underlying malloc returned nullptr); callers must check the result.
     void* alloc(size_t size, size_t align = alignof(std::max_align_t));
 
     // Allocate and value-initialize an object of type T.

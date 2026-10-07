@@ -747,6 +747,14 @@ RTTI_TEST_CASE(serialize_into_buffer) {
     RTTI_CHECK_EQ(eb, std::string("null"));
 }
 
+// C-4 note (no runtime injection): the arena's alloc can fail only when the
+// underlying malloc returns nullptr, which is impractical to trigger from a
+// unit test. The fix is a correctness review: every node-creation path now
+// guards the new_node() result. document::make_array/make_object/make_scalar
+// return nullptr, and each parser creation site reports error_code::overflow
+// (the closest existing code; error.hpp has no dedicated out-of-memory code)
+// instead of dereferencing null. json_large_object_key_lookup below keeps
+// exercising those creation APIs through their steady-state path.
 RTTI_TEST_CASE(json_large_object_key_lookup) {
     rtti::json::document d;
     d.make_object();

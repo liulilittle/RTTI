@@ -355,6 +355,24 @@ RTTI_TEST_CASE(xml_parse_errors) {
     }
 }
 
+// Numeric character references whose value exceeds the XML code-point range
+// must be rejected even when the accumulated value would wrap a 32-bit
+// unsigned (e.g. `&#x100000041;` wraps to 0x41 'A'); both hex and decimal
+// forms report bad_entity instead of emitting a character (C-1).
+RTTI_TEST_CASE(xml_entity_overflow_range) {
+    const char* bad[] = {
+        "<root>&#x100000041;</root>",
+        "<root>&#4294967361;</root>",
+    };
+    for (const char* src : bad) {
+        const auto r = rtti::xml::parse(src);
+        RTTI_CHECK(!r.ok());
+        if (!r.ok()) {
+            RTTI_CHECK(r.err.code == rtti::error_code::bad_entity);
+        }
+    }
+}
+
 // --- Nesting depth limit ----------------------------------------------------
 
 RTTI_TEST_CASE(xml_parse_too_deep) {
@@ -673,14 +691,15 @@ RTTI_TEST_CASE(xml_serialize_buffer) {
     rtti::xml::serialize(rd.value, bufc, c);
     RTTI_CHECK_EQ(bufc, refc);
 
-    // The overload appends to an existing buffer (caller clears to overwrite).
+    // The overload overwrites (never appends): a dirty prefix is dropped so
+    // the buffer always holds exactly this document's text, matching the
+    // json/ini/toml serialize(doc, out) contract (C-3).
     std::string out = "PREFIX:";
     rtti::xml::serialize(rd.value, out);
-    RTTI_CHECK_EQ(out.size(), ref.size() + 7);
-    RTTI_CHECK_EQ(std::string(out, 7), ref);
+    RTTI_CHECK_EQ(out, ref);
+    RTTI_CHECK_EQ(out.size(), ref.size());
 
-    // Clearing then serializing reproduces the reference.
-    out.clear();
+    // Repeated calls to the same buffer keep producing exactly the reference.
     rtti::xml::serialize(rd.value, out);
     RTTI_CHECK_EQ(out, ref);
 }

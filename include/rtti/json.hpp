@@ -481,6 +481,9 @@ inline bool document::get_key_at(std::size_t index, string_view& key,
 inline value_io* document::make_array() {
     if (root_ == nullptr) {
         root_ = new_node();
+        if (root_ == nullptr) {
+            return nullptr;  // arena allocation failed (C-4)
+        }
     }
     return root_->make_array();
 }
@@ -492,6 +495,9 @@ inline void document::push_back(value_io* v) {
 inline value_io* document::make_object() {
     if (root_ == nullptr) {
         root_ = new_node();
+        if (root_ == nullptr) {
+            return nullptr;  // arena allocation failed (C-4)
+        }
     }
     return root_->make_object();
 }
@@ -503,6 +509,9 @@ inline void document::set_key(string_view key, value_io* v) {
 inline value_io* document::make_scalar(field_value v) {
     if (root_ == nullptr) {
         root_ = new_node();
+        if (root_ == nullptr) {
+            return nullptr;  // arena allocation failed (C-4)
+        }
     }
     return root_->make_scalar(v);
 }
@@ -643,6 +652,12 @@ inline node* parser::parse_object(std::size_t depth) {
         return nullptr;
     }
     node* n = stream ? &stream_marker : doc->new_node();
+    if (!stream && n == nullptr) {
+        // No dedicated out-of-memory code exists in error.hpp; overflow is
+        // the closest general resource-limit code for arena exhaustion (C-4).
+        err = fail(error_code::overflow, pos);
+        return nullptr;
+    }
     if (!stream) {
         n->k = value_io::kind::object;
     }
@@ -729,6 +744,12 @@ inline node* parser::parse_array(std::size_t depth) {
         return nullptr;
     }
     node* n = stream ? &stream_marker : doc->new_node();
+    if (!stream && n == nullptr) {
+        // No dedicated out-of-memory code exists in error.hpp; overflow is
+        // the closest general resource-limit code for arena exhaustion (C-4).
+        err = fail(error_code::overflow, pos);
+        return nullptr;
+    }
     if (!stream) {
         n->k = value_io::kind::array;
     }
@@ -781,6 +802,10 @@ inline node* parser::parse_literal() {
             return &stream_marker;
         }
         node* n = doc->new_node();
+        if (n == nullptr) {
+            err = fail(error_code::overflow, pos);  // arena exhaustion, see C-4
+            return nullptr;
+        }
         n->k = value_io::kind::boolean;
         n->b = true;
         return n;
@@ -794,6 +819,10 @@ inline node* parser::parse_literal() {
             return &stream_marker;
         }
         node* n = doc->new_node();
+        if (n == nullptr) {
+            err = fail(error_code::overflow, pos);  // arena exhaustion, see C-4
+            return nullptr;
+        }
         n->k = value_io::kind::boolean;
         n->b = false;
         return n;
@@ -807,6 +836,10 @@ inline node* parser::parse_literal() {
             return &stream_marker;
         }
         node* n = doc->new_node();
+        if (n == nullptr) {
+            err = fail(error_code::overflow, pos);  // arena exhaustion, see C-4
+            return nullptr;
+        }
         n->k = value_io::kind::null;
         return n;
     }
@@ -830,6 +863,10 @@ inline node* parser::parse_string_node() {
         return &stream_marker;
     }
     node* n = doc->new_node();
+    if (n == nullptr) {
+        err = fail(error_code::overflow, pos);  // arena exhaustion, see C-4
+        return nullptr;
+    }
     n->k = value_io::kind::string;
     if (!escaped) {
         n->s = doc->arena_.dup(direct.data(), direct.size());
@@ -924,6 +961,10 @@ inline node* parser::parse_number() {
         return &stream_marker;
     }
     node* nd = doc->new_node();
+    if (nd == nullptr) {
+        err = fail(error_code::overflow, pos);  // arena exhaustion, see C-4
+        return nullptr;
+    }
     if (!is_real) {
         int64_t v = 0;
         const auto res = std::from_chars(begin, begin + n, v);
