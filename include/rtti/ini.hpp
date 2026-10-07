@@ -188,7 +188,7 @@ public:
         char* end = nullptr;
         errno = 0;
         const long long v = std::strtoll(t.c_str(), &end, 10);
-        if (end == t.c_str() || *end != '\0') {
+        if (errno == ERANGE || end == t.c_str() || *end != '\0') {
             return false;
         }
         out = static_cast<std::int64_t>(v);
@@ -207,7 +207,7 @@ public:
         char* end = nullptr;
         errno = 0;
         const double v = std::strtod(t.c_str(), &end);
-        if (end == t.c_str() || *end != '\0') {
+        if (errno == ERANGE || end == t.c_str() || *end != '\0') {
             return false;
         }
         out = v;

@@ -845,4 +845,22 @@ RTTI_TEST_CASE(toml_deep_table_path_too_deep) {
     RTTI_CHECK(out.find("k = 2") != std::string::npos);
 }
 
+// A dotted key inside an inline table that exceeds the path depth cap must
+// also report too_deep: parse_inline_table used to overwrite read_path's
+// too_deep with unexpected_token (toml.hpp:1504-1507), violating the header
+// contract that deep nesting yields error_code::too_deep (toml.hpp:27-29).
+RTTI_TEST_CASE(toml_deep_inline_table_path_too_deep) {
+    std::string key;
+    for (int i = 0; i < 600; ++i) {
+        if (i != 0) {
+            key.push_back('.');
+        }
+        key += "a";
+    }
+    const std::string src = "x = {" + key + " = 1 }\n";
+    auto r = rtti::toml::parse(src);
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK_EQ(r.err.code, rtti::error_code::too_deep);
+}
+
 } // namespace rtti_test_lib

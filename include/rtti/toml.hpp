@@ -1503,7 +1503,9 @@ struct parser {
             }
             std::vector<std::string> comps;
             if (!read_path(comps) || comps.empty()) {
-                err = fail(error_code::unexpected_token, pos);
+                if (err.code != error_code::too_deep) {
+                    err = fail(error_code::unexpected_token, pos);
+                }
                 return false;
             }
             skip_horiz();

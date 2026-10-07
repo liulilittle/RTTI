@@ -209,6 +209,28 @@ RTTI_TEST_CASE(ini_parse_separators_eq_and_colon) {
     RTTI_CHECK_EQ(v, std::int64_t(3));
 }
 
+// Overflowing numeric scalars must NOT silently clamp: strtoll/strtod range
+// errors (ERANGE) are exact failures, matching xml.hpp:205 / toml.hpp:210,236
+// (spec §2 consistency). "9223372036854775808" overflows int64 and "1e999"
+// overflows double, so both must read back as failures.
+RTTI_TEST_CASE(ini_integer_overflow_erange_rejected) {
+    auto d = rtti::ini::parse("a = 9223372036854775808\n");
+    RTTI_CHECK(d.ok());
+    rtti::value_io* a = nullptr;
+    RTTI_CHECK(d.value.get_key("a", a));
+    std::int64_t v = 0;
+    RTTI_CHECK(!scalar_int(a, v));
+}
+
+RTTI_TEST_CASE(ini_real_overflow_erange_rejected) {
+    auto d = rtti::ini::parse("a = 1e999\n");
+    RTTI_CHECK(d.ok());
+    rtti::value_io* a = nullptr;
+    RTTI_CHECK(d.value.get_key("a", a));
+    double v = 0.0;
+    RTTI_CHECK(a != nullptr && !a->as_real(v));
+}
+
 RTTI_TEST_CASE(ini_parse_duplicate_key_later_wins) {
     const char* src =
         "x = 1\n"
