@@ -17,14 +17,23 @@ Both editions mirror the same section structure and cross-link each heading.
 
 ## Layout
 
-- `include/rtti/` — headers: `reflect.hpp` (public query API),
-  `reflection.hpp` (field tables + `RTTI_DEFINE_TYPE` macro family),
-  `convert.hpp` (`value_io` + `from_value`/`to_value`), `memory.hpp`,
-  `error.hpp`, `rtti_fwd.hpp`, plus format gate stubs `json.hpp`/`xml.hpp`/`ini.hpp`.
+- `include/rtti/` — headers:
+  - reflect core: `reflect.hpp` (public query API + type judgement),
+    `reflection.hpp` (field tables + macro family + attributes +
+    reflective instantiation), `convert.hpp` (`value_io` +
+    `from_value`/`to_value`), `memory.hpp`, `error.hpp`, `rtti_fwd.hpp`
+    (feature-gate defaults), plus the standalone core capabilities
+    `date_time.hpp`, `base_convert.hpp`, `to_string.hpp`, `naming.hpp`,
+    `ioc.hpp`.
+  - format adapters: `json.hpp`, `xml.hpp`, `ini.hpp`, `toml.hpp`,
+    `proto.hpp` — each behind its own `RTTI_ENABLE_*` gate.
 - `src/` — static-library sources.
 - `tests/` — self-contained zero-dependency test harness.
 - `bench/` — ops/s microbenchmarks.
+- `examples/` — 7 documented demo programs (`reflection_demo`,
+  `core_convert_demo`, `json_demo`, `xml_demo`, `ini_demo`, `toml_demo`,
+  `proto_demo`), each compilable standalone with MSVC `cl`.
 
-Format adapters (JSON/XML/INI) are deliberately deferred to a later phase;
-their gate stubs keep the interface stable. The reflect core compiles with all
-format gates off.
+Format adapters (JSON/XML/INI/TOML/protobuf) are optional build gates. The
+reflect core compiles with all five gates off, and the stripped build passes
+the full test suite.
