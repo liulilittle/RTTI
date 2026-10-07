@@ -53,6 +53,7 @@
 
 #include <rtti/convert.hpp>
 #include <rtti/error.hpp>
+#include <rtti/naming.hpp>
 
 #include <cerrno>
 #include <cstddef>
@@ -69,8 +70,26 @@
 
 namespace rtti::ini {
 
+// Dotted section-name component cap, aligned with the JSON/XML/TOML parse-side
+// max_depth (512). Deeper section headers return error_code::too_deep so a
+// hostile document cannot build a tree deep enough to overflow serialize().
+inline constexpr std::size_t kMaxSectionDepth = 512;
+
+// Re-exported so ci.key_case = rtti::ini::key_case::snake reads naturally.
+using rtti::detail::key_case;
+
 struct write_config {
     bool with_comments = false;  // emit comments preserved during parsing
+    // Reflected-field key naming (Task D1/D2). Defaults keep existing call
+    // sites unchanged. New fields are appended AFTER the original members so
+    // legacy positional aggregate initialization (e.g. write_config{true})
+    // keeps mapping with_comments exactly as before. INI serialization is
+    // line-based (no nesting), so indent_char is accepted for config symmetry
+    // but unused by the writer.
+    detail::key_case key_case = detail::key_case::identity;
+    const std::map<std::string, std::string>* rename_map = nullptr;
+    bool skip_empty = false;
+    char indent_char = ' ';
 };
 
 namespace detail {
@@ -243,6 +262,10 @@ public:
 
     rtti::value_io* make_array() override {
         r = role_t::array;
+        skind = rtti::field_value::kind::none;
+        owned.clear();
+        entries.clear();
+        elems.clear();
         return this;
     }
 
@@ -252,6 +275,10 @@ public:
 
     rtti::value_io* make_object() override {
         r = role_t::object;
+        skind = rtti::field_value::kind::none;
+        owned.clear();
+        entries.clear();
+        elems.clear();
         return this;
     }
 
@@ -277,9 +304,7 @@ public:
             }
             case rtti::field_value::kind::real: {
                 skind = rtti::field_value::kind::real;
-                char buf[64];
-                std::snprintf(buf, sizeof(buf), "%.17g", v.as_real());
-                owned.assign(buf);
+                rtti::detail::format_real(v.as_real(), owned);
                 break;
             }
             case rtti::field_value::kind::string: {
@@ -554,10 +579,18 @@ inline document::document() {
 
 // Open (or extend) the section selected by a dotted path. Repeated final
 // components accumulate into an array slot; nested paths under repeated
-// sections attach to the last element.
+// sections attach to the last element. `max_depth` caps the number of dotted
+// components: a header deeper than the shared parse limit returns nullptr with
+// `too_deep` set instead of building an unbounded tree that serialize() would
+// later recurse into (stack overflow). On any other failure `too_deep` stays
+// false (empty/blank component etc).
 inline detail::node* open_section(detail::node* current,
                                   rtti::string_view name,
-                                  detail::pool* pool) {
+                                  detail::pool* pool,
+                                  std::size_t max_depth,
+                                  bool& too_deep) {
+    too_deep = false;
+    std::size_t depth = 0;
     std::size_t begin = 0;
     while (begin <= name.size()) {
         std::size_t dot = name.find('.', begin);
@@ -567,6 +600,11 @@ inline detail::node* open_section(detail::node* current,
         const bool last = (dot == rtti::string_view::npos);
         if (comp.empty()) {
             return nullptr;  // empty path component
+        }
+        ++depth;
+        if (depth > max_depth) {
+            too_deep = true;
+            return nullptr;
         }
         const std::string cname(comp.data(), comp.size());
         detail::node* child = current->find_child(cname);
@@ -718,10 +756,14 @@ inline result<document> parse(rtti::string_view src) {
                 err.err.offset = line_start + i;
                 return err;
             }
-            detail::node* sec = open_section(doc.root_, name, doc.pool_.get());
+            bool too_deep = false;
+            detail::node* sec =
+                open_section(doc.root_, name, doc.pool_.get(), kMaxSectionDepth,
+                             too_deep);
             if (sec == nullptr) {
                 result<document> err;
-                err.err.code = error_code::ini_bad_line;
+                err.err.code = too_deep ? error_code::too_deep
+                                        : error_code::ini_bad_line;
                 err.err.src = src.data();
                 err.err.src_len = src.size();
                 err.err.offset = line_start + i;
@@ -1171,6 +1213,12 @@ inline void serialize(const document& doc, std::string& out,
     for (const std::string& c : root->comments) {
         detail::emit_comment(out, cfg, rtti::string_view(c.data(), c.size()));
     }
+    if (root->is_scalar()) {
+        // Scalar root: emit the raw scalar text (no section/key wrapper).
+        out += root->text();
+        out.push_back('\n');
+        return;
+    }
     detail::write_section_body(out, cfg, root, std::string());
 }
 
@@ -1182,11 +1230,21 @@ inline std::string serialize(const document& doc, const write_config& cfg = {}) 
 
 // Serialize a reflected object through to_value into a temporary document.
 // Returns an empty string when conversion fails (error codes are not surfaced
-// by this convenience overload).
+// by this convenience overload). A non-default naming policy is honored on
+// the reflected field keys via to_value_named.
 template <typename T>
 std::string serialize(const T& obj, const write_config& cfg = {}) {
     document doc;
-    if (rtti::to_value(&doc, obj) != error_code::ok) {
+    error_code e = error_code::ok;
+    if (cfg.rename_map == nullptr && cfg.key_case == rtti::detail::key_case::identity &&
+        !cfg.skip_empty) {
+        e = rtti::to_value(&doc, obj);
+    } else {
+        const rtti::detail::naming_policy np{cfg.key_case, cfg.rename_map,
+                                       cfg.skip_empty};
+        e = rtti::to_value_named(&doc, obj, np);
+    }
+    if (e != error_code::ok) {
         return std::string();
     }
     return serialize(doc, cfg);
@@ -1202,6 +1260,34 @@ result<T> parse_as(rtti::string_view src) {
         return r;
     }
     const error_code e = rtti::from_value(&d.value, r.value);
+    if (e != error_code::ok) {
+        r.err.code = e;
+        r.err.src = src.data();
+        r.err.src_len = src.size();
+        r.err.offset = 0;
+    }
+    return r;
+}
+
+// Config-aware parse: output keys written under the same naming policy map
+// back to field names through from_value_named.
+template <typename T>
+result<T> parse_as(rtti::string_view src, const write_config& cfg) {
+    result<document> d = parse(src);
+    result<T> r;
+    if (!d.ok()) {
+        r.err = d.err;
+        return r;
+    }
+    error_code e = error_code::ok;
+    if (cfg.rename_map == nullptr && cfg.key_case == rtti::detail::key_case::identity &&
+        !cfg.skip_empty) {
+        e = rtti::from_value(&d.value, r.value);
+    } else {
+        const rtti::detail::naming_policy np{cfg.key_case, cfg.rename_map,
+                                       cfg.skip_empty};
+        e = rtti::from_value_named(&d.value, r.value, np);
+    }
     if (e != error_code::ok) {
         r.err.code = e;
         r.err.src = src.data();

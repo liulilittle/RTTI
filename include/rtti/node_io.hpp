@@ -34,6 +34,9 @@ namespace rtti {
 // malformed path shape (empty segment, stray dot, an index step after '.',
 // malformed brackets) reports kind_mismatch. The returned pointer borrows the
 // tree and stays valid while the tree lives.
+// NOTE: locate is noexcept; the path tokenizer allocates a small scratch
+// vector, so an out-of-memory condition (std::bad_alloc) terminates instead of
+// throwing. Paths used in practice stay well below any allocation pressure.
 result<const value_io*> locate(const value_io& root, string_view path) noexcept;
 
 // Mutable overload: same navigation, returns mutable node pointers (usable as

@@ -32,6 +32,17 @@ struct NodeLocateAddress {
     RTTI_DEFINE_TYPE_INTRUSIVE(NodeLocateAddress, city, zip)
 };
 
+struct NodeLocateIniCfg {
+    int newkey = 0;
+    RTTI_DEFINE_TYPE_INTRUSIVE(NodeLocateIniCfg, newkey)
+};
+
+struct NodeLocateTomlCfg {
+    int x = 0;
+    int y = 0;
+    RTTI_DEFINE_TYPE_INTRUSIVE(NodeLocateTomlCfg, x, y)
+};
+
 namespace {
 
 // Root JSON document used by the positive / node_as / to_node cases.
@@ -78,6 +89,12 @@ RTTI_TEST_CASE(NodeLocateJsonPositive) {
     auto d2 = rtti::json::parse("{\"m\":[[1,2],[3,4]]}");
     RTTI_CHECK(d2.ok());
     RTTI_CHECK_EQ(rtti::node_as<int>(*rtti::locate(d2.value, "m[1][0]")).value, 3);
+
+    // Indexing into an array whose first element is a scalar and the second a
+    // nested array: m[1] is [1,2], so m[1][0] == 1.
+    auto d3 = rtti::json::parse("{\"m\":[5,[1,2]]}");
+    RTTI_CHECK(d3.ok());
+    RTTI_CHECK_EQ(rtti::node_as<int>(*rtti::locate(d3.value, "m[1][0]")).value, 1);
 }
 
 RTTI_TEST_CASE(NodeLocateConst) {
@@ -126,14 +143,27 @@ RTTI_TEST_CASE(NodeLocateJsonFailure) {
     RTTI_CHECK(!rtti::locate(d.value, "a[0").ok());       // unclosed bracket
     RTTI_CHECK(!rtti::locate(d.value, "a[0]x").ok());     // junk after index
 
-    // Kind mismatches: key on an array, index on an object.
+    // Kind mismatches: key on an array, index on an object, index on a scalar.
     const auto key_on_array = rtti::locate(d.value, "a.x");
     RTTI_CHECK(!key_on_array.ok());
     RTTI_CHECK_EQ(key_on_array.err.code, rtti::error_code::kind_mismatch);
 
-    const auto idx_on_scalar = rtti::locate(d.value, "a[0][1]");
+    const auto idx_on_object = rtti::locate(d.value, "a[0][1]");
+    RTTI_CHECK(!idx_on_object.ok());
+    RTTI_CHECK_EQ(idx_on_object.err.code, rtti::error_code::kind_mismatch);
+
+    // A genuine scalar-indexing negative: [0] applied to the scalar 5.
+    auto d2 = rtti::json::parse("{\"m\":[5,[1,2]]}");
+    RTTI_CHECK(d2.ok());
+    const auto idx_on_scalar = rtti::locate(d2.value, "m[0][0]");
     RTTI_CHECK(!idx_on_scalar.ok());
     RTTI_CHECK_EQ(idx_on_scalar.err.code, rtti::error_code::kind_mismatch);
+
+    // Index overflow beyond size_t is treated as an out-of-range index.
+    const std::string big = "a[" + std::string(30, '9') + "]";
+    const auto overflow = rtti::locate(d.value, big);
+    RTTI_CHECK(!overflow.ok());
+    RTTI_CHECK_EQ(overflow.err.code, rtti::error_code::no_such_field);
 }
 
 RTTI_TEST_CASE(NodeLocateNodeAs) {
@@ -212,6 +242,72 @@ RTTI_TEST_CASE(NodeLocateToNode) {
     const std::string out2 = rtti::json::serialize(doc, compact);
     RTTI_CHECK(out2.find("\"city\":\"Paris\"") != std::string::npos);
     RTTI_CHECK(out2.find("\"city\":\"Milan\"") != std::string::npos);
+}
+
+RTTI_TEST_CASE(NodeLocateToNodeIniToml) {
+    // INI: replacing an object-valued section subtree must drop stale keys
+    // instead of merging them (spec 4.3 replace semantics).
+    {
+        auto d = rtti::ini::parse("[sect]\nz=1\nkeep=2\n");
+        RTTI_CHECK(d.ok());
+        const auto loc = rtti::locate(d.value, "sect");
+        RTTI_CHECK(loc.ok());
+        RTTI_CHECK_EQ(rtti::to_node(**loc, NodeLocateIniCfg{7}), rtti::error_code::ok);
+        const std::string out = rtti::ini::serialize(d.value);
+        RTTI_CHECK(out.find("newkey = 7") != std::string::npos);
+        RTTI_CHECK(out.find("keep") == std::string::npos);
+        RTTI_CHECK(out.find("z = 1") == std::string::npos);
+        const auto back = rtti::node_as<NodeLocateIniCfg>(
+            *rtti::locate(d.value, "sect"));
+        RTTI_CHECK(back.ok());
+        RTTI_CHECK_EQ(back.value.newkey, 7);
+    }
+    // INI: replacing the whole root object must not keep old top-level keys.
+    {
+        auto d = rtti::ini::parse("z=1\nkeep=2\n");
+        RTTI_CHECK(d.ok());
+        RTTI_CHECK_EQ(rtti::to_node(d.value, NodeLocateIniCfg{9}), rtti::error_code::ok);
+        const std::string out = rtti::ini::serialize(d.value);
+        RTTI_CHECK(out.find("newkey = 9") != std::string::npos);
+        RTTI_CHECK(out.find("keep") == std::string::npos);
+    }
+    // TOML: replacing an array subtree must clear previous elements.
+    {
+        auto d = rtti::toml::parse("list=[1,2,3]\n");
+        RTTI_CHECK(d.ok());
+        const auto loc = rtti::locate(d.value, "list");
+        RTTI_CHECK(loc.ok());
+        RTTI_CHECK_EQ(rtti::to_node(**loc, std::vector<int>{7, 8}),
+                      rtti::error_code::ok);
+        const std::string out = rtti::toml::serialize(d.value);
+        RTTI_CHECK(out.find("7") != std::string::npos);
+        RTTI_CHECK(out.find("8") != std::string::npos);
+        RTTI_CHECK(out.find("3") == std::string::npos);
+        const auto back = rtti::node_as<std::vector<int>>(
+            *rtti::locate(d.value, "list"));
+        RTTI_CHECK(back.ok());
+        RTTI_CHECK_EQ(back.value.size(), std::size_t(2));
+        RTTI_CHECK_EQ(back.value[0], 7);
+        RTTI_CHECK_EQ(back.value[1], 8);
+    }
+    // TOML: replacing a table object subtree must not keep stale keys.
+    {
+        auto d = rtti::toml::parse("[tbl]\nx=1\ny=2\n");
+        RTTI_CHECK(d.ok());
+        const auto loc = rtti::locate(d.value, "tbl");
+        RTTI_CHECK(loc.ok());
+        RTTI_CHECK_EQ(rtti::to_node(**loc, NodeLocateTomlCfg{5, 6}),
+                      rtti::error_code::ok);
+        const std::string out = rtti::toml::serialize(d.value);
+        RTTI_CHECK(out.find("x = 5") != std::string::npos);
+        RTTI_CHECK(out.find("y = 6") != std::string::npos);
+        RTTI_CHECK(out.find("y = 2") == std::string::npos);
+        const auto back = rtti::node_as<NodeLocateTomlCfg>(
+            *rtti::locate(d.value, "tbl"));
+        RTTI_CHECK(back.ok());
+        RTTI_CHECK_EQ(back.value.x, 5);
+        RTTI_CHECK_EQ(back.value.y, 6);
+    }
 }
 
 RTTI_TEST_CASE(NodeLocateRootIndex) {
