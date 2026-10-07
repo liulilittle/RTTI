@@ -1,7 +1,7 @@
 // Stripped-build matrix verification. Task 10 of the RTTI reflect-core plan.
 // Forces every format adapter gate off in THIS translation unit (independent
 // of the project-wide CMake gates), proving the reflect core carries zero
-// format-header dependencies and keeps working with formats disabled.
+// format-header dependencies and keeps working with all five formats disabled.
 
 #if defined(RTTI_ENABLE_JSON) && RTTI_ENABLE_JSON
 #  undef RTTI_ENABLE_JSON
@@ -15,13 +15,21 @@
 #  undef RTTI_ENABLE_INI
 #  define RTTI_ENABLE_INI 0
 #endif
+#if defined(RTTI_ENABLE_TOML) && RTTI_ENABLE_TOML
+#  undef RTTI_ENABLE_TOML
+#  define RTTI_ENABLE_TOML 0
+#endif
+#if defined(RTTI_ENABLE_PROTO) && RTTI_ENABLE_PROTO
+#  undef RTTI_ENABLE_PROTO
+#  define RTTI_ENABLE_PROTO 0
+#endif
 
 #include "test_harness.hpp"
 #include <rtti/reflect.hpp>
 #include <rtti/convert.hpp>
 #include <string>
 
-// The reflect core must compile with all three format gates off. The stubs
+// The reflect core must compile with all five format gates off. The stubs
 // below are never included by core headers; if one ever leaks in, the #error
 // in the stub trips during this test's compile.
 // #include <rtti/json.hpp>   // intentionally commented: would #error when off

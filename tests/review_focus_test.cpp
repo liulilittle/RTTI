@@ -42,10 +42,10 @@ struct WithAlloc {
     RTTI_DEFINE_TYPE_INTRUSIVE(WithAlloc, v, s);
 };
 
-struct Defaults {
+struct ReviewDefaults {
     int t = 5;
     std::string h;
-    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Defaults, t, h);
+    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ReviewDefaults, t, h);
 };
 
 struct Strict {
@@ -118,7 +118,7 @@ RTTI_TEST_CASE(custom_allocator_containers) {
 RTTI_TEST_CASE(default_variant_missing_key) {
     box* src = make_obj();
     src->set_key("h", make_str("hi"));
-    Defaults d;
+    ReviewDefaults d;
     d.t = 99;
     RTTI_CHECK_EQ(rtti::from_value(src, d), rtti::error_code::ok);
     RTTI_CHECK_EQ(d.t, 99);

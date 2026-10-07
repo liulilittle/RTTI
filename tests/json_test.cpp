@@ -747,4 +747,41 @@ RTTI_TEST_CASE(serialize_into_buffer) {
     RTTI_CHECK_EQ(eb, std::string("null"));
 }
 
+RTTI_TEST_CASE(json_large_object_key_lookup) {
+    rtti::json::document d;
+    d.make_object();
+    for (int i = 0; i < 200; ++i) {
+        std::string k = "key" + std::to_string(i);
+        rtti::value_io* v = d.make_node();
+        v->make_scalar(rtti::field_value::of(static_cast<int64_t>(i)));
+        d.set_key(k, v);
+    }
+    rtti::value_io* found = nullptr;
+    RTTI_CHECK(d.get_key("key199", found));
+    if (found) {
+        int64_t val = 0;
+        found->as_integer(val);
+        RTTI_CHECK(val == 199);
+    }
+    // Insertion order preserved via get_key_at (hash must not reorder).
+    rtti::string_view k0;
+    rtti::value_io* v0 = nullptr;
+    RTTI_CHECK(d.get_key_at(0, k0, v0));
+    if (v0) {
+        int64_t val = 0;
+        v0->as_integer(val);
+        RTTI_CHECK(val == 0);
+    }
+}
+
+RTTI_TEST_CASE(json_shared_stream_dot_zero) {
+    // JSON serialization shares one output stream; a trailing integral real
+    // after a fractional one must still keep its ".0".
+    const std::string s = rtti::json::serialize(std::vector<double>{1.5, 2.0});
+    RTTI_CHECK(s.find("1.5") != std::string::npos);
+    RTTI_CHECK(s.find("2.0") != std::string::npos);
+    const std::string s2 = rtti::json::serialize(std::vector<double>{2.0, 1.5});
+    RTTI_CHECK(s2.find("2.0") != std::string::npos);
+}
+
 } // namespace rtti_test_lib

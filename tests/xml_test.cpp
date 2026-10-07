@@ -8,7 +8,9 @@
 
 #include <rtti/xml.hpp>
 #include "test_harness.hpp"
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -681,6 +683,61 @@ RTTI_TEST_CASE(xml_serialize_buffer) {
     out.clear();
     rtti::xml::serialize(rd.value, out);
     RTTI_CHECK_EQ(out, ref);
+}
+
+// --- Scalar-root serialization ------------------------------------------------
+
+RTTI_TEST_CASE(xml_scalar_root_serialize_real) {
+    rtti::xml::document d;
+    d.make_scalar(rtti::field_value::of(3.14));
+    const std::string o = rtti::xml::serialize(d);
+    RTTI_CHECK(o.find("3.14") != std::string::npos);
+}
+
+RTTI_TEST_CASE(xml_scalar_root_serialize_other_kinds) {
+    rtti::xml::document di;
+    di.make_scalar(rtti::field_value::of(static_cast<int64_t>(42)));
+    RTTI_CHECK(rtti::xml::serialize(di).find("42") != std::string::npos);
+
+    rtti::xml::document db;
+    db.make_scalar(rtti::field_value::of(true));
+    RTTI_CHECK(rtti::xml::serialize(db).find("true") != std::string::npos);
+
+    rtti::xml::document ds;
+    ds.make_scalar(rtti::field_value::of(rtti::string_view("a<b&c")));
+    const std::string so = rtti::xml::serialize(ds);
+    RTTI_CHECK(so.find("a&lt;b&amp;c") != std::string::npos);
+}
+
+// Non-finite reals read back as inf/-inf/nan through the XML adapter (the XML
+// text keeps the deterministic tokens; no crash, no corrupt output).
+RTTI_TEST_CASE(xml_nonfinite_readback) {
+    const std::string xi = rtti::xml::serialize(std::numeric_limits<double>::infinity());
+    RTTI_CHECK(xi.find("inf") != std::string::npos);
+    const auto pi = rtti::xml::parse_as<double>(xi);
+    RTTI_CHECK(pi.ok() && std::isinf(pi.value) && pi.value > 0);
+
+    const auto pn = rtti::xml::parse_as<double>(
+        rtti::xml::serialize(-std::numeric_limits<double>::infinity()));
+    RTTI_CHECK(pn.ok() && std::isinf(pn.value) && pn.value < 0);
+
+    const auto pa = rtti::xml::parse_as<double>(
+        rtti::xml::serialize(std::numeric_limits<double>::quiet_NaN()));
+    RTTI_CHECK(pa.ok() && std::isnan(pa.value));
+}
+
+// Exact depth-limit boundary: the default max_depth is 512, so a 512-deep
+// element chain parses while the existing 600-deep case reports too_deep.
+RTTI_TEST_CASE(xml_parse_depth_boundary) {
+    std::string ok;
+    for (int i = 0; i < 512; ++i) {
+        ok += "<a>";
+    }
+    for (int i = 0; i < 512; ++i) {
+        ok += "</a>";
+    }
+    const auto r = rtti::xml::parse(ok);
+    RTTI_CHECK(r.ok());
 }
 
 } // namespace rtti_test_lib

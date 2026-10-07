@@ -26,6 +26,7 @@ using rtti::detail::find_first_not_of;
 using rtti::detail::skip_whitespace;
 using rtti::detail::is_structural_or_string;
 using rtti::detail::json_structural_mask;
+using rtti::detail::json_string_mask;
 using rtti::detail::xml_special_mask;
 
 // Scalar reference implementations (documented semantics of scan.hpp):
@@ -113,6 +114,15 @@ RTTI_TEST_CASE(scan_json_structural_mask) {
     const char* plain = "alpha beta";
     RTTI_CHECK_EQ(find_first_of(plain, plain + std::strlen(plain), json),
                   plain + std::strlen(plain));
+}
+
+RTTI_TEST_CASE(scan_json_string_mask) {
+    const char_mask m = json_string_mask();
+    RTTI_CHECK(m.test('"'));
+    RTTI_CHECK(m.test('\\'));
+    const char s[] = "abc\"def\\ghi";
+    const char* hit = find_first_of(s, s + 11, m);
+    RTTI_CHECK(hit != nullptr && *hit == '"');
 }
 
 RTTI_TEST_CASE(scan_find_first_not_of) {

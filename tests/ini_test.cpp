@@ -5,6 +5,8 @@
 #include "test_harness.hpp"
 #include <rtti/ini.hpp>
 
+#include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -39,6 +41,14 @@ struct IniPerson {
     IniColor color = IniColor::Red;
     RTTI_DEFINE_TYPE_INTRUSIVE(IniPerson, id, score, name, active, nums, friends,
                                scores, tags, point, color)
+};
+
+// Wraps a real field for non-finite round-trips. The INI adapter binds scalar
+// roots as key/value lines, so a bare real cannot be round-tripped on its own;
+// a reflected member (like every format test struct) round-trips losslessly.
+struct IniRealBox {
+    double d = 0.0;
+    RTTI_DEFINE_TYPE_INTRUSIVE(IniRealBox, d)
 };
 
 struct IniStrict {
@@ -617,6 +627,86 @@ RTTI_TEST_CASE(ini_serialize_into_buffer_comments_cfg) {
     RTTI_CHECK_EQ(buf, rtti::ini::serialize(d.value, rtti::ini::write_config{true}));
     RTTI_CHECK(buf.find("; hello") != std::string::npos);
     RTTI_CHECK(buf.find("# inside") != std::string::npos);
+}
+
+// --- Scalar-root serialization ------------------------------------------------
+
+RTTI_TEST_CASE(ini_scalar_root_serialize_real) {
+    rtti::ini::document d;
+    d.make_scalar(rtti::field_value::of(3.14));
+    const std::string o = rtti::ini::serialize(d);
+    RTTI_CHECK(o.find("3.14") != std::string::npos);
+}
+
+RTTI_TEST_CASE(ini_scalar_root_serialize_other_kinds) {
+    rtti::ini::document di;
+    di.make_scalar(rtti::field_value::of(static_cast<int64_t>(42)));
+    RTTI_CHECK(rtti::ini::serialize(di).find("42") != std::string::npos);
+
+    rtti::ini::document db;
+    db.make_scalar(rtti::field_value::of(true));
+    RTTI_CHECK(rtti::ini::serialize(db).find("true") != std::string::npos);
+
+    rtti::ini::document ds;
+    ds.make_scalar(rtti::field_value::of(rtti::string_view("hello world")));
+    RTTI_CHECK(rtti::ini::serialize(ds).find("hello world") != std::string::npos);
+}
+
+// --- Deep dotted-section-name guard (R1-1) ------------------------------------
+// A dotted section header with an unbounded component count used to build an
+// arbitrarily deep tree that serialize() then recursed into (stack overflow).
+// Parse now caps the section-name component depth; over the limit it returns
+// error_code::too_deep instead of building a tree, so the parse -> serialize
+// workflow errors out cleanly and never crashes.
+RTTI_TEST_CASE(ini_deep_dotted_section_too_deep) {
+    std::string name;
+    for (int i = 0; i < 600; ++i) {
+        if (i != 0) {
+            name.push_back('.');
+        }
+        name += "a";
+    }
+    const std::string src = "[" + name + "]\nk = 1\n";
+    auto r = rtti::ini::parse(rtti::string_view(src));
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK_EQ(r.err.code, rtti::error_code::too_deep);
+
+    // A reasonable depth still parses and serializes without error.
+    std::string ok_name;
+    for (int i = 0; i < 200; ++i) {
+        if (i != 0) {
+            ok_name.push_back('.');
+        }
+        ok_name += "a";
+    }
+    const std::string ok_src = "[" + ok_name + "]\nk = 2\n";
+    auto ok = rtti::ini::parse(rtti::string_view(ok_src));
+    RTTI_CHECK(ok.ok());
+    const std::string out = rtti::ini::serialize(ok.value);
+    RTTI_CHECK(out.find("k = 2") != std::string::npos);
+}
+
+// Non-finite reals read back as inf/-inf/nan through the INI adapter (the INI
+// text keeps the deterministic tokens; no crash, no corrupt output).
+RTTI_TEST_CASE(ini_nonfinite_readback) {
+    IniRealBox p;
+    p.d = std::numeric_limits<double>::infinity();
+    const std::string x = rtti::ini::serialize(p);
+    RTTI_CHECK(x.find("inf") != std::string::npos);
+    const auto pi = rtti::ini::parse_as<IniRealBox>(rtti::string_view(x));
+    RTTI_CHECK(pi.ok() && std::isinf(pi.value.d) && pi.value.d > 0);
+
+    IniRealBox n;
+    n.d = -std::numeric_limits<double>::infinity();
+    const auto pn = rtti::ini::parse_as<IniRealBox>(
+        rtti::string_view(rtti::ini::serialize(n)));
+    RTTI_CHECK(pn.ok() && std::isinf(pn.value.d) && pn.value.d < 0);
+
+    IniRealBox a;
+    a.d = std::numeric_limits<double>::quiet_NaN();
+    const auto pa = rtti::ini::parse_as<IniRealBox>(
+        rtti::string_view(rtti::ini::serialize(a)));
+    RTTI_CHECK(pa.ok() && std::isnan(pa.value.d));
 }
 
 } // namespace rtti_test_lib
