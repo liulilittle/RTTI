@@ -553,6 +553,8 @@ inline error_code scalar_in_value(rtti::field_value& v, fkind k, const fbuf& b,
         case fkind::u64: {
             // uint64 values above INT64_MAX clamp to INT64_MAX on the tree (the
             // value_io integer node is int64); the typed path shares the limit.
+            // Documented boundary: decode clamps >= 2^63 to INT64_MAX
+            // (flat.hpp "u64 boundary"); encode refuses via convert overflow.
             const std::uint64_t u = b.u64(pos, ok);
             const std::uint64_t kMaxInt64 = 0x7FFFFFFFFFFFFFFFull;
             v = rtti::field_value::of(

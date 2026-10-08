@@ -433,9 +433,46 @@ RTTI_TEST_CASE(FbsIdAttributeRequiredOnAllFields) {
     RTTI_CHECK_EQ(box->fields[0].id, uint16_t(0));
     RTTI_CHECK(box->fields[1].has_id);
     RTTI_CHECK_EQ(box->fields[1].id, uint16_t(2)); // union value id
-    RTTI_CHECK_EQ(box->fields[1].type, rtti::flat::fbs_type::unionref);
+RTTI_CHECK_EQ(box->fields[1].type, rtti::flat::fbs_type::unionref);
     RTTI_CHECK(box->fields[2].has_id);
     RTTI_CHECK_EQ(box->fields[2].id, uint16_t(3));
+}
+
+RTTI_TEST_CASE(FbsUnionRefIdAtTotalRejected) {
+    // D-1 regression: a unionref whose explicit id equals the table's slot
+    // total (here one union member -> total 2, id 2) slipped past the
+    // `f.id > total` guard; the union-value branch then indexed
+    // `seen[f.id]` == `seen[2]` past the end of a size==2 vector (heap OOB,
+    // malformed .fbs could crash the parser). It must be a clean
+    // proto_bad_field, never undefined behaviour.
+    const char schema[] =
+        "namespace t; table A { x:int; } union U { A; } "
+        "table T { u:U (id: 2); }\n";
+    const auto r = rtti::flat::parse_schema(
+        rtti::string_view(schema, sizeof(schema) - 1));
+    RTTI_CHECK(!r.ok());
+    if (!r.ok()) {
+        RTTI_CHECK_EQ(r.err.code, rtti::error_code::proto_bad_field);
+    }
+}
+
+RTTI_TEST_CASE(FbsRealExponentDefaultParsed) {
+    // Minor regression: a real default with an exponent like "1.5e3" used to
+    // stop the number token at "1.5" and leave "e3" as stray tokens (the file
+    // then failed to parse, or worse mis-scanned). The fraction branch must
+    // swallow the exponent so strtod sees the full literal.
+    const char schema[] = "table T { x:double = 1.5e3; }\n";
+    const auto r = rtti::flat::parse_schema(
+        rtti::string_view(schema, sizeof(schema) - 1));
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    const rtti::flat::fbs_agg_desc* t = rtti::flat::find_type(r.value, "T");
+    RTTI_CHECK(t != nullptr);
+    RTTI_CHECK_EQ(t->fields.size(), size_t(1));
+    RTTI_CHECK(t->fields[0].has_default);
+    RTTI_CHECK(t->fields[0].dflt_real == 1500.0);
 }
 
 // --- compile + wire integration -------------------------------------------------

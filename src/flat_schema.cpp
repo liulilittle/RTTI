@@ -173,10 +173,28 @@ struct fbs_scanner {
                     }
                     ++p;
                 }
-                if (p != e && *p == '.') {
+if (p != e && *p == '.') {
                     ++p;
                     while (p != e && is_digit(*p)) {
                         ++p;
+                    }
+                    // A fraction may carry an exponent ("1.5e3"): consume the
+                    // whole "1.5e3" so strtod sees the exponent, instead of
+                    // returning "1.5" and leaving "e3" as stray tokens.
+                    if (p != e && (*p == 'e' || *p == 'E')) {
+                        const char* save = p;
+                        ++p;
+                        if (p != e && (*p == '+' || *p == '-')) {
+                            ++p;
+                        }
+                        bool any = false;
+                        while (p != e && is_digit(*p)) {
+                            ++p;
+                            any = true;
+                        }
+                        if (!any) {
+                            p = save; // not an exponent; plain "1.5"
+                        }
                     }
                     const std::string num(t.begin, p);
                     t.dval = std::strtod(num.c_str(), nullptr);
@@ -1442,6 +1460,10 @@ inline bool resolve_schema(fbs_schema_desc& d, error_info& err) {
         for (fbs_union_variant_desc& v : u.variants) {
             const std::size_t tidx = resolve_agg(ns, v.type_ref);
             if (tidx == kNoIndex || d.types[tidx].stct) {
+                // Known limitation (review C minor): fbs_union_variant_desc
+                // does not carry the member token offset, so the diagnostic
+                // falls back to the stale err.offset. Keeping the struct
+                // layout stable beats a per-variant offset field for now.
                 fail(error_code::unexpected_token, err.offset);
                 return false;
             }
@@ -1587,7 +1609,7 @@ const std::size_t aidx = resolve_agg(ns, f.ref);
         bool valid = true;
         for (const fbs_field_desc& f : agg.fields) {
             if (f.type == fbs_type::unionref) {
-                if (f.id == 0 || f.id > total) {
+                if (f.id == 0 || f.id >= total) {
                     valid = false;
                     break;
                 }

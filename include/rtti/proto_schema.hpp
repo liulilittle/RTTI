@@ -1767,7 +1767,9 @@ inline bool parser::parse_enum(schema_desc& d,
                     return false;
                 }
             }
-            next_default = v + 1;
+            next_default = (v == (std::numeric_limits<std::int64_t>::max)())
+                               ? v
+                               : v + 1;
             schema_enum_value ev;
             ev.name = vname;
             ev.value = static_cast<std::int32_t>(
@@ -1886,12 +1888,31 @@ inline bool resolve_message_ref(
     const schema_desc& d,
     const std::unordered_map<std::string, std::size_t>& full,
     const std::unordered_map<std::string, std::size_t>& simple,
-    const std::string& ref, std::size_t& out) {
-    const auto it = full.find(ref);
-    if (it != full.end()) {
-        out = it->second;
-        return true;
+    const std::string& scope, const std::string& ref, std::size_t& out) {
+    // Scope-aware relative-name resolution (protoc semantics): walk the
+    // enclosing message scope chain from the innermost level outward and
+    // prefer the nearest complete match. For scope "A.B" and ref "Inner" try
+    // "A.B.Inner", then "A.Inner", then "Inner". This binds a shadowed name
+    // to the field's own message (A.Inner / B.Inner) instead of whichever
+    // same-named message happened to be registered first globally.
+    {
+        std::string s = scope;
+        for (;;) {
+            const std::string cand = s.empty() ? ref : s + "." + ref;
+            const auto sit = full.find(cand);
+            if (sit != full.end()) {
+                out = sit->second;
+                return true;
+            }
+            if (s.empty()) {
+                break;
+            }
+            const std::size_t dot = s.rfind('.');
+            s = (dot == std::string::npos) ? "" : s.substr(0, dot);
+        }
     }
+    // Lenient fallbacks preserved for forward/map-entry/cross-scope refs: a
+    // bare simple-name global lookup first, then a dotted-suffix scan.
     if (ref.find('.') == std::string::npos) {
         const auto it2 = simple.find(ref);
         if (it2 != simple.end()) {
@@ -1911,7 +1932,26 @@ inline bool resolve_message_ref(
 }
 
 inline std::size_t resolve_enum_ref(const schema_desc& d,
+                                    const std::string& scope,
                                     const std::string& ref) {
+    // Same scope-aware walk as resolve_message_ref: a relative enum reference
+    // binds to the nearest enclosing message scope's enum first.
+    {
+        std::string s = scope;
+        for (;;) {
+            const std::string cand = s.empty() ? ref : s + "." + ref;
+            for (std::size_t i = 0; i < d.enum_defs.size(); ++i) {
+                if (d.enum_defs[i].full_name == cand) {
+                    return i;
+                }
+            }
+            if (s.empty()) {
+                break;
+            }
+            const std::size_t dot = s.rfind('.');
+            s = (dot == std::string::npos) ? "" : s.substr(0, dot);
+        }
+    }
     const std::string dotref = "." + ref;
     for (std::size_t i = 0; i < d.enum_defs.size(); ++i) {
         const std::string& e = d.enum_defs[i].full_name;
@@ -1996,11 +2036,16 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
                 continue;
             }
             std::string norm = f.type_ref;
-            if (!norm.empty() && norm.front() == '.') {
+            // A leading dot is an absolute (global) reference: it resolves at
+            // the top scope only, never relative to the enclosing message.
+            const bool absolute = (!norm.empty() && norm.front() == '.');
+            if (absolute) {
                 norm.erase(0, 1);
             }
+            const std::string scope =
+                absolute ? std::string() : d.messages[i].full_name;
             std::size_t target = 0;
-            if (resolve_message_ref(d, full, simple, norm, target)) {
+            if (resolve_message_ref(d, full, simple, scope, norm, target)) {
                 // A message-typed field carrying a symbol default is rejected
                 // (protoc forbids defaults on message fields).
                 if (!f.dflt_enum_name.empty()) {
@@ -2013,7 +2058,7 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
                 f.is_enum = false;
                 continue;
             }
-            const std::size_t eidx = resolve_enum_ref(d, norm);
+            const std::size_t eidx = resolve_enum_ref(d, scope, norm);
             if (eidx != static_cast<std::size_t>(-1)) {
                 f.type = scalar_type::enum_val;
                 f.type_index = static_cast<std::size_t>(-1);
@@ -2055,13 +2100,13 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
             norm.erase(0, 1);
         }
         std::size_t target = 0;
-        if (resolve_message_ref(d, full, simple, norm, target)) {
+        if (resolve_message_ref(d, full, simple, std::string(), norm, target)) {
             f.type = scalar_type::message_val;
             f.type_index = target;
             f.is_enum = false;
             continue;
         }
-        const std::size_t eidx = resolve_enum_ref(d, norm);
+        const std::size_t eidx = resolve_enum_ref(d, std::string(), norm);
         if (eidx != static_cast<std::size_t>(-1)) {
             f.type = scalar_type::enum_val;
             f.type_index = static_cast<std::size_t>(-1);
@@ -2234,7 +2279,8 @@ inline error_code register_schema_extensions(const schema_desc& d) {
             norm.erase(0, 1);
         }
         std::size_t target = static_cast<std::size_t>(-1);
-        if (!detail::resolve_message_ref(d, full, simple, norm, target)) {
+        if (!detail::resolve_message_ref(d, full, simple, std::string(), norm,
+                                         target)) {
             // protoc: "<extendee> is not defined."
             return error_code::proto_bad_field;
         }

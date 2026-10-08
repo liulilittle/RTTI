@@ -114,6 +114,19 @@ bool operator==(const FlatSlot0& a, const FlatSlot0& b) {
     return a.names == b.names;
 }
 
+// u64 wire boundary probe: values at and above 2^63 cannot be represented in
+// the int64 value_io node, so decode clamps them to INT64_MAX (see flat.hpp).
+// Values below 2^63 must round-trip exactly.
+struct FlatU64 {
+    std::uint64_t big = 0;
+
+    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(FlatU64, big)
+};
+
+bool operator==(const FlatU64& a, const FlatU64& b) {
+    return a.big == b.big;
+}
+
 // ---- typed round-trip helpers ----------------------------------------------
 
 bool operator==(const FlatVec3& a, const FlatVec3& b) {
@@ -277,6 +290,14 @@ struct schema<rtti_test_lib::FlatSlot0> {
     static constexpr std::size_t count = 1;
     static inline const field_desc fields[count] = {
         make_field_desc("names", 0, fkind::vector, fkind::string),
+    };
+};
+
+template <>
+struct schema<rtti_test_lib::FlatU64> {
+    static constexpr std::size_t count = 1;
+    static inline const field_desc fields[count] = {
+        make_field_desc("big", 0, fkind::u64),
     };
 };
 
@@ -769,6 +790,61 @@ RTTI_TEST_CASE(Flat8ByteVectorRoundtrip) {
         RTTI_CHECK_EQ(e1,
                       static_cast<std::uint64_t>(static_cast<std::int64_t>(-1)));
     }
+}
+
+RTTI_TEST_CASE(FlatU64BoundaryRoundTrip) {
+    // D-4: u64 >= 2^63 has no int64 value_io lane. The typed ENCODE path
+    // refuses such values with overflow (no silent wrap). Decode of a wire
+    // value with bit 63 set clamps to INT64_MAX on the tree (documented
+    // boundary in flat.hpp); values below 2^63 round-trip exactly.
+    const std::uint64_t kMaxInt64 = 0x7FFFFFFFFFFFFFFFull;
+    const std::uint64_t kTwoPow63 = 0x8000000000000000ull;
+
+    // Below the boundary: lossless.
+    FlatU64 below;
+    below.big = kMaxInt64; // 2^63 - 1
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::serialize(below, wire), rtti::error_code::ok);
+    const auto back = rtti::flat::parse_as<FlatU64>(
+        rtti::string_view(wire.data(), wire.size()));
+    RTTI_CHECK(back.ok());
+    RTTI_CHECK(back.value == below);
+    RTTI_CHECK_EQ(back.value.big, kMaxInt64);
+
+    // At the boundary: typed serialize reports overflow instead of wrapping
+    // the high bit into a negative int64 (convert bridge guards uint64).
+    FlatU64 at;
+    at.big = kTwoPow63; // 2^63
+    std::string wire2;
+    RTTI_CHECK_EQ(rtti::flat::serialize(at, wire2),
+                  rtti::error_code::overflow);
+
+    // Wire bytes produced elsewhere (e.g. the official flatc tool) may carry
+    // u64 = 2^63 in a slot; decoding must clamp to INT64_MAX, never crash or
+    // wrap. Emulate such a buffer by serializing 2^63-1 and setting the high
+    // byte of the little-endian u64 payload (top value byte) to 0x80.
+    std::string foreign = wire;
+    RTTI_CHECK(foreign.size() >= 24);
+    foreign.back() = static_cast<char>(0x80);
+    const auto back2 = rtti::flat::parse_as<FlatU64>(
+        rtti::string_view(foreign.data(), foreign.size()));
+    RTTI_CHECK(back2.ok());
+    RTTI_CHECK_EQ(back2.value.big, kMaxInt64); // clamped, not 2^63
+
+    const auto tree = rtti::flat::parse<FlatU64>(
+        rtti::string_view(foreign.data(), foreign.size()));
+    RTTI_CHECK(tree.ok());
+    bool found = false;
+    RTTI_CHECK_EQ(get_int(&tree.value, "big", found), std::int64_t(kMaxInt64));
+    RTTI_CHECK(found);
+
+    // Re-encoding the clamped tree emits INT64_MAX bytes (lossy by design).
+    std::string rewired;
+    RTTI_CHECK_EQ(rtti::flat::tree_to_wire<FlatU64>(&tree.value, rewired),
+                  rtti::error_code::ok);
+    RTTI_CHECK(rewired.size() >= 24);
+    RTTI_CHECK_EQ(static_cast<unsigned char>(rewired[rewired.size() - 1]),
+                  unsigned char(0x7F));
 }
 
 RTTI_TEST_CASE(FlatSlot0OnlyTableRoundtrip) {

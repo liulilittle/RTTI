@@ -272,6 +272,60 @@ RTTI_TEST_CASE(ProtoSchemaNestedAndComments) {
     RTTI_CHECK_EQ(r.value.enums[0], "Second.Color");
 }
 
+RTTI_TEST_CASE(ProtoSchemaScopedTypeRefShadowing) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // D-3 regression: two sibling messages each nest a message named "Inner".
+    // The type-reference resolver must look the relative name up inside the
+    // field's OWN message scope first (A.ai -> A.Inner, B.bi -> B.Inner),
+    // not bind both to whichever "Inner" happens to be first in the global
+    // simple-name table.
+    const char* text =
+        "syntax = \"proto2\";\n"
+        "message A {\n"
+        "  message Inner { optional int32 a = 1; }\n"
+        "  optional Inner ai = 1;\n"
+        "}\n"
+        "message B {\n"
+        "  message Inner { optional int32 b = 1; }\n"
+        "  optional Inner bi = 1;\n"
+        "}\n";
+    const result<schema_desc> r = parse_schema(text);
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    std::size_t a = static_cast<std::size_t>(-1);
+    std::size_t b = static_cast<std::size_t>(-1);
+    std::size_t a_inner = static_cast<std::size_t>(-1);
+    std::size_t b_inner = static_cast<std::size_t>(-1);
+    for (std::size_t i = 0; i < r.value.messages.size(); ++i) {
+        const std::string& fn = r.value.messages[i].full_name;
+        if (fn == "A") {
+            a = i;
+        } else if (fn == "B") {
+            b = i;
+        } else if (fn == "A.Inner") {
+            a_inner = i;
+        } else if (fn == "B.Inner") {
+            b_inner = i;
+        }
+    }
+    RTTI_CHECK(a != static_cast<std::size_t>(-1));
+    RTTI_CHECK(b != static_cast<std::size_t>(-1));
+    RTTI_CHECK(a_inner != static_cast<std::size_t>(-1));
+    RTTI_CHECK(b_inner != static_cast<std::size_t>(-1));
+    const auto& fa = r.value.messages[a].fields;
+    const auto& fb = r.value.messages[b].fields;
+    RTTI_CHECK_EQ(fa.size(), size_t(1));
+    RTTI_CHECK(fa[0].is_message);
+    RTTI_CHECK_EQ(fa[0].type_index, a_inner);
+    RTTI_CHECK_EQ(fb.size(), size_t(1));
+    RTTI_CHECK(fb[0].is_message);
+    RTTI_CHECK_EQ(fb[0].type_index, b_inner);
+    RTTI_CHECK(a_inner != b_inner);
+}
+
 RTTI_TEST_CASE(ProtoSchemaCommentOnlyFile) {
     using namespace rtti;
     using namespace rtti::proto;
@@ -1313,6 +1367,29 @@ RTTI_TEST_CASE(ProtoSchemaEnumDefaultResolve) {
             "[default = NOPE]; }\n");
         RTTI_CHECK(!e.ok());
         RTTI_CHECK_EQ((int)e.err.code, (int)error_code::unexpected_token);
+    }
+}
+
+RTTI_TEST_CASE(ProtoSchemaEnumMaxInt64ImplicitOverflow) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // D-2 regression: an explicit last enum constant at INT64_MAX makes the
+    // implicit value of the next constant `next_default = INT64_MAX + 1`,
+    // which is signed-overflow UB. Fix saturates at INT64_MAX like the .fbs
+    // parser (flat_schema.cpp), so the implicit value truncates to the same
+    // int32 as the explicit one and the duplicate is rejected cleanly -- the
+    // malformed enum is an error, never out-of-range arithmetic.
+    {
+        const result<schema_desc> r =
+            parse_schema("enum E { A = 9223372036854775807; B }");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::proto_bad_field);
+    }
+    // A second constant that does not collide still parses fine.
+    {
+        const result<schema_desc> r =
+            parse_schema("enum E { A = 9223372036854775807; B = 0 }");
+        RTTI_CHECK(r.ok());
     }
 }
 

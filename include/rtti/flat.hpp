@@ -33,6 +33,11 @@
 //                         decode tree fills defaults for absent scalar/string/
 //                         vector fields and empty objects for absent tables and
 //                         structs, so a value_io tree round-trips losslessly.
+//   * u64 boundary    : the value_io integer node is int64, so a u64 wire
+//                         value >= 2^63 (bit 63 set) cannot be represented
+//                         faithfully: decode clamps such values to INT64_MAX
+//                         (2^63 - 1). Values below 2^63 round-trip exactly.
+//                         Typed parse_as<T>/serialize<T> shares this limit.
 //   * wire writing    : forward, alignment-padded builder. Table bodies carry
 //                         inline scalars/structs and 4-byte offsets for
 //                         out-of-line strings/vectors/nested tables; each
