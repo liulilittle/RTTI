@@ -138,7 +138,8 @@ std::string to_string(const T& v, string_view format_spec) {
 // Serialize any value_io node to a single compact line (spec §7.3): objects as
 // {"k":v,...}, arrays as [a,b,...], booleans/strings/null in their compact
 // forms and numbers through the format spec (empty spec = shortest texts).
-// A null node argument reports no_such_field. Never throws.
+// A null node argument reports no_such_field. Allocation failure may throw
+// std::bad_alloc; no other failure throws.
 std::string node_to_string(const value_io* node,
                            string_view spec = string_view(),
                            error_info* err = nullptr);
@@ -147,7 +148,8 @@ std::string node_to_string(const value_io* node,
 // T (registered with RTTI_DEFINE_TYPE*) and render the object as a compact
 // object line. The optional spec is applied to every numeric field value.
 // A zero-field table renders as "{}"; a failed field read returns an empty
-// string (never throws).
+// string (allocation failure may throw std::bad_alloc; otherwise it never
+// throws).
 template <typename T>
 std::string format_reflected(const T& obj, string_view spec = string_view(),
                              error_info* err = nullptr) {
