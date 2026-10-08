@@ -23,7 +23,9 @@ add_library(rtti STATIC
     src/number_format.cpp
     src/format_reflected.cpp
     src/flat.cpp
-    src/flat_schema.cpp)
+    src/flat_schema.cpp
+    src/ini.cpp
+    src/json.cpp)
 target_include_directories(rtti PUBLIC include)
 target_compile_features(rtti PUBLIC cxx_std_17)
 
