@@ -1619,13 +1619,21 @@ inline bool parser::parse_enum(schema_desc& d,
                     return false;
                 }
             }
+            // G-2: enum constants are int32 in both proto2 and proto3 (protoc
+            // rejects wider values). Reject before truncation so a constant
+            // outside [INT32_MIN, INT32_MAX] is an error instead of silently
+            // wrapping (e.g. 2147483648 -> -2147483648).
+            if (v > (std::numeric_limits<std::int32_t>::max)() ||
+                v < (std::numeric_limits<std::int32_t>::min)()) {
+                set_error(error_code::proto_bad_field, num_pos);
+                return false;
+            }
             next_default = (v == (std::numeric_limits<std::int64_t>::max)())
                                ? v
                                : v + 1;
             schema_enum_value ev;
             ev.name = vname;
-            ev.value = static_cast<std::int32_t>(
-                static_cast<std::int64_t>(static_cast<std::int32_t>(v)));
+            ev.value = static_cast<std::int32_t>(v);
             // proto3 requires the first enum value to be zero.
             if (syn_ == syntax::proto3 && ed.values.empty() && ev.value != 0) {
                 set_error(error_code::unexpected_token, num_pos);

@@ -1385,11 +1385,51 @@ RTTI_TEST_CASE(ProtoSchemaEnumMaxInt64ImplicitOverflow) {
         RTTI_CHECK(!r.ok());
         RTTI_CHECK_EQ((int)r.err.code, (int)error_code::proto_bad_field);
     }
-    // A second constant that does not collide still parses fine.
+    // G-2: the INT64_MAX constant itself is outside the int32 enum range, so
+    // the overloaded form (with a non-colliding B) is rejected too -- protoc
+    // reports "value out of range for int32" rather than accepting it.
     {
         const result<schema_desc> r =
             parse_schema("enum E { A = 9223372036854775807; B = 0 }");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::proto_bad_field);
+    }
+}
+
+RTTI_TEST_CASE(ProtoSchemaEnumValueRangeInt32) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // G-2: enum constants must fit int32; out-of-range values are rejected
+    // (protoc semantics) instead of being silently truncated through int32.
+    // 2147483648 (> INT32_MAX) parses as an int64 but overflows int32.
+    {
+        const result<schema_desc> r =
+            parse_schema("enum E { A = 2147483648; }");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::proto_bad_field);
+    }
+    // -2147483649 (< INT32_MIN) overflows the negative int32 range.
+    {
+        const result<schema_desc> r =
+            parse_schema("enum E { A = -2147483649; }");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::proto_bad_field);
+    }
+    // The implicit "previous + 1" seed is range-checked too: A = INT32_MAX
+    // makes B implicitly 2147483648, which is rejected.
+    {
+        const result<schema_desc> r =
+            parse_schema("enum E { A = 2147483647; B; }");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK_EQ((int)r.err.code, (int)error_code::proto_bad_field);
+    }
+    // The int32 boundaries remain legal and round-trip unmodified.
+    {
+        const result<schema_desc> r = parse_schema(
+            "enum E { A = 2147483647; B = -2147483648; C = 0; }");
         RTTI_CHECK(r.ok());
+        RTTI_CHECK_EQ(r.value.enum_defs[0].values[0].value, 2147483647);
+        RTTI_CHECK_EQ(r.value.enum_defs[0].values[1].value, -2147483648);
     }
 }
 
