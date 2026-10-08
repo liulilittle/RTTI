@@ -18,6 +18,7 @@ add_library(rtti STATIC
     src/error.cpp
     src/memory.cpp
     src/string_ops.cpp
+    src/text_node.cpp
     src/naming.cpp
     src/scan.cpp
     src/number_format.cpp
