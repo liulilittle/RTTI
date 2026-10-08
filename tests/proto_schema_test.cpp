@@ -371,6 +371,56 @@ RTTI_TEST_CASE(ProtoSchemaExtendScopeAwareResolution) {
     RTTI_CHECK(a_inner != b_inner);
 }
 
+RTTI_TEST_CASE(ProtoSchemaQualifiedExtendeeName) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    extension_registry::global().clear();
+    // G-5: an extendee written package-qualified ("foo.Baz") binds the message
+    // whose registered full name is the reduced form ("Baz") -- the parser
+    // drops `package` prefixes, so the leading components are not part of the
+    // full name and must be reduced component-wise (previously code=20).
+    const char* text =
+        "syntax = \"proto2\";\n"
+        "message Baz { extensions 100 to 199; }\n"
+        "extend foo.Baz { optional int32 q = 100; }\n";
+    const result<schema_desc> r = parse_schema(text);
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK_EQ(r.value.extensions.size(), size_t(1));
+    RTTI_CHECK_EQ(r.value.extensions[0].extendee, "Baz");
+    const auto cs = compile_schema(r.value);
+    RTTI_CHECK(cs.ok());
+    const extension_desc* e = extension_registry::global().find(100);
+    RTTI_CHECK(e != nullptr);
+    RTTI_CHECK_EQ(e->extendee, "Baz");
+    RTTI_CHECK_EQ(e->name, "q");
+    extension_registry::global().clear();
+}
+
+RTTI_TEST_CASE(ProtoSchemaAbsoluteExtendeeName) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    extension_registry::global().clear();
+    // G-5: a leading-dot extendee is an absolute reference; it binds the
+    // fully-qualified nested message name regardless of the extend block's
+    // own scope and is registered under that full name.
+    const char* text =
+        "syntax = \"proto2\";\n"
+        "message A {\n"
+        "  message Message { extensions 1 to 10; }\n"
+        "}\n"
+        "extend .A.Message { optional int32 e = 1; }\n";
+    const result<schema_desc> r = parse_schema(text);
+    RTTI_CHECK(r.ok());
+    RTTI_CHECK_EQ(r.value.extensions.size(), size_t(1));
+    RTTI_CHECK_EQ(r.value.extensions[0].extendee, "A.Message");
+    const auto cs = compile_schema(r.value);
+    RTTI_CHECK(cs.ok());
+    const extension_desc* e = extension_registry::global().find(1);
+    RTTI_CHECK(e != nullptr);
+    RTTI_CHECK_EQ(e->extendee, "A.Message");
+    extension_registry::global().clear();
+}
+
 RTTI_TEST_CASE(ProtoSchemaCommentOnlyFile) {
     using namespace rtti;
     using namespace rtti::proto;

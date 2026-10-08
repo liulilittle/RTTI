@@ -1856,12 +1856,28 @@ inline std::size_t resolve_enum_ref(const schema_desc& d,
 // extend block's own enclosing scope first) with the the lenient
 // simple-name/dotted-suffix fallback of a regular type reference. A leading
 // dot is an absolute reference and resolves from the global scope only.
+// G-5: when the name still does not bind, its leading components are reduced
+// one by one ("foo.Baz" binds the message registered as just "Baz"), matching
+// package prefixes this parser does not record.
 inline bool resolve_extendee(
     const schema_desc& d,
     const std::unordered_map<std::string, std::size_t>& full,
     const std::unordered_map<std::string, std::size_t>& simple,
     const std::string& scope, const std::string& ref, std::size_t& out) {
-    return resolve_message_ref(d, full, simple, scope, ref, out);
+    if (resolve_message_ref(d, full, simple, scope, ref, out)) {
+        return true;
+    }
+    std::string cand = ref;
+    for (std::size_t dot = cand.find('.');
+         dot != std::string::npos; dot = cand.find('.')) {
+        cand = cand.substr(dot + 1);
+        const auto it = full.find(cand);
+        if (it != full.end()) {
+            out = it->second;
+            return true;
+        }
+    }
+    return false;
 }
 
 // Apply enum default semantics to a field the resolution pass has confirmed as
@@ -2795,8 +2811,11 @@ error_code register_schema_extensions(const schema_desc& d) {
             norm.erase(0, 1);
         }
         std::size_t target = static_cast<std::size_t>(-1);
-        if (!detail::resolve_message_ref(d, full, simple, std::string(), norm,
-                                         target)) {
+        // Canonical (parse-resolved) extendees match exactly by full name;
+        // raw leftovers (unresolved at parse, e.g. cross-file refs) use the
+        // same scope-aware / component-reduced resolution as parse time.
+        if (!detail::resolve_extendee(d, full, simple, std::string(), norm,
+                                      target)) {
             // protoc: "<extendee> is not defined."
             return error_code::proto_bad_field;
         }
