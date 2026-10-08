@@ -396,6 +396,18 @@ RTTI_TEST_CASE(parse_error_codes) {
     RTTI_CHECK(!bad_surrogate.ok());
     RTTI_CHECK_EQ(bad_surrogate.err.code, rtti::error_code::invalid_utf8);
 
+    // G-4: a high surrogate must be followed by a low-surrogate escape, a
+    // low surrogate must not appear alone. Both lone-surrogate shapes and an
+    // unpaired high surrogate ahead of ordinary text are rejected as
+    // invalid_utf8 (json.cpp surrogate-pair validation).
+    auto bad_low = rtti::json::parse("\"\\udfff\"");
+    RTTI_CHECK(!bad_low.ok());
+    RTTI_CHECK_EQ(bad_low.err.code, rtti::error_code::invalid_utf8);
+
+    auto bad_high_trail = rtti::json::parse("\"\\ud800x\"");
+    RTTI_CHECK(!bad_high_trail.ok());
+    RTTI_CHECK_EQ(bad_high_trail.err.code, rtti::error_code::invalid_utf8);
+
     auto bad_hex = rtti::json::parse("\"\\u12xz\"");
     RTTI_CHECK(!bad_hex.ok());
     RTTI_CHECK_EQ(bad_hex.err.code, rtti::error_code::invalid_utf8);

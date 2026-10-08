@@ -773,6 +773,33 @@ RTTI_TEST_CASE(toml_malformed_no_crash) {
     RTTI_CHECK(!r16.ok());
 }
 
+RTTI_TEST_CASE(toml_surrogate_escape_validation) {
+    // G-4 pin: basic-string \uXXXX escapes must decode a valid surrogate
+    // pair to the astral code point and reject lone low surrogates, lone
+    // high surrogates, and an unpaired high surrogate ahead of ordinary
+    // text with invalid_utf8 (toml.cpp decode_escape).
+    {
+        const auto d = rtti::toml::parse("pair = \"\\ud83d\\ude00\"\n");
+        RTTI_CHECK(d.ok());
+        std::string s;
+        rtti::value_io* n = nullptr;
+        RTTI_CHECK(d.value.get_key("pair", n) && str_of(n, s));
+        RTTI_CHECK_EQ(s, std::string("\xf0\x9f\x98\x80"));
+    }
+    const char* bad[] = {
+        "hi = \"\\ud800\"\n",  // lone high surrogate
+        "hi = \"\\ud800x\"\n", // high surrogate not followed by a low escape
+        "lo = \"\\udfff\"\n",  // lone low surrogate
+    };
+    for (const char* src : bad) {
+        const auto d = rtti::toml::parse(src);
+        RTTI_CHECK(!d.ok());
+        if (!d.ok()) {
+            RTTI_CHECK_EQ(d.err.code, rtti::error_code::invalid_utf8);
+        }
+    }
+}
+
 RTTI_TEST_CASE(toml_deep_nesting_too_deep) {
     std::string deep = "a = ";
     for (int i = 0; i < 600; ++i) {

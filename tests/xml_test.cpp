@@ -383,6 +383,30 @@ RTTI_TEST_CASE(xml_entity_overflow_range) {
     }
 }
 
+// The UTF-16 surrogate range (U+D800..U+DFFF) holds no XML code points, so
+// numeric character references naming a surrogate must be rejected with
+// bad_entity (xml.cpp valid_xml_char), for both hex and decimal forms.
+RTTI_TEST_CASE(xml_entity_surrogate_range) {
+    const char* bad[] = {
+        "<root>&#xD800;</root>",
+        "<root>&#xDBFF;</root>", // last high surrogate
+        "<root>&#xDC00;</root>", // first low surrogate
+        "<root>&#xDFFF;</root>",
+        "<root>&#55296;</root>", // decimal U+D800
+        "<root>&#57343;</root>", // decimal U+DFFF
+    };
+    for (const char* src : bad) {
+        const auto r = rtti::xml::parse(src);
+        RTTI_CHECK(!r.ok());
+        if (!r.ok()) {
+            RTTI_CHECK(r.err.code == rtti::error_code::bad_entity);
+        }
+    }
+    // A valid BMP reference still decodes, so the rejection is range-specific.
+    const auto good = rtti::xml::parse("<root>&#x41;</root>");
+    RTTI_CHECK(good.ok());
+}
+
 // --- Nesting depth limit ----------------------------------------------------
 
 RTTI_TEST_CASE(xml_parse_too_deep) {

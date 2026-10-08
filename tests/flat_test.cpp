@@ -847,6 +847,52 @@ RTTI_TEST_CASE(FlatU64BoundaryRoundTrip) {
                   unsigned char(0x7F));
 }
 
+RTTI_TEST_CASE(FlatU64MaxBoundary) {
+    // D-4 upper edge: the full-width value UINT64_MAX must hit the same
+    // guards as 2^63. Typed ENCODE reports overflow (the convert bridge
+    // refuses unsigned > INT64_MAX; no silent wrap to -1). DECODE of a
+    // foreign wire slot holding UINT64_MAX clamps to INT64_MAX on the typed
+    // parse, the raw tree and a re-encoded wire. The baseline value is chosen
+    // below 2^63 and distinct from INT64_MAX so a wrong field-byte offset is
+    // caught by the clamp assertions instead of passing vacuously.
+    const std::uint64_t kMaxInt64 = 0x7FFFFFFFFFFFFFFFull;
+    const std::uint64_t kUint64Max = 0xFFFFFFFFFFFFFFFFull;
+
+    FlatU64 max;
+    max.big = kUint64Max;
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::serialize(max, wire),
+                  rtti::error_code::overflow);
+
+    FlatU64 below;
+    below.big = 0x0123456789ABCDEFull;
+    std::string foreign;
+    RTTI_CHECK_EQ(rtti::flat::serialize(below, foreign), rtti::error_code::ok);
+    RTTI_CHECK(foreign.size() >= 8);
+    // Force every little-endian payload byte of the u64 slot to 0xFF.
+    for (std::size_t i = foreign.size() - 8; i < foreign.size(); ++i) {
+        foreign[i] = static_cast<char>(0xFF);
+    }
+    const auto back = rtti::flat::parse_as<FlatU64>(
+        rtti::string_view(foreign.data(), foreign.size()));
+    RTTI_CHECK(back.ok());
+    RTTI_CHECK_EQ(back.value.big, kMaxInt64); // clamped, not 0xFFFF..F
+
+    const auto tree = rtti::flat::parse<FlatU64>(
+        rtti::string_view(foreign.data(), foreign.size()));
+    RTTI_CHECK(tree.ok());
+    bool found = false;
+    RTTI_CHECK_EQ(get_int(&tree.value, "big", found), std::int64_t(kMaxInt64));
+    RTTI_CHECK(found);
+
+    std::string rewired;
+    RTTI_CHECK_EQ(rtti::flat::tree_to_wire<FlatU64>(&tree.value, rewired),
+                  rtti::error_code::ok);
+    RTTI_CHECK(rewired.size() >= 8);
+    RTTI_CHECK_EQ(static_cast<unsigned char>(rewired[rewired.size() - 1]),
+                  unsigned char(0x7F));
+}
+
 RTTI_TEST_CASE(FlatSlot0OnlyTableRoundtrip) {
     // A table whose only present field sits at slot 0 must still emit a
     // non-empty vtable; the field may not be silently dropped.

@@ -299,6 +299,33 @@ RTTI_TEST_CASE(FormatNodeToString) {
     RTTI_CHECK_EQ(e.code, rtti::error_code::no_such_field);
 }
 
+RTTI_TEST_CASE(FormatTextNodeSurrogateEscapes) {
+    // G-4 pin: the compact-JSON parser behind text_node (src/text_node.cpp
+    // decode_u_hex) must decode a valid surrogate pair to the astral code
+    // point and reject lone low surrogates, lone high surrogates, and an
+    // unpaired high surrogate ahead of ordinary text with invalid_utf8.
+    {
+        const auto r = rtti::detail::parse_text("[\"\\ud83d\\ude00\"]");
+        RTTI_CHECK(r.ok());
+        RTTI_CHECK(r.value->type() == rtti::value_io::kind::array);
+        rtti::string_view sv;
+        RTTI_CHECK(r.value->at(0) != nullptr && r.value->at(0)->as_string(sv));
+        RTTI_CHECK_EQ(sv, rtti::string_view("\xf0\x9f\x98\x80"));
+    }
+    const char* bad[] = {
+        "[\"\\ud800\"]",  // lone high surrogate
+        "[\"\\ud800x\"]", // high surrogate not followed by a low escape
+        "[\"\\udfff\"]",  // lone low surrogate
+    };
+    for (const char* src : bad) {
+        const auto r = rtti::detail::parse_text(src);
+        RTTI_CHECK(!r.ok());
+        if (!r.ok()) {
+            RTTI_CHECK_EQ(r.err.code, rtti::error_code::invalid_utf8);
+        }
+    }
+}
+
 RTTI_TEST_CASE(FormatReflectedToString) {
     FormatPoint pt;
     pt.x = 1;
