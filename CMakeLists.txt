@@ -25,7 +25,8 @@ add_library(rtti STATIC
     src/flat.cpp
     src/flat_schema.cpp
     src/ini.cpp
-    src/json.cpp)
+    src/json.cpp
+    src/toml.cpp)
 target_include_directories(rtti PUBLIC include)
 target_compile_features(rtti PUBLIC cxx_std_17)
 
