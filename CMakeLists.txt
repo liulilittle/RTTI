@@ -13,11 +13,13 @@ option(RTTI_ENABLE_FLAT  "Enable flatbuffers format adapter" ON)
 add_library(rtti STATIC
     src/base_convert.cpp
     src/common.cpp
+    src/date_time.cpp
     src/reflect.cpp
     src/error.cpp
     src/memory.cpp
     src/string_ops.cpp
     src/naming.cpp
+    src/scan.cpp
     src/number_format.cpp
     src/format_reflected.cpp
     src/flat.cpp
