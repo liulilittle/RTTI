@@ -152,6 +152,16 @@ std::string string_of(rtti::value_io* v) {
 
 // --- Parsing: structure, attributes, children, text, entities --------------
 
+// C-9 note (no runtime injection): like json's C-4, the arena's alloc can fail
+// only when the underlying malloc returns nullptr, which is impractical to
+// trigger from a unit test. The fix is a correctness review: make_view() (the
+// get_key view-construction path) and create_node()/ensure_root() (write-side
+// and parser node creation) now all guard their allocation result. get_key
+// returns false, the write-side value_io builders (make_array/make_object/
+// make_scalar) return nullptr, the void push_back/set_key no-op, and the
+// parser paths report error_code::overflow. Every case behaves identically on
+// the normal (allocation-succeeds) path; the tests below exercise those paths
+// continuously.
 RTTI_TEST_CASE(xml_parse_document) {
     const char* src =
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"

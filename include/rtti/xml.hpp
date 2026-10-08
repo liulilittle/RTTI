@@ -464,6 +464,9 @@ private:
         for (std::size_t i = 0; i < attrs.size(); ++i) {
             if (attrs[i].first == key) {
                 node* v = make_view(nkind::attr_view);
+                if (v == nullptr) {
+                    return false;  // arena exhaustion; get_key fails (C-9)
+                }
                 v->target = const_cast<node*>(this);
                 v->attr_index = i;
                 out = v;
@@ -473,6 +476,9 @@ private:
         // 2. "value" / "_text" bind to the element's own text content.
         if (key == "value" || key == "_text") {
             node* v = make_view(nkind::text_view);
+            if (v == nullptr) {
+                return false;  // arena exhaustion; get_key fails (C-9)
+            }
             v->target = const_cast<node*>(this);
             out = v;
             return true;
@@ -496,6 +502,9 @@ private:
             return true;
         }
         node* v = make_view(nkind::array_view);
+        if (v == nullptr) {
+            return false;  // arena exhaustion; get_key fails (C-9)
+        }
         v->target = const_cast<node*>(this);
         v->qkey = key;
         out = v;
@@ -529,9 +538,10 @@ private:
 // Zero-copy contract: the document owns its nodes and any arena-interned
 // strings, but element/attribute names, attribute values, text and CDATA are
 // string_views into the parse source buffer. The caller must keep that source
-// buffer alive for the whole document lifetime, exactly like json.hpp's
-// document; destroying it first leaves the document referencing freed memory
-// (C-2).
+// buffer alive for the whole document lifetime, unlike the json/ini/toml
+// adapters, which copy every stored string into the document's own arena so
+// their views stay valid after the source is destroyed. Destroying the XML
+// source first leaves the document referencing freed memory (C-2).
 class document : public rtti::value_io {
 public:
     document() = default;
@@ -577,23 +587,27 @@ public:
     // ---- value_io: write side ----------------------------------------------
     value_io* make_array() override {
         ensure_root();
-        return root_->make_array();
+        return root_ != nullptr ? root_->make_array() : nullptr;  // C-9
     }
     void push_back(value_io* v) override {
         ensure_root();
-        root_->push_back(v);
+        if (root_ != nullptr) {
+            root_->push_back(v);  // C-9: no-op on allocation failure
+        }
     }
     value_io* make_object() override {
         ensure_root();
-        return root_->make_object();
+        return root_ != nullptr ? root_->make_object() : nullptr;  // C-9
     }
     void set_key(string_view key, value_io* v) override {
         ensure_root();
-        root_->set_key(key, v);
+        if (root_ != nullptr) {
+            root_->set_key(key, v);  // C-9: no-op on allocation failure
+        }
     }
     value_io* make_scalar(rtti::field_value v) override {
         ensure_root();
-        return root_->make_scalar(v);
+        return root_ != nullptr ? root_->make_scalar(v) : nullptr;  // C-9
     }
     value_io* make_node() override { return create_node(); }
 
@@ -658,7 +672,9 @@ private:
     void ensure_root() {
         if (root_ == nullptr) {
             root_ = create_node();
-            root_->name = string_view("root");
+            if (root_ != nullptr) {
+                root_->name = string_view("root");
+            }
         }
     }
 
@@ -1367,6 +1383,9 @@ private:
             return error_code::ok;
         }
         detail::node* n = doc_.create_node();
+        if (n == nullptr) {
+            return error_code::overflow;  // arena exhaustion, see C-9/C-4
+        }
         n->kind = nkind::cdata;
         n->data = string_view(st, static_cast<std::size_t>(q - st));
         n->parent = el;
@@ -1394,6 +1413,9 @@ private:
             return error_code::ok;
         }
         detail::node* n = doc_.create_node();
+        if (n == nullptr) {
+            return error_code::overflow;  // arena exhaustion, see C-9/C-4
+        }
         n->kind = nkind::comment;
         n->data = string_view(st, static_cast<std::size_t>(q - st));
         *out = n;
@@ -1450,6 +1472,9 @@ private:
             return error_code::ok;
         }
         detail::node* n = doc_.create_node();
+        if (n == nullptr) {
+            return error_code::overflow;  // arena exhaustion, see C-9/C-4
+        }
         n->kind = nkind::pi;
         n->name = target;
         n->data = body;
