@@ -23,10 +23,19 @@ add_library(rtti STATIC
     src/number_format.cpp
     src/format_reflected.cpp
     src/flat.cpp
-    src/flat_schema.cpp
-    src/ini.cpp
-    src/json.cpp
-    src/toml.cpp)
+    src/flat_schema.cpp)
+# Format adapter sources compile only when their feature gate is on (default
+# ON): their headers hard-#error when disabled, so a stripped build must not
+# compile them.
+if(RTTI_ENABLE_INI)
+  target_sources(rtti PRIVATE src/ini.cpp)
+endif()
+if(RTTI_ENABLE_JSON)
+  target_sources(rtti PRIVATE src/json.cpp)
+endif()
+if(RTTI_ENABLE_TOML)
+  target_sources(rtti PRIVATE src/toml.cpp)
+endif()
 target_include_directories(rtti PUBLIC include)
 target_compile_features(rtti PUBLIC cxx_std_17)
 
