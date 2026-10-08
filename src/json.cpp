@@ -108,7 +108,7 @@ struct node : public rtti::value_io {
         out = obj[index].second;
         return true;
     }
-value_io* make_array() override {
+    value_io* make_array() override {
         reset();
         k = rtti::value_io::kind::array;
         return this;

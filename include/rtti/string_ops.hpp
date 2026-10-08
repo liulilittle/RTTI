@@ -116,11 +116,13 @@ std::string quote(string_view s) noexcept;
 std::string unquote(string_view s) noexcept;
 error_code unquote(string_view s, std::string& out) noexcept;
 
-// JSON/C-style escape / unescape. escape maps " \ \b \f \n \r \t and every
-// control byte below 0x20 (\u00XX; also decodes surrogate pairs). A trailing
-// lone backslash is unterminated_string, an unknown escape is
-// unexpected_token, and a malformed \uXXXX is invalid_utf8. The string
-// overload of unescape returns "" on failure.
+// JSON/C-style escape / unescape. escape encodes " \ \b \f \n \r \t and every
+// control byte below 0x20 as \u00XX. unescape decodes those escapes back;
+// \uXXXX accepts four hex digits, and a high-surrogate \uXXXX immediately
+// followed by a low-surrogate \uXXXX is combined into a single code point.
+// A trailing lone backslash is unterminated_string, an unknown escape is
+// unexpected_token, and a malformed \uXXXX (including an unpaired surrogate)
+// is invalid_utf8. The string overload of unescape returns "" on failure.
 std::string escape(string_view s) noexcept;
 std::string unescape(string_view s) noexcept;
 error_code unescape(string_view s, std::string& out) noexcept;

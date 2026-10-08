@@ -23,10 +23,11 @@
 //     holding the old table first.
 //   * value_io mapping: document <-> object; dotted path / section -> nested
 //     objects; array table -> array of objects; array value -> array.
-//   * Malformed input returns an error_code (never throws, never crashes):
-//     unterminated strings/arrays/tables, invalid numbers, empty paths and
-//     overly deep value nesting (parse_config::max_depth, defaults to 512;
-//     deep nesting yields error_code::too_deep).
+//   * Malformed input returns an error_code (allocation failure may throw
+//     std::bad_alloc via the node pool; never crashes): unterminated
+//     strings/arrays/tables, invalid numbers, empty paths and overly deep
+//     value nesting (parse_config::max_depth, defaults to 512; deep nesting
+//     yields error_code::too_deep).
 //   * Streaming (parse_stream) contract: table_start/table_end fire for [x]
 //     and [[x]] blocks; section-less keys are bracketed by an implicit
 //     table_start("")/table_end(""). key_value(path, value) reports the raw

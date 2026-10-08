@@ -25,7 +25,7 @@ template <typename T, typename> struct field_attr_table;
 template <typename T, typename> struct template_info;
 
 // Compile-time feature gates for the optional format adapters.
-// The reflect core itself compiles with all six macros undefined.
+// The reflect core itself compiles with every RTTI_ENABLE_* macro undefined.
 #if !defined(RTTI_ENABLE_JSON)
 #define RTTI_ENABLE_JSON 1
 #endif

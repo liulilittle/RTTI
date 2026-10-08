@@ -1,10 +1,10 @@
 ﻿#pragma once
 // Format-agnostic conversion for RTTI.
-// value_io is the abstract source/sink that future format adapters
-// (JSON/XML/INI) will implement. from_value/to_value route scalars, strings,
-// and the four container families (vector/list/map/set + unordered twins)
-// with transparent allocators/comparators; nested structs and ADL override
-// arrive in Task 7.
+// value_io is the abstract source/sink that the format adapters
+// (JSON/XML/INI/TOML/proto/flat/text_node) implement. from_value/to_value
+// route scalars, strings, and the four container families (vector/list/map/
+// set + unordered twins) with transparent allocators/comparators; reflective
+// structs walk their field tables and custom converters plug in via ADL.
 // English comments only; C++17; no third-party dependencies.
 
 #include <charconv>

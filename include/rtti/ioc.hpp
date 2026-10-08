@@ -1,7 +1,7 @@
 #pragma once
 // IOC container / dependency injection for the RTTI reflection library.
-// A thin layer over the reflective instantiation from task M (spec section
-// 18): register_type<T> / register_as<Iface,Impl> / register_factory<T> feed
+// A thin layer over the reflective-instantiation layer (spec §18):
+// register_type<T> / register_as<Iface,Impl> / register_factory<T> feed
 // a per-container registry; resolve<T> / get<T> return object_ref<T> handles.
 //
 // Design decisions (documented in this header):

@@ -1,4 +1,4 @@
 // Common infrastructure translation unit for the RTTI static library.
-// Kept minimal; later tasks add error.cpp and memory.cpp here.
+// Reserved for rtti_fwd; error/memory live in their own translation units.
 
 #include <rtti/rtti_fwd.hpp>

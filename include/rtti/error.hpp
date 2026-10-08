@@ -9,7 +9,8 @@
 
 namespace rtti {
 
-// Error codes shared by the reflect core and, later, format adapters.
+// Error codes shared by the reflect core and every format adapter
+// (JSON/XML/INI/TOML/proto/flat).
 enum class error_code : uint8_t {
     ok = 0,
     unexpected_token,

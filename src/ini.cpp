@@ -283,7 +283,9 @@ bool node::get_key_at(std::size_t index, rtti::string_view& key,
                             entries[index].name.size());
     out = entries[index].child;
     return true;
-}rtti::value_io* node::make_array() {
+}
+
+rtti::value_io* node::make_array() {
     r = role_t::array;
     skind = rtti::field_value::kind::none;
     owned.clear();

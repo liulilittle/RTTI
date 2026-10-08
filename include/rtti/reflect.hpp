@@ -95,8 +95,8 @@ bool is_derived_from(const instance& inst) noexcept {
 // virtual-ness -- and `instance` keeps no typed pointer to the dynamic type on
 // which a real dynamic_cast could run. RTTI_DEFINE_TYPE_DERIVED + a virtual
 // base (or a multi-base chain) is therefore an UNSUPPORTED COMBINATION for
-// dynamic_cast_ref; it still reports ok() (the chain check passes), and it
-// spec section 0 requirement is that the returned view is never used. The
+// dynamic_cast_ref; it still reports ok() (the chain check passes), and spec
+// §0 requires that the returned view never be dereferenced. The
 // virtual-inheritance behavior is pinned by JudgeTestDynamicCastRefVirtualBaseKnownLimit.
 template <typename T>
 result<T*> dynamic_cast_ref(instance& inst) noexcept {
