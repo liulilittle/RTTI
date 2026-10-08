@@ -38,7 +38,7 @@ RTTI 是一个零依赖、可移植(MSVC / GCC / Clang)、基于 C++17 的运行
 反射实例化、反射迭代器、`date_time`、任意进制转换、统一 `to_string`、键命名
 策略与 IoC 容器)——见 [核心能力](#核心能力)。
 
-整个库是"头文件逻辑 + 极简 src/ 支撑",无第三方依赖,无非标准编译器内置函数。
+整个库以"反射核心与模板桥接的头文件 + 集中于 `src/` 的一次性静态库实现"交付:所有非模板实现——四个文本适配器的 DOM/解析/序列化实体、`.proto` 文本解析器,以及其余全部支撑代码——都被编入 `rtti` 静态库的 19 个编译单元(`src/*.cpp`)。无第三方依赖,无非标准编译器内置函数。
 
 ## 快速上手
 
@@ -83,7 +83,8 @@ RTTI_DEFINE_TYPE(Person, name, age)                  // 类外
 ## 核心能力
 
 除字段注册之外,反射核心还提供一组独立、开箱即用的便捷能力。它们全部是
-头文件式、失败安全(`error_code` / `result<T>`,绝不抛异常)、与格式无关。
+失败安全(`error_code` / `result<T>`,绝不抛异常)、与格式无关;其模板壳保持
+头文件式,非模板实体一次性编入 `src/` 静态库。
 
 ### 类型判断 — `<rtti/reflect.hpp>`
 
@@ -272,10 +273,11 @@ JSON/XML/INI/TOML/FlatBuffers 是可选的编译门。开启时四个文本适�
 `parse_as<T>` / `serialize<T>(obj)`、流式 SAX `parse_stream`,以及
 `write_config`(键命名 / rename / skip_empty)。protobuf 与 flatbuffers 适配器
 (`<rtti/proto.hpp>`、`<rtti/flat.hpp>`)同样以编译门控制,但通过 `parse_config`
-配置(没有 `write_config`)。四个文本适配器(JSON/XML/INI/TOML)与 protobuf 适配器
-为纯头文件模板;flatbuffers 适配器是例外——其 wire codec 与 `.fbs` 解析器为
-非模板实现,编入 `src/flat.cpp` / `src/flat_schema.cpp`(若干字符串/转换工具同样
-以 `src/*.cpp` 提供非模板实现)。这些适配器反射核心永不依赖。
+配置(没有 `write_config`)。模板桥接层保持头文件;四个文本适配器与 `.proto`
+解析器是非模板实现,一次性编入 `src/*.cpp`。protobuf 的 wire codec 仍为头文件
+内联模板(`<rtti/proto.hpp>`);flatbuffers 适配器是例外——其 wire codec 与
+`.fbs` 解析器为非模板实体,编入 `src/flat.cpp` / `src/flat_schema.cpp`。
+这些适配器反射核心永不依赖。
 
 ### JSON — `<rtti/json.hpp>`
 
@@ -456,22 +458,22 @@ wire codec 恒编入 `rtti` 静态库,`<rtti/flat.hpp>` 仍可 include——头�
 六个门构成 2^6 = 64 种组合的剥离矩阵;**每一种组合均显式配置、单独构建并
 通过完整测试**(各自使用独立 scratch 目录,configure 后立即读回
 `CMakeCache.txt` 核验 `RTTI_ENABLE_*` 实际值)。断言数随门开单调递增——
-上一次完整 64 组合扫描实测从全关 `32778` 到全开 `55642`(全部组合
+2026-10-08 完整 64 组合扫描实测从全关 `32790` 到全开 `55696`(全部组合
 `0 failures`,零警告)。扫描脚本(`.opencode/batch_strip.ps1` +
 `.opencode/strip_matrix.ps1`)按开启门数分组如下:
 
 | 开启门数 | 运行组合数 | rtti_tests 断言数范围 |
 | --- | --- | --- |
-| 0 | 1 | 32778 |
-| 1 | 6 | 32923 – 38048 |
-| 2 | 15 | 34151 – 43310 |
-| 3 | 20 | 39345 – 48562 |
-| 4 | 15 | 44580 – 54128 |
-| 5 | 6 | 49850 – 55497 |
-| 6 | 1 | 55642 |
+| 0 | 1 | 32790 |
+| 1 | 6 | 32949 – 38062 |
+| 2 | 15 | 34192 – 43324 |
+| 3 | 20 | 39392 – 48584 |
+| 4 | 15 | 44631 – 54153 |
+| 5 | 6 | 49903 – 55537 |
+| 6 | 1 | 55696 |
 
 (此外,独立 exe `rtti_proto_extension_tests` / `rtti_flat_schema_tests` 在
-PROTO / FLAT 门开启时各增 `160` / `401` 条断言;二者也在扫描中被构建并
+PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被构建并
 运行。)
 
 ## 可移植性
@@ -483,8 +485,8 @@ PROTO / FLAT 门开启时各增 `160` / `401` 条断言;二者也在扫描中被
   该实现。
 - 无 `__declspec`、无 GNU 扩展、无编译器私有内置函数。
 - 计时用 `std::chrono::steady_clock`,RAII 机制,仅用标准容器。
-- 库以头文件交付;反射核心在六个格式门全部关闭时仍可编译,剥离构建通过
-  完整测试套件。
+- 库为头文件驱动设计,并配套单一 `src/` 静态库构建:反射核心在六个格式门
+  全部关闭时仍可编译,剥离构建通过完整测试套件。
 
 ## 文档
 

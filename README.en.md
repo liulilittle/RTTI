@@ -41,7 +41,10 @@ capabilities (type judgement, attributes, reflective instantiation, iterators,
 `date_time`, arbitrary-base conversion, unified `to_string`, key naming and an
 IoC container) — see [Core Capabilities](#core-capabilities).
 
-The whole library is header-delivered logic plus tiny `src/` support; no
+The reflect core and its template bridges are header-delivered; every
+non-template implementation — the four text adapters' DOM/parser/serialize
+bodies, the `.proto` text parser, and all remaining support code — is compiled
+once into the `rtti` static library's 19 translation units (`src/*.cpp`). No
 third-party dependencies, no non-standard compiler intrinsics.
 
 ## Quick Start
@@ -90,8 +93,10 @@ reflected `is-a` machinery.
 ## Core Capabilities
 
 Beyond the field registry, the reflect core exposes a portfolio of
-stand-alone convenience surfaces. All of them are header-only, failure-safe
-(`error_code` / `result<T>`, never throw) and format-independent.
+stand-alone convenience surfaces. All of them are failure-safe
+(`error_code` / `result<T>`, never throw) and format-independent; their
+template shells stay header-only, with non-template bodies compiled once
+into the `src/` library.
 
 ### Type judgement — `<rtti/reflect.hpp>`
 
@@ -297,13 +302,13 @@ text adapters share the same shape — an owned DOM (`document : value_io`), a
 a streaming SAX `parse_stream` and a `write_config` (key naming / rename /
 skip_empty). The protobuf and flatbuffers adapters (`<rtti/proto.hpp>`,
 `<rtti/flat.hpp>`) are gated the same way but configure themselves through
-`parse_config` (they have no `write_config`). The four text adapters
-(JSON/XML/INI/TOML) and the protobuf adapter are header-only templates; the
+`parse_config` (they have no `write_config`). The template bridge layer stays
+header-only; the four text adapters and the `.proto` parser are
+non-template implementations compiled once into `src/*.cpp`. The protobuf
+wire codecs remain header-inline templates (`<rtti/proto.hpp>`); the
 flatbuffers adapter is the exception — its wire codec and `.fbs` parser are
-non-template implementations compiled from `src/flat.cpp` /
-`src/flat_schema.cpp` (several string/conversion tools likewise have
-non-template bodies under `src/*.cpp`). None of these adapters is ever needed
-by the reflect core.
+non-template bodies compiled from `src/flat.cpp` / `src/flat_schema.cpp`.
+None of these adapters is ever needed by the reflect core.
 
 ### JSON — `<rtti/json.hpp>`
 
@@ -504,23 +509,23 @@ The six gates form a 2^6 = 64-combination strip matrix; **every combination
 is explicitly configured, built and run against the full test suite
 independently** (each in its own scratch directory, with the `CMakeCache.txt`
 `RTTI_ENABLE_*` values verified right after configure). Assertions grow
-monotonically as gates are added — from `32778` all-off to `55642` all-on in
-the last full 64-combo sweep (all combinations `0 failures`, zero warnings).
-The sweep (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
+monotonically as gates are added — from `32790` all-off to `55696` all-on in
+the 2026-10-08 full 64-combo sweep (all combinations `0 failures`, zero
+warnings). The sweep (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
 grouped by gate count:
 
 | Gates on | Combinations run | rtti_tests assertions span |
 | --- | --- | --- |
-| 0 | 1 | 32778 |
-| 1 | 6 | 32923 – 38048 |
-| 2 | 15 | 34151 – 43310 |
-| 3 | 20 | 39345 – 48562 |
-| 4 | 15 | 44580 – 54128 |
-| 5 | 6 | 49850 – 55497 |
-| 6 | 1 | 55642 |
+| 0 | 1 | 32790 |
+| 1 | 6 | 32949 – 38062 |
+| 2 | 15 | 34192 – 43324 |
+| 3 | 20 | 39392 – 48584 |
+| 4 | 15 | 44631 – 54153 |
+| 5 | 6 | 49903 – 55537 |
+| 6 | 1 | 55696 |
 
 (In addition, the standalone `rtti_proto_extension_tests` / `rtti_flat_schema_tests`
-executables add `160` / `401` assertions whenever the PROTO / FLAT gate is on;
+executables add `160` / `408` assertions whenever the PROTO / FLAT gate is on;
 they are built and run inside the sweep as well.)
 
 ## Portability
@@ -532,8 +537,9 @@ they are built and run inside the sweep as well.)
   libc++ 14; earlier GCC/Clang lack them.
 - No `__declspec`, no GNU extensions, no compiler-private builtins.
 - `std::chrono::steady_clock` timers, RAII mechanics, standard containers only.
-- The library is header-delivered; the reflect core compiles with all six
-  format gates off and the stripped build passes the full test suite.
+- The library is a header-driven design with a single `src/` static-library
+  build: the reflect core compiles with all six format gates off and the
+  stripped build passes the full test suite.
 
 ## Documentation
 
