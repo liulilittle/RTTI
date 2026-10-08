@@ -1209,6 +1209,29 @@ inline bool parser::parse_extensions_range(schema_message& sm) {
     }
 }
 
+namespace {
+
+// Extend-block scope side channel: schema_extension carries only `extendee` +
+// `field` (stable public API), so the innermost enclosing message name of each
+// `extend` block is recorded here at parse time and consumed by the
+// type-resolution pass (resolve_types) within the same parse_schema call.
+// Keyed by the schema_desc being parsed; an extend_scope_guard erases the
+// entry on every exit path so a later stack-address reuse (e.g. a compile-time
+// re-resolution on a copy) never reads a stale scope.
+thread_local std::unordered_map<const schema_desc*, std::vector<std::string>>
+    g_extend_scopes;
+
+// Erases the side-channel entry for `d` on destruction (all exit paths).
+struct extend_scope_guard {
+    explicit extend_scope_guard(const schema_desc* d) noexcept : d_(d) {
+        g_extend_scopes[d_].clear();
+    }
+    ~extend_scope_guard() { g_extend_scopes.erase(d_); }
+    const schema_desc* d_;
+};
+
+} // namespace
+
 inline bool parser::parse_extend(schema_desc& d,
                                  std::vector<std::string>& stack,
                                  int depth) {
@@ -1285,6 +1308,12 @@ inline bool parser::parse_extend(schema_desc& d,
             return false;
         }
         d.extensions.push_back(std::move(se));
+        // Record the enclosing message scope for G-1 type resolution (the
+        // extend block's innermost enclosing message full name, "" at top
+        // level); resolve_types reads it back through g_extend_scopes.
+        const std::string scope =
+            stack.empty() ? std::string() : stack.back();
+        g_extend_scopes[&d].push_back(scope);
     }
     if (cur.k == token::kind::semi) {
         adv();
@@ -1822,6 +1851,19 @@ inline std::size_t resolve_enum_ref(const schema_desc& d,
     return static_cast<std::size_t>(-1);
 }
 
+// Resolve an `extend` block's extendee name to a message index: scope-aware
+// relative resolution (protoc semantics -- the extendee binds inside the
+// extend block's own enclosing scope first) with the the lenient
+// simple-name/dotted-suffix fallback of a regular type reference. A leading
+// dot is an absolute reference and resolves from the global scope only.
+inline bool resolve_extendee(
+    const schema_desc& d,
+    const std::unordered_map<std::string, std::size_t>& full,
+    const std::unordered_map<std::string, std::size_t>& simple,
+    const std::string& scope, const std::string& ref, std::size_t& out) {
+    return resolve_message_ref(d, full, simple, scope, ref, out);
+}
+
 // Apply enum default semantics to a field the resolution pass has confirmed as
 // an enum reference: an explicit `[default = NAME]` / `[default = N]` wins,
 // otherwise the implicit default is the enum's first value (protoc semantics --
@@ -1949,24 +1991,60 @@ inline bool resolve_types(schema_desc& d, error_info& err) {
     }
     // Resolve `extend` block field types the same way (message refs stay
     // message_val, enum refs become enum_val; unresolved names are opaque when
-    // the file imports, a hard error otherwise).
-    for (auto& se : d.extensions) {
+    // the file imports, a hard error otherwise). Unlike regular message
+    // fields, the scope is NOT derivable from the extension's own data, so it
+    // comes from the scope recorded at parse time (g_extend_scopes). The
+    // extendee name is resolved and canonicalized to the target's full name so
+    // compile-time registration can look it up exactly.
+    const auto ext_scope = g_extend_scopes.find(&d);
+    for (std::size_t i = 0; i < d.extensions.size(); ++i) {
+        schema_extension& se = d.extensions[i];
+        const std::string scope =
+            (ext_scope != g_extend_scopes.end() && i < ext_scope->second.size())
+                ? ext_scope->second[i]
+                : std::string();
+        // Extendee (G-1/G-5): resolve relative to the extend block's scope; a
+        // leading dot is absolute. When it resolves, the stored extendee is
+        // canonicalized to the message's full name; an unresolved name is kept
+        // raw and rejected (or bound after a multi-file merge) at compile time.
+        {
+            std::string norm = se.extendee;
+            const bool absolute = (!norm.empty() && norm.front() == '.');
+            if (absolute) {
+                norm.erase(0, 1);
+            }
+            std::size_t target = static_cast<std::size_t>(-1);
+            if (resolve_extendee(d, full, simple,
+                                 absolute ? std::string() : scope, norm,
+                                 target)) {
+                se.extendee = d.messages[target].full_name;
+            }
+        }
         schema_field& f = se.field;
         if (!f.is_message || f.type_ref.empty()) {
             continue;
         }
+        // Already resolved at parse time: the type_index stays valid (merging
+        // only appends messages) and must not be re-resolved with an empty
+        // scope, which would break scope-shadowed binds.
+        if (f.type_index != static_cast<std::size_t>(-1)) {
+            continue;
+        }
         std::string norm = f.type_ref;
-        if (!norm.empty() && norm.front() == '.') {
+        const bool absolute = (!norm.empty() && norm.front() == '.');
+        if (absolute) {
             norm.erase(0, 1);
         }
+        const std::string fscope =
+            absolute ? std::string() : scope;
         std::size_t target = 0;
-        if (resolve_message_ref(d, full, simple, std::string(), norm, target)) {
+        if (resolve_message_ref(d, full, simple, fscope, norm, target)) {
             f.type = scalar_type::message_val;
             f.type_index = target;
             f.is_enum = false;
             continue;
         }
-        const std::size_t eidx = resolve_enum_ref(d, std::string(), norm);
+        const std::size_t eidx = resolve_enum_ref(d, fscope, norm);
         if (eidx != static_cast<std::size_t>(-1)) {
             f.type = scalar_type::enum_val;
             f.type_index = static_cast<std::size_t>(-1);
@@ -2589,6 +2667,9 @@ inline compiled_message::~compiled_message() = default;
 result<schema_desc> parse_schema(rtti::string_view src) {
     result<schema_desc> r;
     schema_desc d;
+    // Scope side channel: reset for this descriptor and erased on every exit
+    // path, so a reused stack address can never observe a stale entry.
+    detail::extend_scope_guard guard(&d);
     detail::parser p(src);
     if (!p.parse_file(d)) {
         r.err = p.err;

@@ -326,6 +326,51 @@ RTTI_TEST_CASE(ProtoSchemaScopedTypeRefShadowing) {
     RTTI_CHECK(a_inner != b_inner);
 }
 
+RTTI_TEST_CASE(ProtoSchemaExtendScopeAwareResolution) {
+    using namespace rtti;
+    using namespace rtti::proto;
+    // G-1 regression: when two sibling scopes each nest a message named
+    // "Inner", the type references of an `extend` block must resolve inside
+    // the extend block's OWN enclosing message scope (B.Inner), not the first
+    // registered global "Inner" (A.Inner). The extendee name is resolved the
+    // same way and canonicalized to the target's full name.
+    const char* text =
+        "syntax = \"proto2\";\n"
+        "message A {\n"
+        "  message Inner { optional int32 a = 1; extensions 100 to 199; }\n"
+        "}\n"
+        "message B {\n"
+        "  message Inner { optional int32 b = 1; extensions 100 to 199; }\n"
+        "  extend Inner { optional Inner field = 100; }\n"
+        "}\n";
+    const result<schema_desc> r = parse_schema(text);
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    std::size_t a_inner = static_cast<std::size_t>(-1);
+    std::size_t b_inner = static_cast<std::size_t>(-1);
+    for (std::size_t i = 0; i < r.value.messages.size(); ++i) {
+        const std::string& fn = r.value.messages[i].full_name;
+        if (fn == "A.Inner") {
+            a_inner = i;
+        } else if (fn == "B.Inner") {
+            b_inner = i;
+        }
+    }
+    RTTI_CHECK(a_inner != static_cast<std::size_t>(-1));
+    RTTI_CHECK(b_inner != static_cast<std::size_t>(-1));
+    RTTI_CHECK_EQ(r.value.extensions.size(), size_t(1));
+    // The extendee (relative "Inner" inside B) binds to B.Inner and is stored
+    // as the resolved full name.
+    RTTI_CHECK_EQ(r.value.extensions[0].extendee, "B.Inner");
+    // The extension field's message type "Inner" binds to B.Inner as well.
+    const schema_field& f = r.value.extensions[0].field;
+    RTTI_CHECK(f.is_message);
+    RTTI_CHECK_EQ(f.type_index, b_inner);
+    RTTI_CHECK(a_inner != b_inner);
+}
+
 RTTI_TEST_CASE(ProtoSchemaCommentOnlyFile) {
     using namespace rtti;
     using namespace rtti::proto;
