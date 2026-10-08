@@ -57,3 +57,28 @@ RTTI_TEST_CASE(arena_move_semantics) {
     const char* s = b.dup("after", 5);
     RTTI_CHECK_EQ(std::string(s), std::string("after"));
 }
+
+// Cross-block allocation must keep the requested alignment promise. The first
+// block (64 KiB) is filled so the cursor sits at an offset that is 7 (mod 16):
+// the next 16-aligned request computes pad == 9 and must cross into a fresh
+// block, where the pad has to be re-derived from the new block's start.
+RTTI_TEST_CASE(arena_cross_block_keeps_requested_alignment) {
+    // 16-byte-aligned request crossing the 64 KiB boundary: the pad derived
+    // from the previous block's cursor must be recomputed for the fresh block.
+    rtti::memory_arena a;
+    RTTI_CHECK(a.alloc(65520, 16) != nullptr);  // cursor 65520, 16 bytes left
+    RTTI_CHECK(a.alloc(8, 16) != nullptr);       // cursor 65528 (8 mod 16), 8 left
+    RTTI_CHECK(a.total_bytes() < 2 * 64 * 1024); // still a single block
+    void* o = a.alloc(16, 16);
+    RTTI_CHECK(o != nullptr);
+    RTTI_CHECK(a.total_bytes() >= 2 * 64 * 1024); // a fresh block was taken
+    RTTI_CHECK((reinterpret_cast<uintptr_t>(o) % 16) == 0);
+
+    // The same crossing for a plain double (8-byte alignment here).
+    rtti::memory_arena b;
+    RTTI_CHECK(b.alloc(65520, 16) != nullptr);  // cursor 65520
+    RTTI_CHECK(b.alloc(9, 16) != nullptr);       // cursor 65529 (1 mod 8), 7 left
+    double* d = static_cast<double*>(b.alloc(sizeof(double), alignof(double)));
+    RTTI_CHECK(d != nullptr);
+    RTTI_CHECK((reinterpret_cast<uintptr_t>(d) % alignof(double)) == 0);
+}

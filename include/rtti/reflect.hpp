@@ -767,7 +767,11 @@ public:
                 owned_ = fv.as_bool() ? "1" : "0";
                 return string_view(owned_);
             case field_value::kind::real:
-                owned_ = std::to_string(fv.as_real());
+                // Shortest round-tripping text (to_chars), matching the
+                // serialized form used by every format adapter instead of
+                // std::to_string's fixed 6-digit literal.
+                owned_.clear();
+                detail::format_real(fv.as_real(), owned_);
                 return string_view(owned_);
             default:
                 return string_view();

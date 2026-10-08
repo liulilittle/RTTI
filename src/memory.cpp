@@ -84,8 +84,8 @@ void* memory_arena::alloc(size_t size, size_t align) {
         align = alignof(std::max_align_t);
     }
     // Ensure the current block's cursor stays aligned.
-    const uintptr_t cursor = reinterpret_cast<uintptr_t>(cursor_);
-    const size_t pad = (align - (cursor % align)) % align;
+    uintptr_t cursor = reinterpret_cast<uintptr_t>(cursor_);
+    size_t pad = (align - (cursor % align)) % align;
 
     if (tail_ == nullptr || remaining_ < pad + size) {
         size_t want = size + align - 1;
@@ -102,9 +102,14 @@ void* memory_arena::alloc(size_t size, size_t align) {
         cursor_ = b->data;
         remaining_ = b->cap;
         b->used = 0;
+        // The pad computed above derives from the previous block's cursor and
+        // is meaningless for the fresh block; re-derive it from the new
+        // cursor so the returned pointer honours the requested alignment.
+        cursor = reinterpret_cast<uintptr_t>(cursor_);
+        pad = (align - (cursor % align)) % align;
     }
 
-    const uintptr_t start = reinterpret_cast<uintptr_t>(cursor_) + pad;
+    const uintptr_t start = cursor + pad;
     cursor_ = reinterpret_cast<char*>(start + size);
     remaining_ -= pad + size;
     tail_->used += pad + size;

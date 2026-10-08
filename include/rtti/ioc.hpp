@@ -13,7 +13,10 @@
 //    singleton is marked dead and the NEXT resolve<T> re-creates it, so the
 //    container never hands out a use-after-free instance and never runs the
 //    destructor twice (a dead singleton's block is freed without a second
-//    ~T()).
+//    ~T()). This contract holds only while the container lives: the borrow
+//    handle does not own the instance's memory, so it must never outlive the
+//    container (a destroy() after the container is gone would run ~T() on
+//    freed memory).
 //  - resolve<T> returns rtti::result<object_ref<T>>; every failure is an
 //    error_code (never throws, never crashes): unregistered -> kind_mismatch,
 //    missing required scalar -> missing_key, cycle / unsupported dependency
@@ -277,6 +280,9 @@ public:
             // may (wrongly) invoke destroy() on this handle; its release
             // flips the singleton's liveness flag so the container re-creates
             // on the next resolve instead of handing out a dead instance.
+            // The handle holds only the liveness flag, not the instance's
+            // control block: it stays safe as long as the container is alive,
+            // and must not be used after the container is destroyed.
             r.value = object_ref<T>::placement(
                 static_cast<T*>(e->view),
                 [live = e->live](void*) noexcept { *live = false; });

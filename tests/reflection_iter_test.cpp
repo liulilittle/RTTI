@@ -62,11 +62,16 @@ struct IterEmpty {
     RTTI_DEFINE_TYPE_INTRUSIVE(IterEmpty);
 };
 
+struct IterSetReal {
+    std::set<double> vals;
+};
+
 } // namespace rtti_test_lib
 
 RTTI_DEFINE_TYPE(rtti_test_lib::IterPoint, x, y)
 RTTI_DEFINE_TYPE(rtti_test_lib::IterRecord, id, label, nums, scores, tags, empty, inner, pts)
 RTTI_DEFINE_TYPE(rtti_test_lib::IterCustom, av, am, as)
+RTTI_DEFINE_TYPE(rtti_test_lib::IterSetReal, vals)
 
 namespace rtti_test_lib {
 
@@ -366,6 +371,14 @@ RTTI_TEST_CASE(field_iterator_zero_field_type_safe) {
         ++n;
     }
     RTTI_CHECK_EQ(n, size_t(0));
+}
+
+RTTI_TEST_CASE(element_set_real_key_shortest_float) {
+    IterSetReal r;
+    r.vals = {0.1};
+    rtti::element_iterator<IterSetReal> it;
+    RTTI_CHECK_EQ(rtti::element_begin(r, "vals", it), rtti::error_code::ok);
+    RTTI_CHECK_EQ(std::string(it.key()), std::string("0.1"));
 }
 
 } // namespace rtti_test_lib

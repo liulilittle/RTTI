@@ -408,6 +408,22 @@ RTTI_TEST_CASE(StaticArrayNamedPath){
     }
 }
 
+// --- std::array strict-size read (must mirror carray_from) -------------------
+
+RTTI_TEST_CASE(StdArraySizeMismatchIsKindMismatch){
+    // A 4-element source read into a fixed 3-element std::array is a hard
+    // kind_mismatch (spec 12.2), never a silent truncation.
+    box src;
+    src.make_array();
+    for (int64_t i = 0; i < 4; ++i) {
+        box* c = static_cast<box*>(src.make_node());
+        c->make_scalar(rtti::field_value::of(i));
+        src.push_back(c);
+    }
+    std::array<int, 3> out{};
+    RTTI_CHECK_EQ(rtti::from_value(&src, out), error_code::kind_mismatch);
+}
+
 } // namespace rtti_test_lib
 
 #endif

@@ -1091,8 +1091,13 @@ error_code fixed_sequence_from(const value_io* src, A& out) {
     if (src->type() != value_io::kind::array) {
         return error_code::kind_mismatch;
     }
-    const std::size_t n = src->size() < out.size() ? src->size() : out.size();
-    for (std::size_t i = 0; i < n; ++i) {
+    // Match the strict carray_from contract (spec 12.2): an element count
+    // that differs from the fixed compile-time extent is kind_mismatch, never
+    // a silent truncation or a leftover stale tail.
+    if (src->size() != out.size()) {
+        return error_code::kind_mismatch;
+    }
+    for (std::size_t i = 0; i < out.size(); ++i) {
         value_io* child = src->at(i);
         if (child == nullptr) {
             return error_code::kind_mismatch;
