@@ -2278,6 +2278,61 @@ inline T* ctor_factory(const ctor_arg* args, std::size_t count, error_code& ec) 
 
 } // namespace detail
 
+// ---------------------------------------------------------------------------
+// C#-style reference conversions (spec: cast/as variance design).
+//   as<T>(p)   : nullptr on failure; no error payload.
+//   cast<T>(p) : result<T*> with kind_mismatch on failure and no_such_field
+//                for a null source.
+// Covariant upcasts use the compiler's offset-correct static_cast (virtual
+// bases via dynamic_cast, see detail::base_adjuster). Contravariant downcasts
+// require the static source type to be polymorphic (dynamic_cast); a
+// non-polymorphic source cannot be checked at runtime and fails cleanly.
+// Unrelated polymorphic types may still succeed through a dynamic_cast
+// cross-cast. All entry points are failure-safe (spec section 0).
+// ---------------------------------------------------------------------------
+
+template <typename T, typename U>
+T* as(U* p) noexcept {
+    if (p == nullptr) {
+        return nullptr;
+    }
+    if constexpr (std::is_base_of<T, U>::value) {
+        // Covariant direction (or same type): the source statically derives
+        // from the target, so the adjustment is known at compile time.
+        return static_cast<T*>(detail::base_adjuster<U, T>::run(static_cast<void*>(p)));
+    } else if constexpr (std::is_base_of<U, T>::value) {
+        // Contravariant downcast: runtime-checked, needs a polymorphic source.
+        if constexpr (std::is_polymorphic<U>::value) {
+            return dynamic_cast<T*>(p);
+        } else {
+            return nullptr;
+        }
+    } else {
+        // Unrelated: only a polymorphic cross-cast can succeed.
+        if constexpr (std::is_polymorphic<U>::value && std::is_polymorphic<T>::value) {
+            return dynamic_cast<T*>(p);
+        } else {
+            return nullptr;
+        }
+    }
+}
+
+template <typename T, typename U>
+result<T*> cast(U* p) {
+    result<T*> r;
+    if (p == nullptr) {
+        r.err.code = error_code::no_such_field;
+        return r;
+    }
+    T* q = as<T>(p);
+    if (q == nullptr) {
+        r.err.code = error_code::kind_mismatch;
+        return r;
+    }
+    r.value = q;
+    return r;
+}
+
 // Handle to a reflectively-created T instance (spec 18.2). Two lifetime modes:
 //  - RAII (default): the handle owns the heap instance and destroys it on its
 //    own destruction (created by make_object<T> / make_object<T>(args)).
@@ -2326,6 +2381,18 @@ public:
     const T& operator*() const noexcept { return *p_; }
     bool valid() const noexcept { return p_ != nullptr; }
     explicit operator bool() const noexcept { return p_ != nullptr; }
+
+    // C#-style variance conversions: see rtti::as / rtti::cast. `as` returns
+    // nullptr on failure; `cast` returns a result with an error_code. The
+    // returned pointer borrows the handle's object.
+    template <typename Target>
+    Target* as() noexcept {
+        return rtti::as<Target>(p_);
+    }
+    template <typename Target>
+    result<Target*> cast() noexcept {
+        return rtti::cast<Target>(p_);
+    }
 
     // Manual-mode destroy: runs the destructor and returns the raw memory to
     // the allocator's releaser. Idempotent (a second call is a no-op). In

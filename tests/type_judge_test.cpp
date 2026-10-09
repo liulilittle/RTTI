@@ -507,4 +507,50 @@ RTTI_TEST_CASE(JudgeTestBaseAdjustThunk) {
     RTTI_CHECK(static_cast<JudgeBase*>(bp)->x == 7);
 }
 
+RTTI_TEST_CASE(JudgeTestAsCastRawPointer) {
+    using namespace rtti_test_detail;
+    JudgeDerived d;
+    d.x = 3;
+    d.y = 4;
+
+    // Covariant upcast (derived -> base): always safe.
+    JudgeBase* b = rtti::as<JudgeBase>(&d);
+    RTTI_CHECK(b != nullptr && b->x == 3);
+
+    // Exact type: identity view.
+    JudgeDerived* same = rtti::as<JudgeDerived>(&d);
+    RTTI_CHECK(same == &d);
+
+    // Downcast to a type the object is not: clean failure.
+    RTTI_CHECK(rtti::as<JudgeOther>(&d) == nullptr);
+    auto bad = rtti::cast<JudgeOther>(&d);
+    RTTI_CHECK(!bad.ok() && bad.err.code == rtti::error_code::kind_mismatch);
+
+    // Null source.
+    JudgeDerived* nullp = nullptr;
+    RTTI_CHECK(rtti::as<JudgeBase>(nullp) == nullptr);
+    auto nul = rtti::cast<JudgeBase>(nullp);
+    RTTI_CHECK(!nul.ok() && nul.err.code == rtti::error_code::no_such_field);
+
+    // Successful cast returns ok with the value set.
+    auto up = rtti::cast<JudgeBase>(&d);
+    RTTI_CHECK(up.ok() && up.value == b);
+}
+
+RTTI_TEST_CASE(JudgeTestAsCastObjectRef) {
+    using namespace rtti_test_detail;
+    auto h = rtti::make_object<JudgeDerived>();
+    RTTI_CHECK(h.valid());
+    h->x = 11;
+    JudgeBase* b = h.as<JudgeBase>();
+    RTTI_CHECK(b != nullptr && b->x == 11);
+    RTTI_CHECK(h.as<JudgeOther>() == nullptr);
+    auto c = h.cast<JudgeBase>();
+    RTTI_CHECK(c.ok() && c.value == b);
+
+    rtti::object_ref<JudgeDerived> empty;
+    RTTI_CHECK(empty.as<JudgeBase>() == nullptr);
+    RTTI_CHECK(empty.cast<JudgeBase>().err.code == rtti::error_code::no_such_field);
+}
+
 } // namespace rtti_test_lib
