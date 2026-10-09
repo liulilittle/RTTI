@@ -14,6 +14,7 @@ RTTI 是一个零依赖、可移植(MSVC / GCC / Clang)、基于 C++17 的运行
 - [快速上手](#快速上手)
 - [核心能力](#核心能力)
 - [变体转换](#变体转换)
+- [反射遍历](#反射遍历)
 - [格式适配器](#格式适配器)
 - [架构](#架构)
 - [支持的容器](#支持的容器)
@@ -288,6 +289,78 @@ main 运行之后可靠,静态初始化期内不可靠。
 编译期多态类类型,`instance` 路径无法使用 `dynamic_cast`;此类不可达转换干净
 失败,绝不返回错误指针。
 
+## 反射遍历
+
+反射核心的注册表可直接遍历。三种访问器均位于 `<rtti/reflection.hpp>`,
+全部头文件式、零分配、失败安全。
+
+### 枚举遍历 — `<rtti/reflection.hpp>`
+
+用 `RTTI_DEFINE_ENUM` 注册的枚举按其注册顺序暴露枚举值表:
+
+- `enum_count<E>()` — 枚举值个数;
+- `enum_name_at<E>(i)` — 第 `i` 个枚举值的名称,越界返回 `nullptr`;
+- `enum_value_at<E>(i)` — 第 `i` 个枚举值,越界返回 `E{}`;
+- `for_each_enum<E>(fn)` — 按注册顺序对每个枚举值调用
+  `fn(const char* name, E value)`。
+
+```cpp
+enum class Priority { low = 1, normal = 2, high = 3 };
+RTTI_DEFINE_ENUM(Priority, low, normal, high)
+
+std::string text;
+rtti::for_each_enum<Priority>([&](const char* name, Priority v) {
+    text += std::string(name) + "=" + std::to_string(int(v)) + ",";
+});
+// text == "low=1,normal=2,high=3,"
+```
+
+未注册的枚举没有 `enum_table<E>` 特化,因此上述入口对它一律是编译期硬错误——
+与 `fields_of<T>` 相同的 fail-fast 约定;未注册枚举没有静默的空遍历。
+
+### 字段遍历 — `<rtti/reflection.hpp>`
+
+- `for_each_field<T>(fn)` — 按表序(合并后的基类字段在前)对 `T` 的每个字段
+  调用 `fn(const char* name, type_id type)`;
+- `for_each_field(obj, fn)` — 对具体对象做同样的遍历,调用
+  `fn(const char* name, type_id type, const field_value& value)`,访问器
+  同时拿到每个字段的当前值。
+
+```cpp
+struct Point { int x = 0; int y = 0; RTTI_DEFINE_TYPE_INTRUSIVE(Point, x, y) };
+
+int sum = 0;
+rtti::for_each_field(Point{2, 3}, [&](const char*, rtti::type_id, const rtti::field_value& v) {
+    if (v.is_integer()) {
+        sum += static_cast<int>(v.as_integer());
+    }
+});
+// sum == 5
+```
+
+与 `fields<T>()` / `field_count<T>()` 一样,未注册类型是编译期错误,绝不是静默的
+空遍历。
+
+### 模板实参遍历 — `<rtti/reflection.hpp>`
+
+`for_each_template_arg<T>(fn)` 按声明顺序遍历 `T` 的每个已注册模板实参,
+调用 `fn(std::size_t index, const type_desc* arg_type)`。
+
+```cpp
+template <typename A, typename B> struct Box {};
+
+RTTI_TEMPLATE_INFO(Box, int, std::string)
+
+std::size_t n = 0;
+rtti::for_each_template_arg<Box<int, std::string>>([&](std::size_t, const rtti::type_desc*) {
+    ++n;
+});
+// n == 2
+```
+
+与枚举、字段访问器不同,未注册模板(或普通非模板类型)迭代零次——
+`template_info<T>` 回退到安全空表(count `0`),绝不是编译期错误。
+
 ## 格式适配器
 
 JSON/XML/INI/TOML/FlatBuffers 是可选的编译门。开启时四个文本适配器形态
@@ -481,8 +554,8 @@ wire codec 恒编入 `rtti` 静态库,`<rtti/flat.hpp>` 仍可 include——头�
 通过完整测试**(各自使用独立 scratch 目录,configure 后立即读回
 `CMakeCache.txt` 核验 `RTTI_ENABLE_*` 实际值)。断言数随门开单调递增——
 2026-10-08 完整 64 组合扫描(全部组合 `0 failures`,零警告)从全关 `32790`
-到全开 `55696`;当前代码树(含 cast/as 变体转换测试)实测全关 `32849`、全开
-`55823`。扫描脚本(`.opencode/batch_strip.ps1` +
+到全开 `55696`;当前代码树(含 cast/as 变体转换测试与反射遍历 API)实测全关
+`32872`、全开 `55847`。扫描脚本(`.opencode/batch_strip.ps1` +
 `.opencode/strip_matrix.ps1`)按开启门数分组如下:
 
 | 开启门数 | 运行组合数 | rtti_tests 断言数范围 |

@@ -70,6 +70,35 @@ exact type. Because the erased source type is not a compile-time polymorphic
 class type, `dynamic_cast` cannot be used on the `instance` path; such
 unreachable conversions fail cleanly and never return a wrong pointer.
 
+## Reflection traversal
+
+The registration tables are directly iterable, with header-only,
+allocation-free visitors in `<rtti/reflection.hpp>`:
+
+- Enum traversal — `enum_count<E>()`, `enum_name_at<E>(i)`,
+  `enum_value_at<E>(i)` and `for_each_enum<E>(fn)` walk a
+  `RTTI_DEFINE_ENUM`-registered enum's enumerators in registration order.
+  An unregistered enum is a compile-time hard error (fail-fast, like
+  `fields_of<T>`), never a silent empty iteration.
+- Field traversal — `for_each_field<T>(fn)` and `for_each_field(obj, fn)`
+  walk every reflected field (merged base fields first); the object overload
+  also delivers each field's current value. Unregistered types are
+  compile-time errors.
+- Template-argument traversal — `for_each_template_arg<T>(fn)` visits each
+  `RTTI_TEMPLATE_INFO`-registered argument in declaration order; unregistered
+  templates and non-template types iterate zero times (no hard error).
+
+```cpp
+enum class Priority { low = 1, normal = 2, high = 3 };
+RTTI_DEFINE_ENUM(Priority, low, normal, high)
+
+rtti::for_each_enum<Priority>([](const char* name, Priority v) { /* ... */ });
+// Point registered with RTTI_DEFINE_TYPE_INTRUSIVE(Point, x, y):
+rtti::for_each_field(Point{2, 3}, [](const char* n, rtti::type_id, const rtti::field_value& v) { /* ... */ });
+// Box<int, std::string> registered with RTTI_TEMPLATE_INFO(Box, int, std::string):
+rtti::for_each_template_arg<Box<int, std::string>>([](std::size_t i, const rtti::type_desc* t) { /* ... */ });
+```
+
 ## License
 
 Licensed under the MIT License — see [LICENSE](LICENSE).

@@ -15,6 +15,7 @@ introspecting at runtime — is now one macro away.
 - [Quick Start](#quick-start)
 - [Core Capabilities](#core-capabilities)
 - [Variance casts](#variance-casts)
+- [Reflection traversal](#reflection-traversal)
 - [Format Adapters](#format-adapters)
 - [Architecture](#architecture)
 - [Supported Containers](#supported-containers)
@@ -321,6 +322,85 @@ exact type. Because the erased source type is not a compile-time polymorphic
 class type, `dynamic_cast` cannot be used on the `instance` path; such
 unreachable conversions fail cleanly and never return a wrong pointer.
 
+## Reflection traversal
+
+The reflection core's registration tables are directly iterable. All three
+visitors live in `<rtti/reflection.hpp>` and are header-only, allocation-free
+and fail-safe.
+
+### Enum traversal — `<rtti/reflection.hpp>`
+
+An enum registered with `RTTI_DEFINE_ENUM` exposes its enumerator table in
+registration order:
+
+- `enum_count<E>()` — the number of enumerators;
+- `enum_name_at<E>(i)` — the name of the `i`-th enumerator, or `nullptr`
+  out of range;
+- `enum_value_at<E>(i)` — the value of the `i`-th enumerator, or `E{}`
+  out of range;
+- `for_each_enum<E>(fn)` — calls `fn(const char* name, E value)` for every
+  enumerator, in registration order.
+
+```cpp
+enum class Priority { low = 1, normal = 2, high = 3 };
+RTTI_DEFINE_ENUM(Priority, low, normal, high)
+
+std::string text;
+rtti::for_each_enum<Priority>([&](const char* name, Priority v) {
+    text += std::string(name) + "=" + std::to_string(int(v)) + ",";
+});
+// text == "low=1,normal=2,high=3,"
+```
+
+An unregistered enum has no `enum_table<E>` specialization, so these entry
+points are a compile-time hard error for it — the same fail-fast convention
+as `fields_of<T>`. There is no silent empty iteration for unregistered enums.
+
+### Field traversal — `<rtti/reflection.hpp>`
+
+- `for_each_field<T>(fn)` — calls `fn(const char* name, type_id type)` for
+  every field of `T`, in table order (merged base-class fields first);
+- `for_each_field(obj, fn)` — the same walk over a concrete object, calling
+  `fn(const char* name, type_id type, const field_value& value)` so the
+  visitor also receives each field's current value.
+
+```cpp
+struct Point { int x = 0; int y = 0; RTTI_DEFINE_TYPE_INTRUSIVE(Point, x, y) };
+
+int sum = 0;
+rtti::for_each_field(Point{2, 3}, [&](const char*, rtti::type_id, const rtti::field_value& v) {
+    if (v.is_integer()) {
+        sum += static_cast<int>(v.as_integer());
+    }
+});
+// sum == 5
+```
+
+As with `fields<T>()` / `field_count<T>()`, an unregistered type is a
+compile-time error, never a silent empty walk.
+
+### Template-argument traversal — `<rtti/reflection.hpp>`
+
+`for_each_template_arg<T>(fn)` visits each registered template argument of
+`T` in declaration order, calling `fn(std::size_t index,
+const type_desc* arg_type)`.
+
+```cpp
+template <typename A, typename B> struct Box {};
+
+RTTI_TEMPLATE_INFO(Box, int, std::string)
+
+std::size_t n = 0;
+rtti::for_each_template_arg<Box<int, std::string>>([&](std::size_t, const rtti::type_desc*) {
+    ++n;
+});
+// n == 2
+```
+
+Unlike the enum and field visitors, an unregistered template (or a plain
+non-template type) iterates zero times — `template_info<T>` falls back to a
+safe empty table (count `0`), never a compile-time error.
+
 ## Format Adapters
 
 JSON/XML/INI/TOML/FlatBuffers are optional build gates. When enabled the four
@@ -538,8 +618,8 @@ independently** (each in its own scratch directory, with the `CMakeCache.txt`
 `RTTI_ENABLE_*` values verified right after configure). Assertions grow
 monotonically as gates are added. The 2026-10-08 full 64-combo sweep (all
 combinations `0 failures`, zero warnings) ran from `32790` all-off to `55696`
-all-on; the current tree (with the cast/as variance tests) measures `32849`
-all-off and `55823` all-on. The sweep
+all-on; the current tree (with the cast/as variance tests and the reflection
+traversal APIs) measures `32872` all-off and `55847` all-on. The sweep
 (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
 grouped by gate count:
 
