@@ -481,52 +481,73 @@ struct field_access_base {
 // Typed accessor for member M T::*ptr on type T. Uses member-pointer
 // indirection so private members still work when the macro is emitted inside
 // the class (intrusive variant).
+//
+// For fields merged from a base type C into a derived D (RTTI_DEFINE_TYPE_DERIVED),
+// the accessor stays C-anchored (T == the base that declares the member) and
+// carries an adjust thunk: converting `M C::*` into `M D::*` is ill-formed in
+// standard C++ when C is a virtual base of D, so the thunk instead converts the
+// void* obj (which names a D object) into a pointer to the C subobject via
+// static_cast — always well-formed and compiler-adjusted for virtual bases.
+// identity (nullptr) is used for direct fields, where obj already names T.
 template <typename T, typename M>
 struct typed_field_access : field_access_base {
-    M T::*ptr;
+    using member_t = M T::*;
+    member_t ptr;
+    const void* (*adjust_)(const void*) = nullptr;
 
     typed_field_access(const char* n, M T::*p, type_id t) noexcept
         : field_access_base{n, t}, ptr(p) {}
 
+    typed_field_access(const char* n, M T::*p, type_id t,
+                       const void* (*adjust)(const void*)) noexcept
+        : field_access_base{n, t}, ptr(p), adjust_(adjust) {}
+
+    const T* as_t(const void* obj) const noexcept {
+        return static_cast<const T*>(adjust_ ? adjust_(obj) : obj);
+    }
+    T* as_t(void* obj) const noexcept {
+        return const_cast<T*>(as_t(static_cast<const void*>(obj)));
+    }
+
     field_value get(const void* obj) const override {
-        const auto& o = *static_cast<const T*>(obj);
+        const auto& o = *as_t(obj);
         return to_field_value(o.*ptr);
     }
 
     bool set(void* obj, const field_value& v) const override {
-        auto& o = *static_cast<T*>(obj);
+        auto& o = *as_t(obj);
         return field_value_to(o.*ptr, v);
     }
 
     error_code get_value(const void* obj, value_io* dst) const override {
-        const auto& o = *static_cast<const T*>(obj);
+        const auto& o = *as_t(obj);
         return rtti::member_to_value(dst, o.*ptr);
     }
 
     error_code set_value(void* obj, const value_io* src) const override {
-        auto& o = *static_cast<T*>(obj);
+        auto& o = *as_t(obj);
         return rtti::from_value(src, o.*ptr);
     }
 
 error_code get_value_named(const void* obj, value_io* dst,
                            const rtti::detail::naming_policy& np) const override {
-        const auto& o = *static_cast<const T*>(obj);
+        const auto& o = *as_t(obj);
         return rtti::member_to_value_named(dst, o.*ptr, np);
     }
 
     error_code set_value_named(void* obj, const value_io* src,
                                const rtti::detail::naming_policy& np) const override {
-        auto& o = *static_cast<T*>(obj);
+        auto& o = *as_t(obj);
         return rtti::from_value_named(src, o.*ptr, np);
     }
 
     bool is_null_value(const void* obj) const override {
-        const auto& o = *static_cast<const T*>(obj);
+        const auto& o = *as_t(obj);
         return member_is_null(o.*ptr);
     }
 
     error_code field_add(void* obj, const value_io* element) const override {
-        auto& o = *static_cast<T*>(obj);
+        auto& o = *as_t(obj);
         if constexpr (is_map<M>::value) {
             string_view key;
             value_io* child = nullptr;
@@ -573,7 +594,7 @@ error_code get_value_named(const void* obj, value_io* dst,
     }
 
     error_code field_add_scalar(void* obj, const field_value& element) const override {
-        auto& o = *static_cast<T*>(obj);
+        auto& o = *as_t(obj);
         if constexpr (is_map<M>::value) {
             return error_code::kind_mismatch;
         } else if constexpr (is_set<M>::value || is_sequence<M>::value ||
@@ -597,7 +618,7 @@ error_code get_value_named(const void* obj, value_io* dst,
     }
 
     error_code erase_at(void* obj, std::size_t index) const override {
-        auto& o = *static_cast<T*>(obj);
+        auto& o = *as_t(obj);
         if constexpr (is_sequence<M>::value) {
             if (index >= (o.*ptr).size()) {
                 return error_code::no_such_field;
@@ -1894,10 +1915,14 @@ void for_each_base(Fn&& fn) {
     }
 }
 
-// The D-anchored accessor for the OwnIndex-th OWN field of the base type C:
-// a typed_field_access<D, M> over the converted member pointer. One static
-// instance per (D, C, OwnIndex), so fields sharing a member type stay
-// distinct.
+// The D-anchored accessor for the OwnIndex-th OWN field of the base type C.
+// Converting `M C::*` into `M D::*` is ill-formed when C is a virtual base of
+// D (standard C++), so the accessor stays C-anchored (declaring base) and
+// carries a D->C adjust thunk: typed_field_access<C, M>::get first converts the
+// void* obj (a D object) to the C subobject via static_cast -- always
+// well-formed and compiler-adjusted for virtual bases -- then dereferences C's
+// own member pointer. One static instance per (D, C, OwnIndex), so fields
+// sharing a member type stay distinct.
 template <typename D, typename C, std::size_t OwnIndex>
 const field_access_base* derived_accessor() noexcept {
     constexpr std::size_t off = base_field_count<C>();
@@ -1905,10 +1930,14 @@ const field_access_base* derived_accessor() noexcept {
     using M = typename member_pointer_traits<Mp>::value;
     static_assert(std::is_base_of<C, D>::value,
                   "rtti: a reflected derived type must derive from its base");
-    static const typed_field_access<D, M> inst{
+    const void* (*to_c)(const void*) = [](const void* p) noexcept -> const void* {
+        return static_cast<const C*>(static_cast<const D*>(p));
+    };
+    static const typed_field_access<C, M> inst{
         fields_of<C>::desc[off + OwnIndex].name,
-        static_cast<M D::*>(std::get<OwnIndex>(fields_of<C>::members)),
-        &typeid(M)};
+        std::get<OwnIndex>(fields_of<C>::members),
+        &typeid(M),
+        to_c};
     return &inst;
 }
 
