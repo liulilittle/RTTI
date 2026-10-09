@@ -621,3 +621,848 @@ struct has_default<T, std::void_t<typename T::rtti_has_default>>
 - 查询:`attr` 查找函数族(按名/索引/键),见头文件 `reflection.hpp` §6。
 
 > 本章与 §7–§17 的完整逐项签名、示例与提取行号见英文版 [`docs/interface/en/reflection.md`](../en/reflection.md) 对应章节(结构与本章一一对应);中文版以下各节为详尽中文概述,并在关键名称处保留英文签名以便对照。
+
+---
+
+## 7. 枚举反射
+
+枚举支持在本头内自足。一个类型参与枚举反射当且仅当 `rtti::enum_table<E>` 被特化(由 `RTTI_DEFINE_ENUM`)。
+
+### 7.1 `enum_label<E>` 与 `enum_table<E>`
+
+```cpp
+template <typename E>
+struct enum_label {
+    const char* name;
+    E value;
+};
+
+template <typename E>
+struct enum_table;
+```
+
+已注册的 `enum_table<E>` 暴露 `count` 与 `array`(按注册序排列的 `enum_label<E>` 数组)。
+
+### 7.2 `enum_to_string<E>(value)` / `enum_from_string<E>(name)`
+
+```cpp
+template <typename E>
+const char* enum_to_string(E value) noexcept;
+
+template <typename E>
+E enum_from_string(string_view name) noexcept;
+```
+
+| 函数 | 语义 |
+|---|---|
+| `enum_to_string<E>(value)` | `value` 的标签名,无枚举器匹配时返回 `""`。 |
+| `enum_from_string<E>(name)` | `name` 的枚举值,无标签匹配时返回 `static_cast<E>(0)`。 |
+
+### 7.3 `enum_count`、`enum_name_at`、`enum_value_at`、`for_each_enum`
+
+```cpp
+template <typename E>
+constexpr std::size_t enum_count() noexcept;
+
+template <typename E>
+const char* enum_name_at(std::size_t i) noexcept;
+
+template <typename E>
+E enum_value_at(std::size_t i) noexcept;
+
+template <typename E, typename Fn>
+void for_each_enum(Fn&& fn);
+```
+
+| 函数 | 语义 |
+|---|---|
+| `enum_count<E>()` | 已注册枚举器数(注册序)。 |
+| `enum_name_at<E>(i)` | 第 `i` 个枚举器名,越界返回 `nullptr`。 |
+| `enum_value_at<E>(i)` | 第 `i` 个枚举器值,越界返回 `E{}`。 |
+| `for_each_enum<E>(fn)` | 按注册序对每个枚举器调用 `fn(name, value)`。 |
+
+示例:
+
+```cpp
+enum class Color { Red, Green, Blue };
+RTTI_DEFINE_ENUM(Color, Red, Green, Blue)   // namespace scope
+assert(rtti::enum_count<Color>() == 3);
+assert(rtti::enum_to_string<Color>(Color::Green) == std::string_view("Green"));
+assert(rtti::enum_from_string<Color>("Blue") == Color::Blue);
+```
+
+---
+
+## 8. 类型描述系统
+
+`rtti::type_of<T>()` 返回稳定、惰性创建的 `type_desc`,描述 `T` 的类别:标量、字符串、某一容器族(含 queue/stack/priority_queue)、反射结构体(带其字段表)或枚举。嵌套元素/键与字段类型经解析器函数指针按需解析,因此自引用结构在构造期不会无限递归。
+
+### 8.1 `type_kind` 与 `container_family`
+
+```cpp
+enum class type_kind { boolean, integer, real, string, container, reflected, enum_type };
+
+enum class container_family {
+    vector, list, map, unordered_map, set, unordered_set,
+    queue, stack, priority_queue
+};
+```
+
+### 8.2 解析器类型与字段/容器/结构体/枚举描述符
+
+```cpp
+struct type_desc;
+struct container_desc;
+struct struct_desc;
+struct enum_desc;
+
+using type_resolver = const type_desc* (*)();
+
+// 反射结构体的一个字段:name + 按需类型解析器。
+struct field_type_desc {
+    const char* name;
+    type_resolver resolve;
+    const type_desc* type() const noexcept { return resolve(); }
+};
+
+struct container_desc {
+    container_family family;
+    type_resolver key;       // 仅 map 族非 null
+    type_resolver element;
+};
+
+struct struct_desc {
+    std::size_t field_count;
+    const field_type_desc* fields;
+};
+
+// 偏移正确的基指针调整器:把指向拥有类型的指针转为指向基子对象。
+using base_adjust_fn = void* (*)(void*);
+
+// 反射类型的直接基类(spec 19):惰性解析器数组,每注册基一个,声明序。
+struct base_type_list {
+    std::size_t count;
+    const type_resolver* resolve;   // `count` 个惰性解析器数组
+    base_adjust_fn const* adjust;   // `count` 个调整器数组(并行)
+};
+
+struct enum_desc {
+    std::size_t count;
+    const char* const* names;
+    const void* values = nullptr;   // 并行 E 值数组(原始字节)
+    std::size_t value_size = 0;     // sizeof(E)
+};
+```
+
+### 8.3 `type_desc`
+
+```cpp
+struct type_desc {
+    type_kind kind;
+    const std::type_info* id;   // typeid(T)
+    const char* type_name;      // typeid(T).name()
+    const container_desc* as_container;
+    const struct_desc* as_reflected;
+    const enum_desc* as_enum;
+    const base_type_list* as_bases = nullptr;  // 直接基类(spec 19)
+
+    bool abstract = false;
+    bool polymorphic = false;
+
+    bool is_abstract() const noexcept { return abstract; }
+    bool is_polymorphic() const noexcept { return polymorphic; }
+    const base_type_list* bases() const noexcept { return as_bases; }
+};
+```
+
+| 成员 | 含义 |
+|---|---|
+| `kind` | `T` 的类别。 |
+| `id` | `typeid(T)`。 |
+| `type_name` | `typeid(T).name()`。 |
+| `as_container` / `as_reflected` / `as_enum` | 族专属描述符,仅对匹配 `kind` 非 null。 |
+| `as_bases` / `bases()` | 直接基类;无注册基时为 `nullptr`。 |
+| `abstract` / `polymorphic` | 由 `type_of<T>` 建描述符时从 `std::is_abstract` / `std::is_polymorphic` 捕获的编译期分类;默认保持标量/字符串/容器/枚举类别安全(`false`)。 |
+| `is_abstract()` | `T` 是抽象类(有纯虚函数,不能实例化)时为真。 |
+| `is_polymorphic()` | `T` 是多态的(至少一个虚函数,即有 vtable)时为真;是运行期动态检查的前提(spec 19/20)。 |
+
+### 8.4 `type_of<T>()` 与 `type_of(obj)`
+
+```cpp
+template <typename T>
+const type_desc* type_of() noexcept;
+
+// 值重载:rtti::type_of(obj)。
+template <typename T>
+const type_desc* type_of(const T&) noexcept;
+```
+
+返回 `T` 的稳定、惰性创建的 `type_desc*`。`detail::type_of_impl` 的类别映射(按序):
+
+1. `bool` → `kind::boolean`
+2. `T` 整型 → `kind::integer`
+3. `T` 浮点 → `kind::real`
+4. `std::string` / `string_view` → `kind::string`
+5. `is_map<T>` → `kind::container`,`container_desc{map_family<T>(), key_resolver, mapped_type_resolver}`
+6. `is_set<T>` → `kind::container`,`container_desc{set_family<T>(), nullptr, value_type_resolver}`
+7. `is_sequence<T>` → `kind::container`,`container_desc{sequence_family<T>(), nullptr, value_type_resolver}`
+8. `is_priority_queue<T>` → `kind::container` family `priority_queue`
+9. `is_queue<T>` → `kind::container` family `queue`
+10. `is_stack<T>` → `kind::container` family `stack`
+11. `is_reflected<T>` → `kind::reflected`,`struct_desc{field_count<T>(), fields_of<T>::desc}`,加 `base_type_list_of<T>()` 与 abstract/polymorphic 标志。描述符在首次物化时一次性注册到进程级 `detail::desc_registry`,使类型擦除 `instance` 转换可解析运行期动态类型。
+12. `std::is_enum<T>` → `kind::enum_type`,`enum_desc` 由 `enum_table<T>::count`、`enum_names<T>()`、`enum_values<T>()`、`sizeof(T)` 构建。
+13. 否则(未知/未注册类型)→ 仅以 `kind::string` 报告为安全占位;`abstract` / `polymorphic` 类标志仍如实捕获。
+
+返回指针对给定 `T` 稳定(函数局部静态);`const T&` 重载只是转发到 `type_of<T>()`。
+
+示例:
+
+```cpp
+assert(rtti::type_of<int>()->kind == rtti::type_kind::integer);
+struct Point { int x; int y; };
+RTTI_DEFINE_TYPE(Point, x, y)              // namespace scope
+const rtti::type_desc* d = rtti::type_of<Point>();
+assert(d->kind == rtti::type_kind::reflected);
+assert(d->as_reflected->field_count == 2);
+```
+
+### 8.5 进程级描述符注册表(detail)
+
+内部但经 `instance` 转换路径可观察:
+
+```cpp
+inline std::vector<const type_desc*>& desc_registry();
+inline std::mutex& desc_registry_mutex();
+inline void register_desc(const type_desc* d) noexcept;
+inline const type_desc* find_desc(const std::type_info& ti) noexcept;
+```
+
+`register_desc` 在互斥锁下跳过空指针并按 `std::type_info` 等值去重;`find_desc` 查找动态类型。用于完整精度 `instance::as` 的基链遍历重定根。
+
+---
+
+## 9. 编译期类型判定
+
+标准 trait 的 `rtti` 命名空间薄别名,使调用方留在单一命名空间,镜像 `reflect.hpp` 中的 `is_same` / `is_base_of` / `is_convertible`。
+
+```cpp
+template <typename T>
+struct is_abstract : std::is_abstract<T> {};
+template <typename T>
+inline constexpr bool is_abstract_v = is_abstract<T>::value;
+
+template <typename T>
+struct is_polymorphic : std::is_polymorphic<T> {};
+template <typename T>
+inline constexpr bool is_polymorphic_v = is_polymorphic<T>::value;
+
+template <typename T>
+struct has_virtual_destructor : std::has_virtual_destructor<T> {};
+template <typename T>
+inline constexpr bool has_virtual_destructor_v = has_virtual_destructor<T>::value;
+```
+
+| Trait | 含义 |
+|---|---|
+| `is_abstract<T>` / `is_abstract_v<T>` | `T` 有纯虚函数(不能实例化)时为真。 |
+| `is_polymorphic<T>` / `is_polymorphic_v<T>` | `T` 至少一个虚函数(有 vtable)时为真。 |
+| `has_virtual_destructor<T>` / `has_virtual_destructor_v<T>` | `T` 有虚析构时为真。 |
+
+---
+
+## 10. 家族判别与枚举辅助
+
+### 10.1 `has_hasher<T>`、`has_data<T>`、`has_bracket<T>`
+
+```cpp
+template <typename T, typename = void>
+struct has_hasher : std::false_type {};
+template <typename T>
+struct has_hasher<T, std::void_t<typename T::hasher>> : std::true_type {};
+
+template <typename T, typename>
+struct has_data : std::false_type {};
+template <typename T>
+struct has_data<T, std::void_t<decltype(std::declval<T&>().data())>> : std::true_type {};
+
+template <typename T, typename = void>
+struct has_bracket : std::false_type {};
+template <typename T>
+struct has_bracket<T, std::void_t<decltype(std::declval<T&>()[size_t(0)])>> : std::true_type {};
+```
+
+| Trait | 含义 |
+|---|---|
+| `has_hasher<T>` | `T` 暴露 `hasher` 成员类型(无序容器)时为真。 |
+| `has_data<T>` | `T` 有 `data()` 成员(连续存储:vector、`std::array`、`std::string`,…)时为真。 |
+| `has_bracket<T>` | `T` 在 `size_t` 上支持 `operator[]` 时为真。 |
+
+### 10.2 `map_family`、`set_family`、`sequence_family`
+
+```cpp
+template <typename T>
+constexpr container_family map_family() noexcept {
+    return has_hasher<T>::value ? container_family::unordered_map : container_family::map;
+}
+template <typename T>
+constexpr container_family set_family() noexcept {
+    return has_hasher<T>::value ? container_family::unordered_set : container_family::set;
+}
+template <typename T>
+constexpr container_family sequence_family() noexcept {
+    if constexpr (has_data<T>::value) {
+        return container_family::vector;
+    } else if constexpr (has_bracket<T>::value) {
+        return container_family::vector;  // deque 视为 vector 族
+    } else {
+        return container_family::list;
+    }
+}
+```
+
+- `map_family<T>()`:无序(有 `hasher`)vs 有序 map。
+- `set_family<T>()`:无序 vs 有序 set。
+- `sequence_family<T>()`:vector 有 `data()`;deque 有 `operator[]` 但无 `data()`(视为 vector 族);list 两者皆无 → `list`。
+
+### 10.3 `enum_names`、`enum_values` 与辅助
+
+```cpp
+template <typename E, std::size_t... I>
+const char* const* enum_name_array(std::index_sequence<I...>);
+
+template <typename E>
+const char* const* enum_names();
+
+template <typename E, std::size_t... I>
+const void* enum_value_array(std::index_sequence<I...>);
+
+template <typename E>
+const void* enum_values();
+```
+
+- `enum_name_array<E>(seq)` 为已注册枚举构建 NUL 结尾名字数组。
+- `enum_names<E>()` 返回该数组(用于构建运行期 `enum_desc`)。
+- `enum_value_array<E>(seq)` / `enum_values<E>()` 返回并行的原始字节值数组;`enum_values<E>()` 在枚举注册零枚举器时返回 `nullptr`。
+
+---
+
+## 11. 模板实参反射
+
+C++17 无法内省任意模板实例化的类型实参,故实参列表显式注册:特化 `rtti::template_info<T>`(经 `RTTI_TEMPLATE_INFO` 宏)把实参类型存为 `std::tuple` 加其计数。未注册模板实例(与非模板类型)回退到主模板的安全空表:count 0、空 tuple、nullptr 数组。
+
+### 11.1 `template_info<T>`
+
+```cpp
+template <typename T, typename = void>
+struct template_info {
+    static constexpr std::size_t count = 0;
+    using args = std::tuple<>;
+};
+```
+
+已注册特化额外声明 `using registered = void;`。
+
+### 11.2 `is_template_instance<T>`
+
+```cpp
+template <typename T, typename = void>
+struct is_template_instance : std::false_type {};
+template <typename T>
+struct is_template_instance<T, std::void_t<typename template_info<T>::registered>>
+    : std::true_type {};
+template <typename T>
+inline constexpr bool is_template_instance_v = is_template_instance<T>::value;
+```
+
+基于标记的检测:`template_info<T>` 特化携带 `registered` 时为真。安全空主模板不视为已注册。
+
+### 11.3 注册查询
+
+```cpp
+template <typename T>
+constexpr std::size_t template_arg_count() noexcept;
+
+template <typename T>
+using template_args = typename template_info<T>::args;
+
+template <typename T, std::size_t I>
+struct template_arg_at_holder {
+    static_assert(I < template_info<T>::count,
+                  "RTTI: template argument index out of range");
+    using type = std::tuple_element_t<I, template_args<T>>;
+};
+template <typename T, std::size_t I>
+using template_arg_at = typename template_arg_at_holder<T, I>::type;
+```
+
+| 成员 | 含义 |
+|---|---|
+| `template_arg_count<T>()` | 已注册模板实参数(非模板为 0)。 |
+| `template_args<T>` | 模板实参类型为 `std::tuple`(未注册为空)。 |
+| `template_arg_at<T, I>` | 第 `I` 个模板实参类型;越界/未注册索引是硬编译错误(`static_assert` "RTTI: template argument index out of range")。 |
+
+### 11.4 运行期描述符访问
+
+```cpp
+template <typename T>
+const type_desc* const* template_args_of() noexcept;
+
+template <typename T>
+const type_desc* template_arg_desc_of(std::size_t index) noexcept;
+
+template <typename T, typename Fn>
+void for_each_template_arg(Fn&& fn);
+```
+
+| 函数 | 语义 |
+|---|---|
+| `template_args_of<T>()` | `type_desc*` 运行期数组,每已注册实参一个,声明序。未注册模板为 `nullptr`(安全空表)。 |
+| `template_arg_desc_of<T>(index)` | 第 `I` 个实参的 `type_desc`,未注册/越界返回 `nullptr`。 |
+| `for_each_template_arg<T>(fn)` | 按声明序对每个已注册实参调用 `fn(std::size_t index, const type_desc* arg_type)`。 |
+
+示例:
+
+```cpp
+template <typename A, typename B> struct Box { A a; B b; };
+RTTI_TEMPLATE_INFO(Box, int, std::string)     // namespace scope
+assert(rtti::is_template_instance_v<Box<int, std::string>>);
+assert(rtti::template_arg_count<Box<int, std::string>>() == 2);
+using T0 = rtti::template_arg_at<Box<int, std::string>, 0>;  // int
+```
+
+---
+
+## 12. 派生类型合并机制(spec 19)
+
+宏族为每个已注册类型发射 `members` tuple(类型**自身**反射字段的类型化成员指针,声明序),与 `base_types<T>` 表并列。以 `RTTI_DEFINE_TYPE_DERIVED` 注册的派生类型把每个基类字段经 D 锚定访问器合并进其表:基成员指针转成派生成员指针(`M Base::*` → `M Derived::*`),使成员指针分派对虚基与非虚基都执行正确子对象偏移。合并的访问器/描述符数组一次性构建进函数局部静态;输入它们的基表常量初始化,故任何静态初始化序下构建都安全。
+
+公开可观察行为:
+
+- 派生类型的 `fields<D>()` 返回合并表,**基字段在前**,随后派生类型自身字段。
+- `field_count<D>()` 等于 `base_count + own_count`。
+- 派生类型的 `type_desc` 经 `as_bases`/`bases()` 携带 `base_type_list`(直接基类),并通过 `detail::register_desc` 注册,使类型擦除 `instance` 转换可遍历它。
+- `is_reflected<D>()`、`is_field` 查询与 `type_of<D>()` 都在合并表上工作。
+
+机制位于 `namespace rtti::detail`:成员指针 trait、`base_total`(基 tuple 上 `fields_of<B>::count` 之和)、`derived_accessor`(D 锚定访问器)、`derived_field_appender`/`derived_desc_appender`(先基后己)、`derived_pool<D>::accessors()/descriptors()`(魔法静态一次性构建)。
+
+---
+
+## 13. 反射构造
+
+类型通过特化 `rtti::ctor_registry<T>`(通常经 `RTTI_DEFINE_CTOR` 宏,镜像显式 proto schema 特化风格)选择反射构造。`make_object<T>` / `create_instance<T>` 位于 `<rtti/reflect.hpp>`;本头供应参数描述符、运行期实参持有者、工厂胶水与实例句柄。
+
+### 13.1 `ctor_arg`
+
+一个运行期构造实参。值来自标量 `field_value`、`value_io` 节点(嵌套/容器/标量)或匹配已注册构造参数名的参数名。当**任一**实参带名时按名匹配参数,否则按位置;命名实参填充其参数,其余参数接收未命名(「位置」)实参,按声明序(混合模式)。
+
+```cpp
+class ctor_arg {
+public:
+    ctor_arg() noexcept = default;
+
+    static ctor_arg scalar(const field_value& v) noexcept;
+    static ctor_arg scalar(const char* name, const field_value& v) noexcept;
+    static ctor_arg node(const value_io* v) noexcept;
+    static ctor_arg node(const char* name, const value_io* v) noexcept;
+
+    const char* name() const noexcept;
+    bool named() const noexcept;
+    bool is_node() const noexcept;
+    bool is_scalar() const noexcept;
+    const field_value& scalar() const noexcept;
+    const value_io* node() const noexcept;
+};
+```
+
+| 成员 | 含义 |
+|---|---|
+| `scalar(v)` / `scalar(name, v)` | 标量负载(可选命名)。 |
+| `node(v)` / `node(name, v)` | `value_io` 源(嵌套/容器/标量),可选命名。 |
+| `name()` | 参数名或 `nullptr`。 |
+| `named()` | `name() != nullptr` 时为真。 |
+| `is_node()` / `is_scalar()` | `node_ != nullptr` vs 标量负载。 |
+| `scalar()` / `node()` | 负载访问器。 |
+
+### 13.2 `ctor_param`
+
+```cpp
+// 一个构造器注册表参数描述符。
+struct ctor_param {
+    const char* name;
+    type_id type;      // C++ 参数类型的 typeid
+    bool optional;     // 省略实参回退到 def(或值初始化值)
+    field_value def;   // 可选默认;空(kind none)-> 值初始化
+};
+```
+
+### 13.3 `ctor_registry<T>` 与 `has_ctor_registry<T>`
+
+```cpp
+template <typename T, typename = void>
+struct ctor_registry {
+    static constexpr std::size_t count = 0;
+    static inline const ctor_param params[1] = {{nullptr, nullptr, false, {}}};
+    using param_types = std::tuple<>;
+    using factory_fn = T* (*)(const ctor_arg*, std::size_t, error_code&);
+    static inline factory_fn factory = nullptr;
+};
+
+template <typename T, typename = void>
+struct has_ctor_registry : std::false_type {};
+template <typename T>
+struct has_ctor_registry<T, std::void_t<typename ctor_registry<T>::param_types>>
+    : std::bool_constant<(ctor_registry<T>::count > 0)> {};
+```
+
+- 主 `ctor_registry<T>` 是空、安全表:`make_object<T>(args)` 对未注册类型报错。
+- 特化(经 `RTTI_DEFINE_CTOR` 或手写)供应有序参数描述符(`params`)、参数类型表(`param_types` 为 `std::tuple`)与从匹配运行期实参构建 `T` 的 `factory`(`factory_fn = T*(*)(const ctor_arg*, std::size_t, error_code&)`)。
+- `has_ctor_registry<T>` 在注册了非空构造表时为真。
+
+### 13.4 运行期实参/参数匹配(detail)
+
+内部机制(`namespace rtti::detail`)实现 spec 18.3 匹配:标量参数填充(`is_scalar_param<D>`)、`scalar_assign<D>`(bool 宽容接受整型 0/1;枚举取自整型道;其余用严格 `field_value_to` 道)、`node_to_field_value`、`arg_matcher`(计数命名/位置实参)、`assign_param<I, Tuple>`(按名或按置;省略的 optional 参数回退默认或值初始化;缺失必选参数为 `missing_key`)、`ctor_values`(未知参数名以 `kind_mismatch` 拒绝——拼写错误胜过缺参报告)、`ctor_new_impl`/`ctor_place_impl`(堆/placement 构造)、`ctor_prepare`、`ctor_factory`(宏引用的通用工厂入口)。
+
+---
+
+## 14. 类型转换:`as` / `cast`
+
+C# 风格引用转换。
+
+- `as<T>(p)`:失败返回 `nullptr`;**无错误负载**。
+- `cast<T>(p)`:`result<T*>`,失败设 `kind_mismatch`,null 源设 `no_such_field`。
+- 协变上转用编译器的偏移正确 `static_cast`,含虚基与多继承(见 `detail::base_adjuster`)。
+- 逆变下转要求静态源类型多态(`dynamic_cast`);非多态源无法运行期检查,干净失败(`nullptr` / `kind_mismatch`)。
+- 无关多态类型可经 `dynamic_cast` 交叉转成功。
+- 所有入口失败安全;**`const` 限定的源或目标类型经 `static_assert` 编译期拒绝**。
+
+```cpp
+template <typename T, typename U>
+T* as(U* p) noexcept {
+    static_assert(!std::is_const<T>::value && !std::is_const<U>::value,
+        "rtti::as/cast do not accept const-qualified source or target types");
+    // p == nullptr → nullptr
+    // is_base_of<T, U>    → 协变(或同型):经 detail::base_adjuster<U, T>::run 在 void* 源上 static_cast。
+    // is_base_of<U, T>    → 逆变下转:is_polymorphic<U> 时 dynamic_cast<T*>(p),否则 nullptr。
+    // 无关               → 两者都多态时 dynamic_cast<T*>(p),否则 nullptr。
+}
+
+template <typename T, typename U>
+result<T*> cast(U* p) {
+    // p == nullptr → r.err.code = no_such_field
+    // q = as<T>(p); q == nullptr → r.err.code = kind_mismatch
+    // else → r.value = q
+}
+```
+
+| 情形 | `as<T>(p)` | `cast<T>(p)` |
+|---|---|---|
+| `p == nullptr` | `nullptr` | `no_such_field` |
+| `is_base_of<T, U>`(上转/同型) | 偏移正确 `static_cast` | 指针 |
+| `is_base_of<U, T>`(下转),`U` 多态 | `dynamic_cast<T*>(p)` | 指针或 `kind_mismatch` |
+| `is_base_of<U, T>`,`U` 非多态 | `nullptr` | `kind_mismatch` |
+| 无关,两者多态 | `dynamic_cast<T*>(p)` | 指针或 `kind_mismatch` |
+| 无关,非同多态 | `nullptr` | `kind_mismatch` |
+| `T` 或 `U` const 限定 | 编译错误(`static_assert`) | 编译错误(`static_assert`) |
+
+示例:
+
+```cpp
+struct Base { virtual ~Base() = default; };
+struct Derived : Base {};
+Derived d;
+Base* b = &d;
+assert(rtti::as<Derived>(b) == &d);   // 下转,多态源
+assert(!rtti::cast<int>(b).ok());     // kind_mismatch
+```
+
+---
+
+## 15. `object_ref<T>` 实例句柄
+
+反射创建的 `T` 实例句柄(spec 18.2)。两种生命周期模式:
+
+- **RAII(默认)**:句柄拥有堆实例并自身析构时销毁(由 `make_object<T>` / `make_object<T>(args)` 创建)。
+- **手动(分配器路径)**:调用方拥有裸内存(`make_object<T>` 带分配器);必须显式调用 `destroy()`。句柄析构不动手动实例,防双释放。
+
+所有操作委托反射核心(字段表、`to_value` / `from_value`、属性、`type_of`);建句柄无需格式适配器。
+
+```cpp
+template <typename T>
+class object_ref {
+public:
+    using value_type = T;
+
+    object_ref() noexcept = default;
+    ~object_ref() noexcept;
+    object_ref(object_ref&& o) noexcept;
+    object_ref& operator=(object_ref&& o) noexcept;
+    object_ref(const object_ref&) = delete;
+    object_ref& operator=(const object_ref&) = delete;
+
+    T* get() noexcept;
+    const T* get() const noexcept;
+    T* operator->() noexcept;
+    const T* operator->() const noexcept;
+    T& operator*() noexcept;
+    const T& operator*() const noexcept;
+    bool valid() const noexcept;
+    explicit operator bool() const noexcept;
+
+    // C# 风格变体转换:见 rtti::as / rtti::cast。
+    template <typename Target>
+    Target* as() noexcept;
+    template <typename Target>
+    result<Target*> cast() noexcept;
+    template <typename Target>
+    Target* as() const noexcept;
+    template <typename Target>
+    result<Target*> cast() const noexcept;
+
+    void destroy() noexcept;
+
+    // --- 构造助手(高级) ---
+    static object_ref adopt(T* p) noexcept;
+    static object_ref placement(T* p, std::function<void(void*)> release) noexcept;
+
+    // --- 字段 get/set(spec 18.2) ---
+    error_code get(const char* name, field_value& out) const noexcept;
+    error_code set(const char* name, const field_value& v) noexcept;
+
+    // --- 序列化桥(格式无关 value_io 路径) ---
+    error_code to_value(value_io* dst) const;
+    error_code from_value(const value_io* src);
+    error_code to_value(value_io* dst, const rtti::detail::naming_policy& np) const;
+    error_code from_value(const value_io* src, const rtti::detail::naming_policy& np);
+
+    // --- 容器操作(spec 18.2) ---
+    error_code add(const char* name, const value_io* element) noexcept;
+    error_code add(const char* name, const field_value& element) noexcept;
+    error_code erase_at(const char* name, std::size_t index) noexcept;
+    error_code erase_key(const char* name, string_view key) noexcept;
+    error_code clear(const char* name) noexcept;
+    std::size_t field_size(const char* name, error_code* out_err = nullptr) const noexcept;
+    template <typename Fn>
+    error_code for_each_element(const char* name, value_io* scratch, Fn&& fn) const noexcept;
+    // 容器字段元素类型(spec 18.2 类型查询)。
+    const type_desc* element_type(const char* name) const noexcept;
+
+    // --- 属性(spec 18.2 / 第 17 节) ---
+    std::size_t attr_count() const noexcept;
+    bool has_attr(string_view name) const noexcept;
+    const attr* find_attr(string_view name) const noexcept;
+    field_attr_list field_attr(string_view name) const noexcept;
+    bool field_has_attr(string_view name, string_view attribute) const noexcept;
+
+    // --- 类型查询(spec 18.2) ---
+    const type_desc* type_of() const noexcept;
+};
+```
+
+| 成员 | 语义 |
+|---|---|
+| `valid()` / `operator bool` | `p_ != nullptr`。 |
+| `get()` / `operator->` / `operator*` | 到包装实例的裸访问。 |
+| `as<Target>()` / `cast<Target>()` | 包装指针上的变体转换(见 §14);返回指针借用句柄对象。 |
+| `destroy()` | 手动模式销毁:运行析构并把裸内存还给分配器释放器。幂等(二次调用空操作)。RAII 模式释放拥有的实例。 |
+| `adopt(p)` | 收养堆实例(RAII 模式;所有权转移给句柄)。 |
+| `placement(p, release)` | 包装 placement 构造的实例(手动模式)。`release`(可选,拥有者提供)在 `destroy()` 运行析构后归还裸内存;arena/单调分配器可不传释放器。 |
+| `get(name, out)` | 按名读反射字段;字段缺席 `no_such_field`。 |
+| `set(name, v)` | 按名写反射字段;缺席 `no_such_field`,值类别不匹配 `kind_mismatch`。 |
+| `to_value(dst)` / `from_value(src)` | 经格式无关 `value_io` 桥序列化。 |
+| `to_value / from_value(dst/src, np)` | 遵守命名策略的命名转换变体。 |
+| `add(name, element)` | 从 `value_io` 节点把元素追加到容器字段;缺席 `no_such_field`。 |
+| `add(name, element)` | 把一个标量元素追加到容器字段(map 不支持 → `kind_mismatch`)。 |
+| `erase_at(name, index)` / `erase_key(name, key)` | 从容器字段按索引/键擦除。 |
+| `clear(name)` | 清空容器字段。 |
+| `field_size(name, out_err)` | 容器字段元素数;给出 `out_err` 时设置之(失败回 0)。 |
+| `for_each_element(name, scratch, fn)` | 访问每个元素(带调用方提供的 scratch 节点)。 |
+| `element_type(name)` | 容器字段元素类型描述符,字段缺席/非容器返回 `nullptr`。 |
+| `attr_count` / `has_attr` / `find_attr` / `field_attr` / `field_has_attr` | 委托 §6 类型级函数的属性查询。 |
+| `type_of()` | `rtti::type_of<T>()`。 |
+
+---
+
+## 16. `instance` 类型擦除句柄
+
+异构 ORM 池的类型擦除实例句柄(spec 18.2)。包装任意 `object_ref<T>` 并暴露一套小型统一操作:类型与描述符查询、按名字段 get/set、`value_io` 序列化桥。仅可移动;显式 `destroy()` 转发给被包装句柄。
+
+```cpp
+class instance {
+public:
+    instance() noexcept = default;
+    ~instance() noexcept;
+    instance(instance&& o) noexcept;
+    instance& operator=(instance&& o) noexcept;
+    instance(const instance&) = delete;
+    instance& operator=(const instance&) = delete;
+
+    template <typename T>
+    static instance from(object_ref<T> handle);
+
+    type_id type() const noexcept;
+    const type_desc* type_of() const noexcept;
+    bool valid() const noexcept;
+    explicit operator bool() const noexcept;
+
+    template <typename T>
+    bool is() const noexcept;
+
+    void* data() noexcept;
+    const void* data() const noexcept;
+
+    error_code get(const char* name, field_value& out) const noexcept;
+    error_code set(const char* name, const field_value& v) noexcept;
+    error_code to_value(value_io* dst) const;
+    error_code from_value(const value_io* src);
+    void destroy() noexcept;
+
+    // 经类型擦除句柄的 C# 风格变体转换。
+    template <typename T>
+    T* as() noexcept;
+    template <typename T>
+    result<T*> cast() noexcept;
+};
+```
+
+| 成员 | 语义 |
+|---|---|
+| `from<T>(handle)` | 包装类型化 `object_ref<T>` 句柄。 |
+| `type()` | 被包装 `type_id`(存句柄的静态类型)。 |
+| `type_of()` | 被包装类型描述符。 |
+| `valid()` / `operator bool` | `obj_ != nullptr && op_ != nullptr`。 |
+| `is<T>()` | 精确运行期类型相等:包装对象类型为 `T` 时为真。「is-a」关系用 `is_derived_from<T>`(reflect.hpp)。 |
+| `data()` | 被包装对象指针(类型擦除),句柄有效期间有效。 |
+| `get(name, out)` / `set(name, v)` | 经操作表按名字段 get/set;句柄无效 `no_such_field`。 |
+| `to_value(dst)` / `from_value(src)` | `value_io` 序列化桥。 |
+| `destroy()` | 手动(分配器)实例的显式销毁;RAII 句柄由被包装 `object_ref` 释放。`destroy()` 后句柄为空。 |
+| `as<T>()` | 经类型擦除句柄的变体转换。完整精度:运行期动态类型(存类型多态时)解析为它的反射描述符,基链的偏移正确调整器计算目标子对象。动态描述符无法组成目标时,遍历回退到 (a) 目标正是该动态类型时的运行期动态类型精确地址,再 (b) 静态链(到达存静态类型的基)。失败返回 `nullptr`。 |
+| `cast<T>()` | `as<T>()` 包进 `result<T*>`:无效/空句柄 `no_such_field`,`as` 失败 `kind_mismatch`。 |
+
+`as<T>()` 转换行为细节:
+
+```cpp
+// 1. !valid() 或 null 包装指针 → nullptr
+// 2. target = rtti::type_of<T>()(须 rtti:: 限定:类成员 type_of() 会遮蔽自由函数)
+// 3. 存类型多态且其动态类型比静态类型更派生:
+//      a. dyn_ptr = most_derived(polymorphic T 经 dynamic_cast<void*>)
+//      b. dd = detail::find_desc(*dt);找到则
+//         result = detail::adjust_to(dyn_ptr, dd, target, 0)
+//      c. result == nullptr 且 target 恰为动态类型时,result = dyn_ptr
+// 4. 回退:result = detail::adjust_to(static_ptr, type_of_, target, 0)
+//    (组成静态链,到达存静态类型的基)
+// 5. 返回 static_cast<T*>(result)
+```
+
+内部助手 `detail::same_type_id`、`detail::derived_from_desc`(运行期基链深度守卫遍历,最大深 64)、`detail::adjust_to`(从 `from` 向 `target` 组成偏移正确调整器,深度守卫)与 `detail::scalar_convertible`(上游转换器用的运行期标量可转换判定)支持这些转换。
+
+---
+
+## 17. 方法反射
+
+`reflect_method<T>("Name", args...)` 分派**已注册静态**方法(无实例);`reflect_method(obj, "Name", args...)` 经其实例(`T` 对象、`object_ref<T>` 或 `instance` 句柄)分派成员方法。方法逐个宏一次注册(`RTTI_DEFINE_METHOD` / `RTTI_DEFINE_STATIC_METHOD`):每个把 `method_entry` 链入 `methods<T>()` / `method_count<T>()` 读取的按类型表。参数经 `ctor_arg` 族旅行(标量 `field_value` 或 `value_io` 节点,位置绑定);结果回标量 `field_value`,复合类型则经调用方提供的 `value_io` 节点。
+
+错误码:未注册 → `no_such_method`;实参数/类型不匹配 → `kind_mismatch`;缺实例 → `no_such_field`。绝不抛、绝不崩溃。
+
+### 17.1 `method_info`
+
+```cpp
+// 类型的一个反射方法(由 methods<T>() 返回)。
+struct method_info {
+    const char* name;
+    bool is_static;
+    const char* signature;
+};
+```
+
+### 17.2 `reflect_method` 重载
+
+静态方法调用:
+
+```cpp
+template <typename T>
+inline result<field_value> reflect_method(const char* name, const ctor_arg* args,
+                                          std::size_t count,
+                                          value_io* node = nullptr) noexcept;
+
+template <typename T>
+inline result<field_value> reflect_method(const char* name,
+                                          std::initializer_list<ctor_arg> args,
+                                          value_io* node = nullptr) noexcept;
+```
+
+经对象引用的成员方法调用(`T& obj`、`object_ref<T>&` 或类型擦除 `instance&`):
+
+```cpp
+template <typename T>
+inline result<field_value> reflect_method(T& obj, const char* name,
+                                          const ctor_arg* args, std::size_t count,
+                                          value_io* node = nullptr) noexcept;
+
+template <typename T>
+inline result<field_value> reflect_method(T& obj, const char* name,
+                                          std::initializer_list<ctor_arg> args,
+                                          value_io* node = nullptr) noexcept;
+
+template <typename T>
+inline result<field_value> reflect_method(object_ref<T>& obj, const char* name,
+                                          const ctor_arg* args, std::size_t count,
+                                          value_io* node = nullptr) noexcept;
+
+template <typename T>
+inline result<field_value> reflect_method(object_ref<T>& obj, const char* name,
+                                          std::initializer_list<ctor_arg> args,
+                                          value_io* node = nullptr) noexcept;
+
+inline result<field_value> reflect_method(instance& obj, const char* name,
+                                          const ctor_arg* args, std::size_t count,
+                                          value_io* node = nullptr) noexcept;
+
+inline result<field_value> reflect_method(instance& obj, const char* name,
+                                          std::initializer_list<ctor_arg> args,
+                                          value_io* node = nullptr) noexcept;
+```
+
+| 重载族 | 失败条件 |
+|---|---|
+| 静态(`reflect_method<T>`) | `name == nullptr`,或 `count > 0 && args == nullptr` → `kind_mismatch`;方法找不到 → `no_such_method`;无实例调成员方法 → `no_such_field`;调用错误透传。 |
+| `T& obj` | 同静态,但走成员路径;实例指针恒在。 |
+| `object_ref<T>& obj` | 无效句柄 → `no_such_field`;然后委托 `T&` 重载。 |
+| `instance& obj` | 无效句柄 → `no_such_field`;`name == nullptr` 或坏 `args` → `kind_mismatch`;全局表方法找不到 → `no_such_method`。 |
+
+结果:标量结果(`bool`、枚举、整型、浮点、`string_view`、`const char*`)落在 `result.value`(`field_value`);复合结果(容器、反射结构体、`std::string`,…)要求 `node`,经 `rtti::to_value` 写入;标量且无任何汇 → `kind_mismatch`。
+
+### 17.3 `method_count<T>()` / `methods<T>()`
+
+```cpp
+template <typename T>
+inline std::size_t method_count() noexcept;
+
+template <typename T>
+inline const method_info* methods() noexcept;
+```
+
+`method_count<T>()` 是已注册方法数;`methods<T>()` 返回反射表(空为 `nullptr`),首次使用时一次性构建。
+
+内部记账在 `namespace rtti::detail`:`method_entry` 链表节点、`method_head<T>()`/`method_link<T>`(按类型表头/链)、`method_global_head()`/`method_global_link`(类型擦除 `instance` 查找用程序级表)、`member_traits`/`static_traits`(成员/静态方法签名分解)、`decay_tuple`(剥引用的参数 tuple)、`method_fill`(运行期实参转参数)、`scalar_field`/`result_assign`(结果投递)、`is_void_ret`、`member_apply`/`member_invoke` 与 `static_apply`/`static_invoke`(调用封装)、`find_method`/`find_method_global`、`method_table<T>`(按类型方法表)。
+
+示例:
+
+```cpp
+struct Calc {
+    static int add(int a, int b) { return a + b; }
+    int mul(int a, int b) { return a * b; }
+};
+RTTI_DEFINE_STATIC_METHOD(Calc, add)   // namespace scope
+RTTI_DEFINE_METHOD(Calc, mul)
+
+rtti::ctor_arg args[] = {
+    rtti::ctor_arg::scalar(rtti::field_value::of(int64_t(3))),
+    rtti::ctor_arg::scalar(rtti::field_value::of(int64_t(4))),
+};
+auto r = rtti::reflect_method<Calc>("add", args, 2);
+assert(r.ok() && r.value.as_integer() == 7);
+
+Calc c;
+auto r2 = rtti::reflect_method(c, "mul", args, 2);
+assert(r2.ok() && r2.value.as_integer() == 12);
+```
