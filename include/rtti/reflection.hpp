@@ -1793,6 +1793,16 @@ const type_desc* template_arg_desc_of(std::size_t index) noexcept {
     return template_args_of<T>()[index];
 }
 
+// Visit each registered template argument in declaration order.
+// fn(std::size_t index, const type_desc* arg_type).
+template <typename T, typename Fn>
+void for_each_template_arg(Fn&& fn) {
+    const std::size_t n = template_info<T>::count;
+    for (std::size_t i = 0; i < n; ++i) {
+        fn(i, template_arg_desc_of<T>(i));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Derived-type merge machinery (spec 19). The macro family emits, for every
 // registered type, a `members` tuple holding the typed member pointers of the

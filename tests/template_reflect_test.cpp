@@ -100,6 +100,9 @@ RTTI_TEMPLATE_INFO(std::vector, int)
 RTTI_TEMPLATE_INFO(rtti_test_detail::TemplateRec, int)
 // Empty registration: guarded macro must yield count 0 / empty args tuple.
 RTTI_TEMPLATE_INFO(rtti_test_detail::EmptyTpl)
+// Registered std::pair instance for the for_each_template_arg traversal tests
+// (two arguments in declaration order; std::pair is otherwise unregistered).
+RTTI_TEMPLATE_INFO(std::pair, int, std::string)
 
 RTTI_DEFINE_TYPE(rtti_test_detail::TemplateRecPlain, payload, note)
 
@@ -291,6 +294,26 @@ RTTI_TEST_CASE(TemplateTestCoexists) {
     RTTI_CHECK_EQ(fv.as_integer(), int64_t(7));
     RTTI_CHECK(rtti::get_field(plain, "note", fv));
     RTTI_CHECK_EQ(fv.as_string(), std::string("hi"));
+}
+
+// --- for_each_template_arg<T>: visit each registered argument --------------
+
+RTTI_TEST_CASE(ForEachTemplateArg) {
+    using P = std::pair<int, std::string>;
+    std::size_t n = 0;
+    rtti::for_each_template_arg<P>([&](std::size_t i, const rtti::type_desc* td) {
+        RTTI_CHECK(td != nullptr);
+        RTTI_CHECK_EQ(i, n);
+        ++n;
+    });
+    RTTI_CHECK_EQ(n, rtti::template_arg_count<P>());
+    RTTI_CHECK_EQ(n, std::size_t(2));
+}
+
+RTTI_TEST_CASE(ForEachTemplateArgNonTemplate) {
+    std::size_t n = 0;
+    rtti::for_each_template_arg<int>([&](std::size_t, const rtti::type_desc*) { ++n; });
+    RTTI_CHECK_EQ(n, std::size_t(0));
 }
 
 } // namespace rtti_test_lib
