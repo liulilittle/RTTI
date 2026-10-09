@@ -1466,3 +1466,621 @@ Calc c;
 auto r2 = rtti::reflect_method(c, "mul", args, 2);
 assert(r2.ok() && r2.value.as_integer() == 12);
 ```
+
+---
+
+## 18. 宏设施
+
+有界实参计数 + 平展迭代。迭代预展开且非递归;每个 `RTTI_APPLY_N` 每实参展开一次 `M`。上限(16)仅为保持宏有界;字段计数上限不是反射类型的设计限制。
+
+### 18.1 基本助手
+
+```cpp
+#define RTTI_CAT_IMPL(a, b) a##b
+#define RTTI_CAT(a, b) RTTI_CAT_IMPL(a, b)
+
+#define RTTI_EXPAND(...) __VA_ARGS__
+```
+
+`RTTI_CAT` 是间接(两级)token 粘贴;`RTTI_EXPAND` 强制实参展开。
+
+### 18.2 空实参检测
+
+```cpp
+#define RTTI_IBP_SPLIT(i, ...) RTTI_IBP_SPLIT_I(i, __VA_ARGS__)
+#define RTTI_IBP_SPLIT_I(i, ...) RTTI_IBP_PRIMITIVE_CAT(RTTI_IBP_SPLIT_, i)(__VA_ARGS__)
+#define RTTI_IBP_SPLIT_0(a, ...) a
+#define RTTI_IBP_SPLIT_1(a, ...) __VA_ARGS__
+#define RTTI_IBP_PRIMITIVE_CAT(a, ...) a ## __VA_ARGS__
+#define RTTI_IBP_CAT(a, ...) RTTI_IBP_PRIMITIVE_CAT(a, __VA_ARGS__)
+#define RTTI_IBP_IS_VARIADIC_C(...) 1
+#define RTTI_IBP_IS_VARIADIC_R_1 1,
+#define RTTI_IBP_IS_VARIADIC_R_RTTI_IBP_IS_VARIADIC_C 0,
+#define RTTI_IS_BEGIN_PARENS(...)                                              \
+    RTTI_IBP_SPLIT(0, RTTI_IBP_CAT(RTTI_IBP_IS_VARIADIC_R_,                   \
+                                   RTTI_IBP_IS_VARIADIC_C __VA_ARGS__))
+
+#define RTTI_CAT2_II(res) res
+#define RTTI_CAT2_I(a, b) RTTI_CAT2_II(a ## b)
+#define RTTI_CAT2(a, b) RTTI_CAT2_I(a, b)
+
+#define RTTI_IS_EMPTY_APPLY_1 1
+#define RTTI_IS_EMPTY_APPLY_0 0
+
+// 当 variadic 列表为空时为 1,否则 0。
+#define RTTI_IS_EMPTY(...)                                                      \
+    RTTI_CAT2(RTTI_IS_EMPTY_APPLY_, RTTI_IS_BEGIN_PARENS(__VA_ARGS__ ()))
+```
+
+`RTTI_IS_BEGIN_PARENS(...)` 检测 variadic 列表是否为空(Boost PP `is_begin_parens` 习语;要求合规预处理器 `/Zc:preprocessor`,反射核心总在其下编译)。`RTTI_IS_EMPTY(...)` 空为 1,否则 0。
+
+### 18.3 实参计数
+
+```cpp
+#define RTTI_NARG_I(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, \
+                    _14, _15, _16, N, ...)                                   \
+    N
+#define RTTI_NARG(...)                                                        \
+    RTTI_NARG_I(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+```
+
+计数实参 0..16。单级形式(`RTTI_NARG` → `RTTI_NARG_I`,无中间 variadic 宏)是 MSVC 合规预处理器所需。注意:**空列表目前得 1**;空 `RTTI_DEFINE_TYPE`(零字段)情形经 `RTTI_IS_EMPTY` 另行处理。
+
+### 18.4 平展迭代:`RTTI_APPLY_0` .. `RTTI_APPLY_16`、`RTTI_APPLY`、`RTTI_APPLY_OPT`
+
+```cpp
+#define RTTI_APPLY_0(M, T)
+#define RTTI_APPLY_1(M, T, a1) M(T, a1)
+#define RTTI_APPLY_2(M, T, a1, a2) M(T, a1) M(T, a2)
+// ... 直到 RTTI_APPLY_16(M, T, a1, ..., a16)
+
+#define RTTI_APPLY(M, T, ...) \
+    RTTI_EXPAND(RTTI_CAT(RTTI_APPLY_, RTTI_NARG(__VA_ARGS__))(M, T, __VA_ARGS__))
+
+#define RTTI_APPLY_OPT_SEL_1(M, T, ...)
+#define RTTI_APPLY_OPT_SEL_0(M, T, ...) RTTI_APPLY(M, T, __VA_ARGS__)
+#define RTTI_APPLY_OPT(M, T, ...) \
+    RTTI_CAT2(RTTI_APPLY_OPT_SEL_, RTTI_IS_EMPTY(__VA_ARGS__))(M, T, __VA_ARGS__)
+```
+
+`RTTI_APPLY(M, T, a...)` 对每个实参展开 `M(T, a1) M(T, a2) ...`(预展开、非递归)。`RTTI_APPLY_OPT` 在列表为空时展开为空。
+
+---
+
+## 19. 字段注册辅助宏
+
+### 19.1 `RTTI_FIELD_DECL`、`RTTI_FIELD_REF`、`RTTI_FIELD_TYPE_DESC`
+
+```cpp
+#define RTTI_FIELD_DECL(T, f)                                                 \
+    static inline const ::rtti::typed_field_access<T, decltype(T::f)> rtti_acc_##f{ \
+        #f, &T::f, &typeid(decltype(T::f))};
+
+#define RTTI_FIELD_REF(T, f) &rtti_acc_##f,
+
+#define RTTI_FIELD_TYPE_DESC(T, f) { #f, &::rtti::type_of<decltype(T::f)> },
+```
+
+- `RTTI_FIELD_DECL` 每字段声明一个静态访问器(`typed_field_access<T, decltype(T::f)>`)。
+- `RTTI_FIELD_REF` 把其地址贡献给 `array` 表。
+- `RTTI_FIELD_TYPE_DESC` 给 `desc` 表贡献一个 `{name, resolver}` 条目。
+
+### 19.2 `RTTI_MEMBER_TYPES_*` / `RTTI_MEMBER_TYPES_OPT`
+
+按计数逗号连接的宏,产出 `decltype(&T::aN)` 成员指针类型表(无尾逗号;MSVC 拒绝模板实参表尾逗号)。整套覆盖计数 0..16:
+
+```cpp
+#define RTTI_MEMBER_TYPES_0(T)
+#define RTTI_MEMBER_TYPES_1(T, a1) decltype(&T::a1)
+#define RTTI_MEMBER_TYPES_2(T, a1, a2) decltype(&T::a1), decltype(&T::a2)
+// ... 直到 RTTI_MEMBER_TYPES_16(T, a1, ..., a16)
+
+#define RTTI_MEMBER_TYPES_OPT_SEL_1(T, ...)
+#define RTTI_MEMBER_TYPES_OPT_SEL_0(T, ...) \
+    RTTI_CAT(RTTI_MEMBER_TYPES_, RTTI_NARG(__VA_ARGS__))(T, __VA_ARGS__)
+#define RTTI_MEMBER_TYPES_OPT(T, ...) \
+    RTTI_CAT2(RTTI_MEMBER_TYPES_OPT_SEL_, RTTI_IS_EMPTY(__VA_ARGS__))(T, __VA_ARGS__)
+```
+
+### 19.3 `RTTI_MEMBER_VALUES_*` / `RTTI_MEMBER_VALUES_OPT`
+
+同样模式,产出成员指针值表(`&T::a1, &T::a2, ...`):
+
+```cpp
+#define RTTI_MEMBER_VALUES_0(T)
+#define RTTI_MEMBER_VALUES_1(T, a1) &T::a1
+#define RTTI_MEMBER_VALUES_2(T, a1, a2) &T::a1, &T::a2
+// ... 直到 RTTI_MEMBER_VALUES_16(T, a1, ..., a16)
+
+#define RTTI_MEMBER_VALUES_OPT_SEL_1(T, ...)
+#define RTTI_MEMBER_VALUES_OPT_SEL_0(T, ...) \
+    RTTI_CAT(RTTI_MEMBER_VALUES_, RTTI_NARG(__VA_ARGS__))(T, __VA_ARGS__)
+#define RTTI_MEMBER_VALUES_OPT(T, ...) \
+    RTTI_CAT2(RTTI_MEMBER_VALUES_OPT_SEL_, RTTI_IS_EMPTY(__VA_ARGS__))(T, __VA_ARGS__)
+```
+
+这些发射一个类型**自身**字段的 `members` tuple(spec 19),派生合并机制把它转成派生类型以构建偏移正确的基访问器。
+
+---
+
+## 20. 类型注册宏(`RTTI_DEFINE_TYPE*`)
+
+### 20.1 `RTTI_DEFINE_TYPE(T, ...)`
+
+命名空间作用域的非侵入式注册(公共成员)。特化包在 `rtti` 命名空间块内,使 MSVC 接受在另一命名空间内显式特化。
+
+```cpp
+#define RTTI_DEFINE_TYPE(T, ...)                                              \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct fields_of<T> {                                                     \
+        static constexpr std::size_t count =                                   \
+            (RTTI_IS_EMPTY(__VA_ARGS__) ? 0 : RTTI_NARG(__VA_ARGS__));         \
+        using members_type = std::tuple<                                      \
+            RTTI_MEMBER_TYPES_OPT(T, __VA_ARGS__)>;                           \
+        static inline const members_type members =                            \
+            members_type{ RTTI_MEMBER_VALUES_OPT(T, __VA_ARGS__) };           \
+        RTTI_APPLY_OPT(RTTI_FIELD_DECL, T, __VA_ARGS__)                       \
+        static inline const field_access_base* const array[                    \
+            (count > 0 ? count : 1)] = {                                      \
+            RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
+        };                                                                     \
+        static inline const field_type_desc desc[(count > 0 ? count : 1)] = { \
+            RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC, T, __VA_ARGS__)              \
+        };                                                                     \
+    };                                                                          \
+    }
+```
+
+**参数**:`T` — 反射类型;`...` — 公共成员名,声明序(至多 16;空列表合法,得 `count == 0`)。
+
+**效果**:以 `count`、`members_type`、`members`、访问器 `array` 与 `desc` 表特化 `rtti::fields_of<T>`。此后 `is_reflected<T>`、`field_count<T>`、`fields<T>`、`for_each_field`、`type_of<T>()` 等都可用。
+
+示例:
+
+```cpp
+struct Point { int x; int y; };
+RTTI_DEFINE_TYPE(Point, x, y)     // namespace scope
+assert(rtti::field_count<Point>() == 2);
+```
+
+### 20.2 `RTTI_DEFINE_TYPE_DERIVED(T, Base, ...)`
+
+派生类型的非侵入式注册(spec 19)。`Base` 的反射字段合并进 `T` 字段表、基在前,经偏移正确的 D 锚定访问器(虚/非虚继承都正确),且 `Base` 的 `type_id` 记入 `T` 运行期基链。
+
+```cpp
+#define RTTI_DEFINE_TYPE_DERIVED(T, Base, ...)                                \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct base_types<T> {                                                    \
+        using list = std::tuple<Base>;                                        \
+    };                                                                         \
+    }                                                                          \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct fields_of<T> {                                                     \
+        static constexpr std::size_t base_count =                             \
+            ::rtti::detail::base_total<::rtti::detail::base_list_t<T>>();     \
+        static constexpr std::size_t own_count =                              \
+            (RTTI_IS_EMPTY(__VA_ARGS__) ? 0 : RTTI_NARG(__VA_ARGS__));        \
+        static constexpr std::size_t count = base_count + own_count;          \
+        using members_type = std::tuple<                                      \
+            RTTI_MEMBER_TYPES_OPT(T, __VA_ARGS__)>;                           \
+        static inline const members_type members =                            \
+            members_type{ RTTI_MEMBER_VALUES_OPT(T, __VA_ARGS__) };           \
+        RTTI_APPLY_OPT(RTTI_FIELD_DECL, T, __VA_ARGS__)                       \
+        static inline const field_access_base* const own_table[              \
+            (own_count > 0 ? own_count : 1)] = {                              \
+            RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
+        };                                                                    \
+        static inline const field_type_desc own_desc[                        \
+            (own_count > 0 ? own_count : 1)] = {                              \
+            RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC, T, __VA_ARGS__)              \
+        };                                                                    \
+        static inline const field_access_base* const* const array =           \
+            ::rtti::detail::derived_pool<T>::accessors();                     \
+        static inline const field_type_desc* const desc =                     \
+            ::rtti::detail::derived_pool<T>::descriptors();                   \
+    };                                                                          \
+    }
+```
+
+**参数**:`T` — 派生类型;`Base` — 单一直接注册基;`...` — `T` 自身公共成员(可空)。
+
+**效果**:特化 `base_types<T>`(单基)与 `fields_of<T>`(合并表)。`array`/`desc` 指向一次性构建的 `detail::derived_pool<T>`。
+
+### 20.3 `RTTI_DEFINE_TYPE_WITH_DEFAULT(T, ...)`
+
+```cpp
+#define RTTI_DEFINE_TYPE_WITH_DEFAULT(T, ...)                                 \
+    RTTI_DEFINE_TYPE(T, __VA_ARGS__)                                          \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct has_default<T> : std::true_type {};                                \
+    }
+```
+
+`RTTI_DEFINE_TYPE` 加 `has_default<T>` 特化,使格式填充器在缺键时保留成员现值。
+
+### 20.4 `RTTI_DEFINE_TYPE_INTRUSIVE(T, ...)`(类内)
+
+```cpp
+#define RTTI_DEFINE_TYPE_INTRUSIVE(T, ...)                                    \
+    struct rtti_registration {                                                \
+        static constexpr std::size_t count =                                   \
+            (RTTI_IS_EMPTY(__VA_ARGS__) ? 0 : RTTI_NARG(__VA_ARGS__));         \
+        using members_type = std::tuple<                                      \
+            RTTI_MEMBER_TYPES_OPT(T, __VA_ARGS__)>;                           \
+        static inline const members_type members =                            \
+            members_type{ RTTI_MEMBER_VALUES_OPT(T, __VA_ARGS__) };           \
+        RTTI_APPLY_OPT(RTTI_FIELD_DECL, T, __VA_ARGS__)                       \
+        static inline const ::rtti::field_access_base* const array[            \
+            (count > 0 ? count : 1)] = {                                      \
+            RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
+        };                                                                     \
+        static inline const ::rtti::field_type_desc desc[                      \
+            (count > 0 ? count : 1)] = {                                      \
+            RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC, T, __VA_ARGS__)              \
+        };                                                                     \
+    };
+```
+
+用于类体内;`rtti_registration` 嵌套结构体经继承被 `fields_of<T>` 拾取(见 §2.2)。支持私有字段。
+
+### 20.5 `RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(T, ...)`
+
+```cpp
+#define RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(T, ...)                       \
+    using rtti_has_default = void;                                            \
+    RTTI_DEFINE_TYPE_INTRUSIVE(T, __VA_ARGS__)
+```
+
+侵入式变体加 `rtti_has_default`(启用 `has_default<T>`)。
+
+---
+
+## 21. 枚举注册宏
+
+### 21.1 `RTTI_ENUM_ENTRY(T, e)`
+
+```cpp
+#define RTTI_ENUM_ENTRY(T, e) ::rtti::enum_label<T>{#e, T::e},
+```
+
+一个表条目:`{ "e", T::e }`。由 `RTTI_DEFINE_ENUM` 内部使用。
+
+### 21.2 `RTTI_DEFINE_ENUM(T, ...)`
+
+```cpp
+// 空实参守卫:`enum E {}`(零枚举器实参)注册空表(count 0,空数组)。
+// RTTI_APPLY_OPT 在列表空时把枚举器表展开为空,故绝无畸形
+// `RTTI_ENUM_ENTRY(T,)` token 形成。
+#define RTTI_DEFINE_ENUM(T, ...)                                              \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct enum_table<T> {                                                    \
+        static constexpr std::size_t count =                                   \
+            (RTTI_IS_EMPTY(__VA_ARGS__) ? 0 : RTTI_NARG(__VA_ARGS__));         \
+        static inline const enum_label<T> array[(count > 0 ? count : 1)] =    \
+            { RTTI_APPLY_OPT(RTTI_ENUM_ENTRY, T, __VA_ARGS__) };              \
+    };                                                                          \
+    }
+```
+
+**参数**:`T` — 枚举类型;`...` — 枚举器名,注册序。**效果**:特化 `rtti::enum_table<T>` 的 `count` 与 `array`。此后 `enum_count<T>()`、`enum_to_string`、`enum_from_string`、`enum_name_at`、`enum_value_at`、`for_each_enum` 都可用。
+
+---
+
+## 22. 模板信息注册宏
+
+### 22.1 实参表助手 `RTTI_TEMPLATE_ARGS_1` .. `RTTI_TEMPLATE_ARGS_16`
+
+按计数逗号连接的宏,展开模板实参表而无尾逗号(MSVC 拒绝模板实参表尾逗号)。
+
+### 22.2 空感知选择器与括号包裹实参
+
+含逗号的类型-id(如 `std::pair<int,int>`)作为单实参以额外括号包裹传入:`RTTI_TEMPLATE_INFO(FnPair, (std::pair<int,int>))`。`RTTI_IS_EMPTY` 无法区分 `(...)` 与 `()`,故选择器**先**查是否以括号开头;每个元素经条件单层括号剥除器(`RTTI_TAO_UNPAREN`、`RTTI_TAO_ELEM`、按计数的 `RTTI_TAO_STRIP_1`..`RTTI_TAO_STRIP_16`、`RTTI_TAO_STRIP`)。于是 `RTTI_TEMPLATE_INFO(Fn, int, (std::pair<int,int>))` 产出 `Fn<int, std::pair<int,int>>`。
+
+### 22.3 `RTTI_TEMPLATE_INFO(T, ...)`
+
+```cpp
+// 示例:
+//   RTTI_TEMPLATE_INFO(MyBox, int, double, std::string)
+// 特化 template_info<MyBox<int, double, std::string>>,含实参类型 std::tuple 与其计数。
+#define RTTI_TEMPLATE_INFO(T, ...)                                            \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct template_info<T<RTTI_TEMPLATE_ARGS_OPT(T, __VA_ARGS__)>> {         \
+        static constexpr std::size_t count =                                  \
+            RTTI_TEMPLATE_ARGS_COUNT(__VA_ARGS__);                            \
+        using args = std::tuple<RTTI_TEMPLATE_ARGS_OPT(T, __VA_ARGS__)>;      \
+        using registered = void;                                              \
+    };                                                                         \
+    }
+```
+
+**参数**:`T` — 类模板;`...` — 其类型实参(至多 16;空列表允许——全默认参数的模板注册为 `T<>`,count 0 空 tuple)。含逗号实参须额外括号包裹。
+
+**效果**:特化 `template_info<Inst>` 的 `count`、`args`(`std::tuple`)与 `registered`。此后 `is_template_instance`、`template_arg_count`、`template_args`、`template_arg_at`、`template_args_of`、`template_arg_desc_of`、`for_each_template_arg` 都可用。未注册模板实例(或非模板类型)报安全空表。
+
+---
+
+## 23. 属性注册宏
+
+属性表是命名空间作用域 `rtti::attr_table<T>` / `rtti::field_attr_table<T>` 的显式特化,因此与侵入式/非侵入式字段注册宏族都组合,而不改动它们。属性可选:无注册的类型直接报 count 0 / null 指针。
+
+每个 `RTTI_ATTR(...)` 展开为工厂调用(`make_attr`),故每个逗号都嵌套在括号内;预处理器永不误计花括号初始化表的尾逗号。
+
+### 23.1 实参助手
+
+```cpp
+#define RTTI_ATTR_ARG_MAKE(_, a) ::rtti::detail::make_attr_arg(a),
+#define RTTI_ATTR_ARGS(...) RTTI_APPLY_OPT(RTTI_ATTR_ARG_MAKE, _, __VA_ARGS__)
+
+// 一个属性值:{ name, { args... } }。
+#define RTTI_ATTR(name, ...) ::rtti::make_attr(name, {RTTI_ATTR_ARGS(__VA_ARGS__)})
+
+#define RTTI_ATTR_REF(_, a) a,
+#define RTTI_ATTR_LIST(...) RTTI_APPLY_OPT(RTTI_ATTR_REF, _, __VA_ARGS__)
+
+// 一个字段的属性表:{ "field", { attrs... } }。
+#define RTTI_FIELD_ATTR_ENTRY(f, ...) \
+    ::rtti::make_field_attr(#f, {RTTI_ATTR_LIST(__VA_ARGS__)})
+```
+
+- `RTTI_ATTR(name, args...)` — 一个属性展开:`make_attr(name, {args...})`。
+- `RTTI_FIELD_ATTR_ENTRY(f, attrs...)` — 一个字段属性表条目:`make_field_attr("f", {attrs...})`。
+
+### 23.2 `RTTI_DEFINE_TYPE_ATTRS(T, ...)`
+
+```cpp
+// 命名空间作用域类型级属性表特化。空声明(无属性)合法,count 0。
+#define RTTI_DEFINE_TYPE_ATTRS(T, ...)                                        \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct attr_table<T> {                                                    \
+        static constexpr std::size_t count =                                   \
+            (RTTI_IS_EMPTY(__VA_ARGS__) ? 0 : RTTI_NARG(__VA_ARGS__));         \
+        static inline const attr array[(count > 0 ? count : 1)] = {            \
+            RTTI_EXPAND(__VA_ARGS__)                                          \
+        };                                                                     \
+        using registered = void;                                              \
+    };                                                                          \
+    }
+```
+
+**参数**:`T` — 反射类型;`...` — `RTTI_ATTR(...)` 展开(可空)。**效果**:特化 `attr_table<T>`;启用 `attrs_defined<T>()`、`attr_count<T>()`、`attr_at`、`find_attr`、`has_attr`。
+
+### 23.3 `RTTI_DEFINE_FIELD_ATTRS(T, ...)`
+
+```cpp
+// 命名空间作用域逐字段属性表特化。
+#define RTTI_DEFINE_FIELD_ATTRS(T, ...)                                       \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct field_attr_table<T> {                                              \
+        static constexpr std::size_t count =                                   \
+            (RTTI_IS_EMPTY(__VA_ARGS__) ? 0 : RTTI_NARG(__VA_ARGS__));         \
+        static inline const field_attr_entry array[                           \
+            (count > 0 ? count : 1)] = { RTTI_EXPAND(__VA_ARGS__) };           \
+        using registered = void;                                              \
+    };                                                                          \
+    }
+```
+
+**参数**:`T` — 反射类型;`...` — `RTTI_FIELD_ATTR_ENTRY(f, attrs...)` 展开(可空)。**效果**:特化 `field_attr_table<T>`;启用字段级属性查询(`field_attr`、`field_attr_count`、`field_attr_at`、`field_find_attr`、`field_has_attr`)。
+
+示例:
+
+```cpp
+struct Point { int x; int y; };
+RTTI_DEFINE_TYPE(Point, x, y)                       // namespace scope
+RTTI_DEFINE_TYPE_ATTRS(Point, RTTI_ATTR("color", "red"))
+RTTI_DEFINE_FIELD_ATTRS(Point,
+    RTTI_FIELD_ATTR_ENTRY(x, RTTI_ATTR("unit", "mm")))
+assert(rtti::attrs_defined<Point>());
+assert(rtti::field_has_attr<Point>("x", "unit"));
+```
+
+---
+
+## 24. 构造器注册宏
+
+每个构造参数一个括号 `(name, type, optional)` 三元组。宏计数参数、构建描述符数组、参数类型表(`std::tuple`)并接线通用运行期工厂,镜像显式 proto schema 特化风格。`std::map<std::string, int>` 这类模板类型参数没问题——逗号在括号内。
+
+### 24.1 三元组访问器
+
+```cpp
+#define RTTI_CTOR_GET_1(a, b, c) a
+#define RTTI_CTOR_GET_2(a, b, c) b
+#define RTTI_CTOR_GET_3(a, b, c) c
+#define RTTI_CTOR_NAME(triple) RTTI_CTOR_GET_1 triple
+#define RTTI_CTOR_TYPE(triple) RTTI_CTOR_GET_2 triple
+#define RTTI_CTOR_OPTIONAL(triple) RTTI_CTOR_GET_3 triple
+
+#define RTTI_CTOR_PARAM_DECL(T, triple)                                       \
+    {RTTI_CTOR_NAME(triple), &typeid(RTTI_CTOR_TYPE(triple)),                 \
+     RTTI_CTOR_OPTIONAL(triple), {}},
+```
+
+`RTTI_CTOR_NAME/TYPE/OPTIONAL` 解包 `(name, type, optional)` 三元组;`RTTI_CTOR_PARAM_DECL` 发射一个 `rtti::ctor_param` 初始化器。
+
+### 24.2 参数类型逗号连接器
+
+```cpp
+#define RTTI_CTOR_TYPES_0(T)
+#define RTTI_CTOR_TYPES_1(T, a1) RTTI_CTOR_TYPE(a1)
+#define RTTI_CTOR_TYPES_2(T, a1, a2) RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2)
+// ... 直到 RTTI_CTOR_TYPES_16(T, a1, ..., a16)
+```
+
+逗号连接的参数类型表(无尾逗号;MSVC 拒绝模板实参表内尾逗号)。
+
+### 24.3 `RTTI_DEFINE_CTOR(T, ...)`
+
+```cpp
+// 命名空间作用域为 T 注册反射构造器。至少一个 (name, type, optional) 参数。
+// 示例:
+//   RTTI_DEFINE_CTOR(MyType, ("x", int, false), ("y", std::string, true))
+#define RTTI_DEFINE_CTOR(T, ...)                                              \
+    namespace rtti {                                                          \
+    template <>                                                               \
+    struct ctor_registry<T> {                                                 \
+        static constexpr std::size_t count = RTTI_NARG(__VA_ARGS__);           \
+        static inline const ::rtti::ctor_param params[                        \
+            (count > 0 ? count : 1)] = {                                      \
+            RTTI_APPLY(RTTI_CTOR_PARAM_DECL, T, __VA_ARGS__)                  \
+        };                                                                     \
+        using param_types = std::tuple<RTTI_CAT(RTTI_CTOR_TYPES_,            \
+            RTTI_NARG(__VA_ARGS__))(T, __VA_ARGS__)>;                        \
+        using factory_fn = T* (*)(const ::rtti::ctor_arg*, std::size_t,       \
+                                   ::rtti::error_code&);                       \
+        static inline factory_fn factory =                                     \
+            &::rtti::detail::ctor_factory<T, param_types>;                    \
+    };                                                                          \
+    }
+```
+
+**参数**:`T` — 反射类型;`...` — 每构造参数至少一个 `(name, type, optional)` 三元组(`name` 字符串字面量;`type` C++ 参数类型;`optional` `bool`)。**效果**:特化 `ctor_registry<T>` 的 `count`、`params`、`param_types` 与接线的 `factory`;启用 `has_ctor_registry<T>` 与经 `make_object<T>` / `create_instance<T>`(reflect.hpp)的反射构造。
+
+示例:
+
+```cpp
+struct MyType {
+    MyType(int x, std::string y) : x_(x), y_(std::move(y)) {}
+    int x_;
+    std::string y_;
+};
+RTTI_DEFINE_TYPE(MyType, x_, y_)                       // namespace scope
+RTTI_DEFINE_CTOR(MyType, ("x", int, false), ("y", std::string, true))
+// rtti::make_object<MyType>(rtti::ctor_arg::scalar("x", field_value::of(int64_t(1))))
+```
+
+---
+
+## 25. 方法注册宏
+
+每次宏调用在命名空间作用域注册类型 `T` 的**一个**方法:
+
+- `RTTI_DEFINE_METHOD(T, MethodName)` — 成员方法。
+- `RTTI_DEFINE_STATIC_METHOD(T, MethodName)` — 静态方法。
+
+每个把 `method_entry` 链入 `T` 的表(`method_link`)与类型擦除 `instance` 路径用的程序级表(`method_global_link`)。注册结构体按 `(method, line)` 唯一,故一个类型的多个方法,以及不同类型在不同行的同名方法,在同一 TU 共存。结构体在匿名命名空间内定义,故头中宏被多 TU 使用时每 TU 链接一个条目。
+
+```cpp
+#define RTTI_DEFINE_METHOD(T, MethodName)                                     \
+    namespace rtti { namespace detail { namespace {                           \
+    struct RTTI_CAT(RTTI_CAT(rtti_method_, MethodName), RTTI_CAT(_, __LINE__)) { \
+        static ::rtti::error_code call(void* self,                             \
+                                       const ::rtti::ctor_arg* args,           \
+                                       std::size_t count,                      \
+                                       ::rtti::field_value* out,               \
+                                       ::rtti::value_io* node) noexcept {      \
+            return ::rtti::detail::member_invoke<T>(&T::MethodName, self,      \
+                                                    args, count, out, node);  \
+        }                                                                     \
+        static const ::rtti::detail::method_entry* entry() noexcept {         \
+            static ::rtti::detail::method_entry e = {                         \
+                #MethodName, false,                                           \
+                typeid(decltype(&T::MethodName)).name(),                       \
+                &call, &typeid(T), nullptr};                                   \
+            return &e;                                                         \
+        }                                                                     \
+        static void link() noexcept {                                         \
+            ::rtti::detail::method_link<T>(entry());                          \
+            ::rtti::detail::method_global_link(entry());                      \
+        }                                                                     \
+        RTTI_CAT(RTTI_CAT(rtti_method_, MethodName), RTTI_CAT(_, __LINE__))() noexcept { \
+            link();                                                           \
+        }                                                                     \
+    };                                                                        \
+    static RTTI_CAT(RTTI_CAT(rtti_method_, MethodName), RTTI_CAT(_, __LINE__)) \
+        RTTI_CAT(RTTI_CAT(rtti_method_inst_, MethodName), RTTI_CAT(_, __LINE__)){}; \
+    } } }
+
+#define RTTI_DEFINE_STATIC_METHOD(T, MethodName)                              \
+    namespace rtti { namespace detail { namespace {                           \
+    struct RTTI_CAT(RTTI_CAT(rtti_smethod_, MethodName), RTTI_CAT(_, __LINE__)) { \
+        static ::rtti::error_code call(void*,                                 \
+                                       const ::rtti::ctor_arg* args,           \
+                                       std::size_t count,                      \
+                                       ::rtti::field_value* out,               \
+                                       ::rtti::value_io* node) noexcept {      \
+            return ::rtti::detail::static_invoke(&T::MethodName, args, count, \
+                                                 out, node);                  \
+        }                                                                     \
+        static const ::rtti::detail::method_entry* entry() noexcept {         \
+            static ::rtti::detail::method_entry e = {                         \
+                #MethodName, true,                                            \
+                typeid(decltype(&T::MethodName)).name(),                       \
+                &call, &typeid(T), nullptr};                                   \
+            return &e;                                                         \
+        }                                                                     \
+        static void link() noexcept {                                         \
+            ::rtti::detail::method_link<T>(entry());                          \
+            ::rtti::detail::method_global_link(entry());                      \
+        }                                                                     \
+        RTTI_CAT(RTTI_CAT(rtti_smethod_, MethodName), RTTI_CAT(_, __LINE__))() noexcept { \
+            link();                                                           \
+        }                                                                     \
+    };                                                                        \
+    static const RTTI_CAT(RTTI_CAT(rtti_smethod_, MethodName), RTTI_CAT(_, __LINE__)) \
+        RTTI_CAT(RTTI_CAT(rtti_smethod_inst_, MethodName), RTTI_CAT(_, __LINE__)){}; \
+    } } }
+```
+
+**参数**:`T` — 拥有类型;`MethodName` — (静态)成员函数名。方法签名由 `decltype(&T::MethodName)` 产生:返回类型与参数表经 `member_traits` / `static_traits` 分解;参数经 `ctor_arg`(位置绑定)旅行;结果经 `field_value` / `value_io` 汇回来(见 §17)。
+
+示例:
+
+```cpp
+struct Calc {
+    static int add(int a, int b) { return a + b; }
+    int mul(int a, int b) { return a * b; }
+};
+RTTI_DEFINE_STATIC_METHOD(Calc, add)   // namespace scope
+RTTI_DEFINE_METHOD(Calc, mul)
+assert(rtti::method_count<Calc>() == 2);
+```
+
+---
+
+## 26. 头结构与会 include 环说明
+
+反射核心的内联访问器(`typed_field_access::get_value`/`get_value_named` 与容器 `for_each` 路径)调用格式无关转换器(`to_value` / `from_value` / `member_to_value` / `member_to_value_named`),其内联定义在 `convert.hpp`。只包含本头(或 `reflect.hpp`)的 TU 实例化这些模板而看不到定义,链接期留未定义引用(LNK2019)。把 include 推到文件末尾打破潜在环(`convert.hpp` 顶部包含 `reflection.hpp`,`#pragma once` 抑制嵌套包含),同时让每个反射核心 TU 看到转换器定义:
+
+```cpp
+#include <rtti/convert.hpp>
+```
+
+头文件物理布局(行号对应当前文件):
+
+| 行 | 节 |
+|---|---|
+| 1-29 | 头注释、标准 include |
+| 30-269 | `namespace rtti` 开、转换器前向声明、`fields_of`、`base_types`、容器形状 trait、`key_traits`、`type_id` |
+| 266-805 | `type_id`、`field_value`、`field_value_to`、`value_io`、`field_access_base`、`typed_field_access` |
+| 807-857 | 侵入式 `fields_of` 拾取、`field_count`、`fields`、`for_each_field`、`has_default` |
+| 859-1163 | 属性系统(`attr_arg`、`attr`、表、`make_attr`、查询) |
+| 1165-1266 | 宏设施(`RTTI_NARG`、`RTTI_APPLY`、`RTTI_IS_EMPTY`,…) |
+| 1268-1323 | 枚举反射(`enum_label`、`enum_table`、枚举查询) |
+| 1325-1420 | 类型描述系统(`type_kind`、`type_desc` 族) |
+| 1422-1507 | 编译期判定、家族判别、枚举助手 |
+| 1509-1704 | `type_of` 与 `detail::type_of_impl` |
+| 1706-1804 | 模板实参反射 |
+| 1806-2010 | 派生类型合并机制 |
+| 2012-2397 | 反射构造(`ctor_arg`、`ctor_param`、`ctor_registry`) |
+| 2399-2455 | `as` / `cast` 引用转换 |
+| 2457-2717 | `object_ref<T>` |
+| 2719-2980 | `instance` 类型擦除句柄 |
+| 2982-3075 | 转换助手(`same_type_id`、`derived_from_desc`、`adjust_to`、`scalar_convertible`) |
+| 3077-3517 | 方法反射 |
+| 3520-3630 | 字段注册辅助宏 |
+| 3632-3746 | 类型/枚举注册宏 |
+| 3748-3901 | 模板信息注册宏 |
+| 3903-4056 | 属性/构造器注册宏 |
+| 4058-4145 | 方法注册宏、尾部 include |
+
+## 27. 其它语言
+
+- [English (英文版)](../en/reflection.md)
