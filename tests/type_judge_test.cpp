@@ -553,4 +553,40 @@ RTTI_TEST_CASE(JudgeTestAsCastObjectRef) {
     RTTI_CHECK(empty.cast<JudgeBase>().err.code == rtti::error_code::no_such_field);
 }
 
+RTTI_TEST_CASE(JudgeTestAsCastPolymorphic) {
+    using namespace rtti_test_detail;
+
+    // Polymorphic downcast hit: dynamic_cast succeeds on the exact dynamic type.
+    JudgePolyD pd;
+    pd.pd = 42;
+    JudgePoly* pbase = &pd;
+    JudgePolyD* hit = rtti::as<JudgePolyD>(pbase);
+    RTTI_CHECK(hit != nullptr && hit->pd == 42);
+    RTTI_CHECK(rtti::cast<JudgePolyD>(pbase).ok());
+
+    // Polymorphic downcast miss: dynamic type is the base, not the derived.
+    JudgePoly base_obj;
+    RTTI_CHECK(rtti::as<JudgePolyD>(&base_obj) == nullptr);
+    RTTI_CHECK(rtti::cast<JudgePolyD>(&base_obj).err.code == rtti::error_code::kind_mismatch);
+
+    // Unrelated polymorphic cross-cast: Right* -> Left* succeeds via dynamic_cast.
+    struct Left  { virtual ~Left() {} };
+    struct Right { virtual ~Right() {} };
+    struct Both  : Left, Right { int tag = 0; };
+    Both both;
+    Right* right = &both;
+    Left* left = rtti::as<Left>(right);
+    RTTI_CHECK(left != nullptr);
+    RTTI_CHECK(rtti::as<Right>(left) == right);
+
+    // Multiple inheritance upcast to a non-first base: offset must be correct.
+    struct A { int a = 0; };
+    struct B { int b = 0; };
+    struct AB : A, B { int c = 0; };
+    AB ab;
+    ab.a = 1; ab.b = 2; ab.c = 3;
+    B* pb = rtti::as<B>(&ab);
+    RTTI_CHECK(pb != nullptr && pb->b == 2);
+}
+
 } // namespace rtti_test_lib

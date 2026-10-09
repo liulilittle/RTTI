@@ -2283,9 +2283,10 @@ inline T* ctor_factory(const ctor_arg* args, std::size_t count, error_code& ec) 
 //   as<T>(p)   : nullptr on failure; no error payload.
 //   cast<T>(p) : result<T*> with kind_mismatch on failure and no_such_field
 //                for a null source.
-// Covariant upcasts use the compiler's offset-correct static_cast (virtual
-// bases via dynamic_cast, see detail::base_adjuster). Contravariant downcasts
-// require the static source type to be polymorphic (dynamic_cast); a
+// Covariant upcasts use the compiler's offset-correct static_cast, including
+// virtual bases and multiple inheritance (see detail::base_adjuster).
+// Contravariant downcasts require the static source type to be polymorphic
+// (dynamic_cast); a
 // non-polymorphic source cannot be checked at runtime and fails cleanly.
 // Unrelated polymorphic types may still succeed through a dynamic_cast
 // cross-cast. All entry points are failure-safe (spec section 0).
@@ -2293,6 +2294,8 @@ inline T* ctor_factory(const ctor_arg* args, std::size_t count, error_code& ec) 
 
 template <typename T, typename U>
 T* as(U* p) noexcept {
+    static_assert(!std::is_const<T>::value && !std::is_const<U>::value,
+        "rtti::as/cast do not accept const-qualified source or target types");
     if (p == nullptr) {
         return nullptr;
     }
@@ -2391,6 +2394,14 @@ public:
     }
     template <typename Target>
     result<Target*> cast() noexcept {
+        return rtti::cast<Target>(p_);
+    }
+    template <typename Target>
+    Target* as() const noexcept {
+        return rtti::as<Target>(p_);
+    }
+    template <typename Target>
+    result<Target*> cast() const noexcept {
         return rtti::cast<Target>(p_);
     }
 
