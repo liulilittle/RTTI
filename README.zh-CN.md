@@ -330,7 +330,8 @@ rtti::for_each_enum<Priority>([&](const char* name, Priority v) {
 struct Point { int x = 0; int y = 0; RTTI_DEFINE_TYPE_INTRUSIVE(Point, x, y) };
 
 int sum = 0;
-rtti::for_each_field(Point{2, 3}, [&](const char*, rtti::type_id, const rtti::field_value& v) {
+Point p{2, 3};
+rtti::for_each_field(p, [&](const char*, rtti::type_id, const rtti::field_value& v) {
     if (v.is_integer()) {
         sum += static_cast<int>(v.as_integer());
     }

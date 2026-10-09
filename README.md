@@ -94,7 +94,8 @@ RTTI_DEFINE_ENUM(Priority, low, normal, high)
 
 rtti::for_each_enum<Priority>([](const char* name, Priority v) { /* ... */ });
 // Point registered with RTTI_DEFINE_TYPE_INTRUSIVE(Point, x, y):
-rtti::for_each_field(Point{2, 3}, [](const char* n, rtti::type_id, const rtti::field_value& v) { /* ... */ });
+Point p{2, 3};
+rtti::for_each_field(p, [](const char* n, rtti::type_id, const rtti::field_value& v) { /* ... */ });
 // Box<int, std::string> registered with RTTI_TEMPLATE_INFO(Box, int, std::string):
 rtti::for_each_template_arg<Box<int, std::string>>([](std::size_t i, const rtti::type_desc* t) { /* ... */ });
 ```
