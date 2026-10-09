@@ -26,7 +26,8 @@ Full documentation lives under `docs/` (bilingual, mutually linked):
   `reflection.md` (core + macros + `as`/`cast`), `convert.md` (value model +
   `to_value`/`from_value`), `formats.md` (JSON/XML/INI/TOML), `proto-flat.md`
   (protobuf + FlatBuffers), `utils.md` (base_convert / date_time / naming /
-  version / gates).
+  version / gates), `reflect-tools.md` (runtime query / ORM / IoC / to_string /
+  string_ops).
 - **Design & architecture** — `docs/design/en|zh/architecture.md`: layers,
   core mechanisms, key decisions & rationale.
 - **Performance & benchmarks** — `docs/benchmarks/en|zh/performance-report.md`:

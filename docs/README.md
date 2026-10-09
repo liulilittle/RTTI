@@ -10,7 +10,8 @@ documents are bilingual (English + 简体中文) and mutually linked.
 | Interface: value conversion `convert.hpp` | [en/interface/convert.md](interface/en/convert.md) | [zh/interface/convert.md](interface/zh/convert.md) |
 | Interface: format adapters JSON/XML/INI/TOML | [en/interface/formats.md](interface/en/formats.md) | [zh/interface/formats.md](interface/zh/formats.md) |
 | Interface: protocols protobuf / FlatBuffers | [en/interface/proto-flat.md](interface/en/proto-flat.md) | [zh/interface/proto-flat.md](interface/zh/proto-flat.md) |
-| Interface: tools & support cluster (utils + reflect-tools) | [en/interface/utils.md](interface/en/utils.md) | [zh/interface/utils.md](interface/zh/utils.md) |
+| Interface: tools & support `base_convert`/`date_time`/`naming`/`version`/`rtti_fwd` | [en/interface/utils.md](interface/en/utils.md) | [zh/interface/utils.md](interface/zh/utils.md) |
+| Interface: reflect tools `reflect`/`ioc`/`to_string`/`str` | [en/interface/reflect-tools.md](interface/en/reflect-tools.md) | [zh/interface/reflect-tools.md](interface/zh/reflect-tools.md) |
 | Design & architecture | [en/design/architecture.md](design/en/architecture.md) | [zh/design/architecture.md](design/zh/architecture.md) |
 | Performance & benchmark report | [en/benchmarks/performance-report.md](benchmarks/en/performance-report.md) | [zh/benchmarks/performance-report.md](benchmarks/zh/performance-report.md) |
 

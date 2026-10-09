@@ -610,7 +610,11 @@ PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被
   树桥、扩展、`.fbs` schema 读取器。
 - [工具与支持簇](./docs/interface/en/utils.md) ·
   [中文](./docs/interface/zh/utils.md)—— base_convert / date_time / naming /
-  version / rtti_fwd;另含 reflect-tools(ORM / IoC / to_string / string_ops)。
+  version / rtti_fwd。
+- [反射工具集](./docs/interface/en/reflect-tools.md) ·
+  [中文](./docs/interface/zh/reflect-tools.md)—— `reflect.hpp` 运行时查询与
+  ORM(create_instance / bind)、`ioc.hpp` DI 容器、`to_string.hpp` /
+  `string_ops.hpp`(`rtti::str`)。
 
 ### 设计
 

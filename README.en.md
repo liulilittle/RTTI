@@ -679,7 +679,11 @@ they are built and run inside the sweep as well.)
   codecs, tree bridge, extensions, `.fbs` schema reader.
 - [Tools & support cluster](./docs/interface/en/utils.md) ·
   [中文](./docs/interface/zh/utils.md) — base_convert / date_time / naming /
-  version / rtti_fwd; also reflect-tools (ORM / IoC / to_string / string_ops).
+  version / rtti_fwd.
+- [Reflect tools](./docs/interface/en/reflect-tools.md) ·
+  [中文](./docs/interface/zh/reflect-tools.md) — `reflect.hpp` runtime query &
+  ORM (create_instance / bind), `ioc.hpp` DI container, `to_string.hpp` /
+  `string_ops.hpp` (`rtti::str`).
 
 ### Design
 
