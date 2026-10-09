@@ -613,7 +613,7 @@ struct has_default<T, std::void_t<typename T::rtti_has_default>>
 
 属性把附加元数据挂到反射类型或单个字段,运行期可查(如 C# attribute)。参与方式:
 
-- `attr_arg` — 属性参数的一个值(kind 化负载,如 `attr_arg::make_int(3)`、`make_str("x")` 等)。
+- `attr_arg` — 属性参数的一个值(kind 化负载,工厂为 `attr_arg::integer` / `attr_arg::real` / `attr_arg::text` / `attr_arg::boolean`;通用转换经 `detail::make_attr_arg`)。
 - `attr` — 一个属性:`name` + 参数数组。
 - `field_attr_entry` / `field_attr_list` — 字段级属性条目/列表。
 - `attr_table<T>` / `field_attr_table<T>` — 类型级/字段级属性表的静态注册表。

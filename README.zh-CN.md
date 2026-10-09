@@ -591,7 +591,7 @@ PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被
 
 - [English](README.en.md) —— 英文版。
 - [简体中文](README.zh-CN.md) —— 本文。
-- [docs 文档首页](../docs/README.md) —— 全部接口、设计与性能文档索引(中英双语)。
+- [docs 文档首页](docs/README.md) —— 全部接口、设计与性能文档索引(中英双语)。
 
 ### 接口参考(API Reference,双语)
 

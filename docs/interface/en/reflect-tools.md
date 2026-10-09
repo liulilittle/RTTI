@@ -701,7 +701,7 @@ assert(rtti::str::escape("a\nb") == "a\\nb");
   `from_value`/`to_value`, named conversion, number/node formatting, `memory`.
 - Tools & support: [`utils.md`](utils.md) — `base_convert`, `date_time`,
   `naming`, `version`, `rtti_fwd`.
-- Design & architecture: [`../design/en/architecture.md`](../design/en/architecture.md).
+- Design & architecture: [`../../design/en/architecture.md`](../../design/en/architecture.md).
 - 简体中文 edition: [`zh/reflect-tools.md`](../zh/reflect-tools.md).
 
 Constructor params are prepared through the same `ctor_registry<T>` /

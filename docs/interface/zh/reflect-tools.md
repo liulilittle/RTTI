@@ -638,5 +638,5 @@ assert(rtti::str::escape("a\nb") == "a\\nb");
   命名转换、数字/节点格式化、`memory`。
 - 工具与支持:[`utils.md`](utils.md) — `base_convert`、`date_time`、`naming`、
   `version`、`rtti_fwd`。
-- 设计与架构:[`../design/zh/architecture.md`](../design/zh/architecture.md)。
+- 设计与架构:[`../../design/zh/architecture.md`](../../design/zh/architecture.md)。
 - English edition (英文版): [`en/reflect-tools.md`](../en/reflect-tools.md)。

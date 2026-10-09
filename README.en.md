@@ -658,7 +658,7 @@ they are built and run inside the sweep as well.)
 
 - [English](README.en.md) — this file.
 - [中文](README.zh-CN.md).
-- [Docs home](../docs/README.md) — index of all interfaces, design and
+- [Docs home](docs/README.md) — index of all interfaces, design and
   benchmark documents (bilingual).
 
 ### Interface reference (API Reference, bilingual)
