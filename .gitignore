@@ -1,6 +1,7 @@
 # Build artifacts
 build/
 build-off/
+build-opt/
 cmake-build-*/
 *.user
 *.suo
@@ -19,6 +20,9 @@ cmake-build-*/
 
 # SDD / superpowers scratch
 .superpowers/
+
+# W3 backups (pre-edit snapshots)
+.opencode/backups/
 
 # Git worktrees
 .worktrees/
