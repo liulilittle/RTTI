@@ -549,7 +549,7 @@ parse("2026-10-06T12:34:56")     == invalid_number       // missing timezone
 parse("2026-10-06T12:34:56Zextra") == invalid_number     // trailing junk
 parse("2026-10-06T12:34:56.1234567890Z") == invalid_number  // 10 fraction digits
 parse("2026-10-06T12:34:56+25:00")     == invalid_number // offset hour out of range
-parse("2026-10-06T12:34:56.1234567890Z", ...) — not a valid parse, see above
+parse("2026-10-06T12:34:56+08:0X")     == invalid_number // non-digit offset minute
 ```
 
 ### 3.6 Comparisons and arithmetic
