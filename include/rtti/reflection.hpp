@@ -2763,15 +2763,24 @@ public:
     // C#-style variance conversions through the type-erased handle. Full
     // precision: the runtime dynamic type (when the stored type is
     // polymorphic) resolves to its reflected descriptor, and the base chain's
-    // offset-correct adjusters compute the target subobject. A downcast whose
-    // dynamic descriptor was never materialized (type_of<D>() never called)
-    // falls back to the static chain, which only reaches bases. Failures
-    // return nullptr / error_code, never a wrong pointer (spec section 0).
+    // offset-correct adjusters compute the target subobject. When the dynamic
+    // descriptor cannot compose the target (its chain is incomplete, or the
+    // dynamic type is unreflected), the walk falls back to (a) the runtime
+    // dynamic type's exact address when the target IS that type, then (b) the
+    // static chain, which reaches the stored static type's bases. A downcast
+    // whose dynamic descriptor was never materialized (type_of<D>() never
+    // called) therefore still reaches bases and never a wrong pointer.
+    // Failures return nullptr / error_code (spec section 0).
     template <typename T>
     T* as() noexcept {
         static_assert(!std::is_const<T>::value,
             "rtti::as/cast do not accept const-qualified source or target types");
         if (!valid()) {
+            return nullptr;
+        }
+        // A handle wrapping a null object is an empty source (spec error table).
+        void* static_ptr = data();
+        if (static_ptr == nullptr) {
             return nullptr;
         }
         // rtti:: qualification is required: this class has a non-template
@@ -2781,17 +2790,32 @@ public:
             return nullptr;
         }
         const std::type_info* dt = op_->dynamic_type(obj_);
-        const type_desc* root = type_of_;
-        void* root_ptr = data();
+        void* result = nullptr;
         if (dt != nullptr && type_of_ != nullptr && type_of_->id != nullptr &&
             *dt != *type_of_->id) {
+            // The stored type is polymorphic and its dynamic type is more
+            // derived than the static type: try the full-precision dynamic
+            // walk first.
+            void* dyn_ptr = op_->most_derived(obj_);
             const type_desc* dd = detail::find_desc(*dt);
             if (dd != nullptr) {
-                root = dd;
-                root_ptr = op_->most_derived(obj_);
+                result = detail::adjust_to(dyn_ptr, dd, target, 0);
+            }
+            // Identity to the runtime dynamic type (even when unreflected):
+            // the most-derived address is an exact view of T.
+            if (result == nullptr && target->id != nullptr && *target->id == *dt) {
+                result = dyn_ptr;
             }
         }
-        return static_cast<T*>(detail::adjust_to(root_ptr, root, target, 0));
+        if (result == nullptr) {
+            // Fallback: compose the static chain from the stored static type,
+            // which reaches its bases with offset-correct adjusters. This
+            // keeps legal upcasts to the stored static base working even when
+            // the dynamic descriptor's chain is incomplete (spec section:
+            // type-erased path; upcast must not spuriously fail).
+            result = detail::adjust_to(static_ptr, type_of_, target, 0);
+        }
+        return static_cast<T*>(result);
     }
 
     template <typename T>
@@ -2799,7 +2823,7 @@ public:
         static_assert(!std::is_const<T>::value,
             "rtti::as/cast do not accept const-qualified source or target types");
         result<T*> r;
-        if (!valid()) {
+        if (!valid() || data() == nullptr) {
             r.err.code = error_code::no_such_field;
             return r;
         }

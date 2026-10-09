@@ -50,6 +50,12 @@ struct JudgePolyD : JudgePoly {
     int pd = 0;
 };
 
+// Polymorphic but deliberately NOT reflected: exercises the type-erased
+// identity fallback (target == runtime dynamic type with no descriptor).
+struct JudgePolyUnref : JudgePoly {
+    int pu = 0;
+};
+
 // Unrelated reflected type used as a negative target.
 struct JudgeOther {
     int w = 0;
@@ -636,6 +642,59 @@ RTTI_TEST_CASE(JudgeTestInstanceDowncastPolymorphic) {
     rtti::instance inst = rtti::instance::from(std::move(base_handle));
     JudgePolyD* rec = inst.as<JudgePolyD>();
     RTTI_CHECK(rec != nullptr && rec->pd == 42);
+}
+
+RTTI_TEST_CASE(JudgeTestInstanceUpcastStoredBase) {
+    using namespace rtti_test_detail;
+    (void)rtti::type_of<JudgePoly>();
+    (void)rtti::type_of<JudgePolyD>();
+    // Store a derived object behind a polymorphic base handle. The dynamic
+    // descriptor (JudgePolyD) has no reflected base link, so the dynamic walk
+    // cannot reach the stored static base; the static-chain fallback must.
+    rtti::object_ref<JudgePoly> base_handle =
+        rtti::object_ref<JudgePoly>::adopt(new JudgePolyD());
+    static_cast<JudgePolyD*>(base_handle.get())->pd = 42;
+    rtti::instance inst = rtti::instance::from(std::move(base_handle));
+
+    JudgePoly* up = inst.as<JudgePoly>();  // identity / upcast to stored base
+    RTTI_CHECK(up != nullptr);
+    RTTI_CHECK(inst.cast<JudgePoly>().ok());
+    JudgePolyD* down = inst.as<JudgePolyD>();  // exact dynamic type
+    RTTI_CHECK(down != nullptr && down->pd == 42);
+
+    // Downcast miss: the runtime type is the base itself, not the derived.
+    rtti::object_ref<JudgePoly> base_only =
+        rtti::object_ref<JudgePoly>::adopt(new JudgePoly());
+    rtti::instance inst2 = rtti::instance::from(std::move(base_only));
+    RTTI_CHECK(inst2.as<JudgePolyD>() == nullptr);
+    RTTI_CHECK(inst2.cast<JudgePolyD>().err.code == rtti::error_code::kind_mismatch);
+}
+
+RTTI_TEST_CASE(JudgeTestInstanceUnreflectedDynamicType) {
+    using namespace rtti_test_detail;
+    (void)rtti::type_of<JudgePoly>();
+    // A polymorphic dynamic type with no reflection: the target IS the runtime
+    // dynamic type, so the most-derived address is an exact view (spec L93
+    // fallback; the descriptor carries no chain to compose).
+    rtti::object_ref<JudgePoly> base_handle =
+        rtti::object_ref<JudgePoly>::adopt(new JudgePolyUnref());
+    static_cast<JudgePolyUnref*>(base_handle.get())->pu = 7;
+    rtti::instance inst = rtti::instance::from(std::move(base_handle));
+    JudgePolyUnref* u = inst.as<JudgePolyUnref>();
+    RTTI_CHECK(u != nullptr && u->pu == 7);
+    RTTI_CHECK(inst.as<JudgePoly>() != nullptr);  // upcast to stored base
+}
+
+RTTI_TEST_CASE(JudgeTestInstanceNullWrapped) {
+    using namespace rtti_test_detail;
+    // A non-empty handle wrapping a null object_ref: valid() but data()==null.
+    // Treated as an empty source: as -> nullptr, cast -> no_such_field.
+    rtti::object_ref<JudgeBase> null_handle;
+    rtti::instance inst = rtti::instance::from(std::move(null_handle));
+    RTTI_CHECK(inst.valid());
+    RTTI_CHECK(inst.data() == nullptr);
+    RTTI_CHECK(inst.as<JudgeBase>() == nullptr);
+    RTTI_CHECK(inst.cast<JudgeBase>().err.code == rtti::error_code::no_such_field);
 }
 
 } // namespace rtti_test_lib
