@@ -898,6 +898,15 @@ virtual bases and multiple inheritance, regardless of polymorphism.
 Contravariant downcasts are runtime-checked and require a polymorphic
 source; a non-polymorphic source fails cleanly. Const-qualified source or
 target types are rejected at compile time.
+
+For a type-erased `instance`, the runtime dynamic type resolves through the
+reflected base chain (offset-correct). When the dynamic type's chain is
+incomplete (its descriptor was never materialized) the conversion falls back
+to the stored static type's chain, so legal upcasts to a stored static base
+never fail spuriously; an unreflected dynamic type is reachable only as its
+exact type. Because the erased source type is not a compile-time polymorphic
+class type, `dynamic_cast` cannot be used on the `instance` path; such
+unreachable conversions fail cleanly and never return a wrong pointer.
 ```
 ```markdown
 ## 变体转换
@@ -912,6 +921,12 @@ target types are rejected at compile time.
 (派生到基)编译期正确,含虚基类与多继承,与是否多态无关。逆变下转运行时
 检查,要求源多态;非多态源干净失败。const 限定的源或目标类型在编译期被
 拒绝,绝不返回错误偏移的指针。
+
+类型擦除 `instance`:运行时动态类型经反射基链解析(偏移正确);动态类型链
+不完整(其描述符从未物化)时回退到存储静态类型的基链,故到存储静态基的合法
+上转不会误失败;未反射的动态类型仅能按其精确类型命中。因擦除后的源类型非
+编译期多态类类型,`instance` 路径无法使用 `dynamic_cast`;此类不可达转换干净
+失败,绝不返回错误指针。
 ```
 
 - [ ] **Step 4: 全量三档终验**
@@ -931,7 +946,7 @@ Run:
 .\build\tests\Debug\rtti_flat_schema_tests.exe
 .\build-off\tests\Debug\rtti_tests.exe
 ```
-Expected: 主 `rtti_tests` = 基线 55774 + 本计划新增断言;`proto_ext` 160/0;`flat_schema` 408/0;`build-off` 32800/0 + 新增核心断言。失败均为 0。
+Expected: 主 `rtti_tests` = 基线 55819 + 本 Task5 新增断言;`proto_ext` 160/0;`flat_schema` 408/0;`build-off` 32800/0 + 新增核心断言。失败均为 0。
 
 - [ ] **Step 5: Commit**
 

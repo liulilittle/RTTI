@@ -90,7 +90,8 @@ class instance {
 2. **可转换判定**:`T` 与 `D` 相同,或 `T` 在 `D` 的反射基链中(`derived_from_desc`)。
 3. **指针调整(全精度,不依赖 offset-0)**:扩展反射基链记录**偏移正确的转换 thunk**——`RTTI_DEFINE_TYPE_DERIVED(D, Base)` 编译期已知 D 与 Base,生成 `[](void* p){ return static_cast<Base*>(static_cast<D*>(p)); }` 形式的 thunk(虚基类偏移由编译器计算);沿 D→…→T 的基链路径组合 thunk 得到最终 `T*`。
    - 消除现 `dynamic_cast_ref` 的 offset-0 限制(其 KNOWN LIMITATION 在文档中保留说明历史,新 API 为全精度路径)。
-4. **回退**:无法沿链组合(如未注册基链)时,若 `D` 多态可退回 `dynamic_cast`;否则失败。
+4. **回退**:无法沿动态类型描述符的基链组合出目标时,依次:(a) 若目标即运行时动态类型,返回 most-derived 地址(零偏移恒等);(b) 回退到**静态链**(存储静态类型 `type_of_` 的基链,可正确上转到静态基)。失败返回 nullptr/error_code,绝不返回错误偏移指针。
+   - 注:类型擦除 `instance` 的源静态类型已被擦除为 `void*`,**无法**对运行期选定的目标类型做 `dynamic_cast`(C++ 要求源静态类型为编译期已知的多态类类型;`dynamic_cast` 于 `void*` 非法)。故此处不采用 `dynamic_cast` 回退——这是类型擦除路径的固有限制,已由上述 (a)/(b) 子集覆盖合法恒等/上转;未注册基链的下转/跨基转换干净失败(文档化)。
 
 ### 与既有 API 的关系
 
