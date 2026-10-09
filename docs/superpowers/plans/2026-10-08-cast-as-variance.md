@@ -22,7 +22,7 @@
 
 ## Review Focus
 
-- 非多态虚基类上转:标准 C++ 无合法指针调整(既非 `static_cast` 亦非 `dynamic_cast`)→ 必须**干净失败**(`as`=nullptr / `cast`=kind_mismatch),**绝不返回错误偏移的指针**。
+- **上转(含虚基)合法**:`static_cast<Base*>(Derived*)` 上转方向对虚基由标准保证合法且偏移正确(Task2 实测 `det<VD,VB>=1`、`vx` 偏移正确),上转必须成功,不得误判失败。**下转**须运行时检查:`static_cast<D*>(b_ptr)` 在源为非多态时无检查(虚基下转且 ill-formed),故下转一律走 `dynamic_cast`(要求源多态),非多态源 → `as`=nullptr / `cast`=kind_mismatch,绝不返回错误偏移的指针。
 - `instance` 下转时动态类型的描述符未被物化(未调用过 `type_of<D>()`)→ 必须干净失败,不得崩溃/误判。
 - 无关类型经 `dynamic_cast` 交叉转换(多继承,双方多态):应命中或失败,不 UB。
 - `as`/`cast` 结果的 const 限定:`as<T>` 仅接受非 const 源与目标,避免 const 丢失;`object_ref<const U>` 场景不引入。
@@ -762,16 +762,24 @@ git commit -m "feat(reflect): full-precision instance as/cast via dynamic type c
 ```cpp
 RTTI_TEST_CASE(JudgeTestAsCastVirtualBase) {
     using namespace rtti_test_detail;
-    // Non-polymorphic virtual base: no legal pointer adjustment -> clean fail.
+    // Virtual-base UPCAST (non-polymorphic source): legal, offset correct.
     JudgeVDerived vd;
     vd.vx = 5;
     vd.vy = 6;
-    RTTI_CHECK(rtti::as<JudgeVBase>(&vd) == nullptr);
-    RTTI_CHECK(rtti::cast<JudgeVBase>(&vd).err.code == rtti::error_code::kind_mismatch);
+    JudgeVBase* vb = rtti::as<JudgeVBase>(&vd);
+    RTTI_CHECK(vb != nullptr && vb->vx == 5);
+    RTTI_CHECK(rtti::cast<JudgeVBase>(&vd).ok());
 
-    }
+    // Non-polymorphic DOWNCAST: no runtime check -> clean failure.
+    JudgeDerived jd;
+    jd.x = 1;
+    jd.y = 2;
+    JudgeBase* base_view = static_cast<JudgeBase*>(&jd);
+    RTTI_CHECK(rtti::as<JudgeDerived>(base_view) == nullptr);
+    RTTI_CHECK(rtti::cast<JudgeDerived>(base_view).err.code == rtti::error_code::kind_mismatch);
+}
 ```
-说明:非多态源的非虚基上转已在 `JudgeTestAsCastRawPointer`(JudgeDerived→JudgeBase)覆盖;本用例专测非多态虚基必须干净失败。
+说明:虚基**上转**合法(static_cast 偏移正确);非多态**下转**才必须干净失败。
 
 - [ ] **Step 2: 运行测试**
 
