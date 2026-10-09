@@ -278,7 +278,19 @@ result<date_time> date_time::parse(string_view iso) {
     if (secs == -9223372037LL && frac_ns < 145224192LL) {
         return make_error<date_time>(error_code::overflow);
     }
-    return make_ok<date_time>(date_time(secs * 1000000000LL + frac_ns));
+    // Compose the nanosecond lane without overflowing the intermediate
+    // seconds term. For secs == -9223372037 (the one value whose bare
+    // product -9223372037*1e9 crosses INT64_MIN), fold a nanosecond into the
+    // multiplier: (secs+1)*1e9 is exactly -9223372036000000000, and the
+    // guarded frac_ns (>= 145224192) keeps (1e9 - frac_ns) within 854775808,
+    // so the difference stays inside [INT64_MIN, INT64_MIN] boundaries.
+    std::int64_t ns = 0;
+    if (secs == -9223372037LL) {
+        ns = (secs + 1) * 1000000000LL - (1000000000LL - frac_ns);
+    } else {
+        ns = secs * 1000000000LL + frac_ns;
+    }
+    return make_ok<date_time>(date_time(ns));
 }
 
 date_time::date_fields date_time::decompose() const noexcept {

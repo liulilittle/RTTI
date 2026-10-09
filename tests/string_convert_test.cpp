@@ -74,6 +74,33 @@ void* operator new[](std::size_t sz) {
     }
     return p;
 }
+// Nothrow forms: libstdc++ algorithms (stable_partition's get_temporary_buffer)
+// allocate through ::operator new(sz, std::nothrow) and release through the
+// compatible delete overload. Without these the throwing/malloc pair above is
+// round-tripped by a mismatched family, which ASan reports as
+// alloc-dealloc-mismatch. Forward to the throwing variants so the counters and
+// the malloc/free pairing stay consistent; the nothrow contract is honored by
+// the catch-return-nullptr on allocation failure.
+void* operator new(std::size_t sz, const std::nothrow_t&) noexcept {
+    try {
+        return ::operator new(sz);
+    } catch (...) {
+        return nullptr;
+    }
+}
+void* operator new[](std::size_t sz, const std::nothrow_t&) noexcept {
+    try {
+        return ::operator new[](sz);
+    } catch (...) {
+        return nullptr;
+    }
+}
+void operator delete(void* p, const std::nothrow_t&) noexcept {
+    ::operator delete(p);
+}
+void operator delete[](void* p, const std::nothrow_t&) noexcept {
+    ::operator delete[](p);
+}
 void operator delete(void* p) noexcept {
     if (p != nullptr) {
         --rtti_test_lib::g_rttileak_live();
