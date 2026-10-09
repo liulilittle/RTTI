@@ -2,7 +2,7 @@
 
 > English edition. Chinese: [`../../zh/performance-report.md`](../zh/performance-report.md).
 > Raw verbatim outputs: `docs/benchmarks/2026-10-09-172835-{Debug,Release}-*.txt`,
-> `2026-10-09-173125-Release-*.txt`. Concise bilingual record:
+> `2026-10-09-173125-Release-*.txt`, `2026-10-09-LTCG-*.txt`. Concise bilingual record:
 > `docs/benchmarks/2026-10-09-msvc.md`.
 
 ## 1. Executive summary
@@ -22,7 +22,7 @@ Key findings (Release `/O2`+`NDEBUG`+LTO only):
   timing loop's floor).
 - Value field traversal `for_each_field(obj, ...)`: Release **10.12 ns/op**;
   Debug **555.47 ns/op** (includes per-iteration object+`std::string`
-  construction, see §5).
+  construction, see §6).
 - Existing rtti_bench: `field_walk` Release ~**954M ops/s**, `get_set_by_name`
   ~**121M ops/s**, recursive roundtrip ~**1.49M ops/s**.
 
@@ -93,6 +93,32 @@ timed iters : 20000000 per sample (warm-up 312500)
 Source: `docs/benchmarks/2026-10-09-172835-Debug-rtti_bench_new.txt` (Debug),
 `2026-10-09-173125-Release-rtti_bench_new.txt` (Release).
 
+### 3.3 LTCG (build-opt `Release`, explicit `/GL` + `/LTCG`)
+
+Same binary, captured again from the separate `build-opt` LTO configuration
+(`RTTI_ENABLE_LTO` + IPO enabled, CMake `INTERPROCEDURAL_OPTIMIZATION` applied
+to the bench targets):
+
+| Benchmark | ns/op (median) |
+| --- | ---: |
+| `enum_count<Color>` | 1.04 |
+| `enum_name_at<Color>` | 1.67 |
+| `enum_value_at<Color>` | 1.83 |
+| `for_each_enum<Color>` | 2.04 |
+| `enum_count<Empty>` (empty table) | 1.67 |
+| `for_each_enum<Empty>` (empty table) | 1.05 |
+| `for_each_field<Derived> names` | 1.89 |
+| `for_each_field(obj, values)` | 10.46 |
+| `template_arg_count<pair<int,string>>` | 1.73 |
+| `for_each_template_arg<pair<int,string>>` | 3.48 |
+| `template_arg_count<int>` (unregistered) | 1.21 |
+
+Repeated captures from this configuration show normal run-to-run variance —
+`for_each_field(obj, values)` was observed at 10.06–10.46 ns/op and
+`for_each_template_arg` at 2.93–3.48 ns/op across runs — inside the same
+~1–10 ns/op envelope reported for the Release table in §3.2. Source:
+`docs/benchmarks/2026-10-09-LTCG-rtti_bench_new.txt`.
+
 ## 4. Results — rtti_bench (existing core)
 
 **Debug:**
@@ -114,10 +140,46 @@ reflect_roundtrip             1488759.2  ops/s  (0.672 s, 500001500000 total)
 Source: `docs/benchmarks/2026-10-09-172835-Debug-rtti_bench.txt`,
 `2026-10-09-173125-Release-rtti_bench.txt`.
 
+### 4.1 LTCG (build-opt `Release`, explicit `/GL` + `/LTCG`)
+
+Captured from the `build-opt` LTO configuration (same binary family, single
+wall-clock pass as in §4):
+
+```
+field_walk                   967773154.0 ops/s  (0.001 s, 394000000 total)
+get_set_by_name              120001920.0 ops/s  (0.008 s, 999999 total)
+reflect_roundtrip             1427807.1  ops/s  (0.700 s, 500001500000 total)
+```
+
+Within the same overall envelope as the §4 Release capture; the
+`reflect_roundtrip` wall-time (0.672 s vs 0.700 s) reflects the single-run
+scheduler noise this report already flags in §6. Source:
+`docs/benchmarks/2026-10-09-LTCG-rtti_bench.txt`.
+
+## 5. Assertion baselines by build mode (test-suite cross-check)
+
+The benchmark numbers above come from the `bench/` microbenchmarks. The
+industrial build matrix is cross-checked by the test suites; every binary below
+exits `0` with zero failures:
+
+| Suite | Debug `build/` | Release `build/` | LTCG `build-opt/` | Gates-off `build-off/` |
+| --- | ---: | ---: | ---: | ---: |
+| `rtti_tests` | 55847 | 55847 | 55847 | 32872 |
+| `rtti_proto_extension_tests` | 160 | 160 | 160 | — |
+| `rtti_flat_schema_tests` | 408 | 408 | 408 | — |
+
+Assertion counts rise monotonically as feature gates turn on: the 32872-entry
+gates-off baseline (`build-off`, all `RTTI_ENABLE_*` disabled) is the core-only
+suite, and the gated proto/flat suites (160 / 408) are not compiled into the
+gates-off build. Verified 2026-10-09 on the §2 host: `rtti_tests` 55847/0 in
+Debug, Release and LTCG; `rtti_proto_extension_tests` 160/0 and
+`rtti_flat_schema_tests` 408/0 in all three on-build modes; `rtti_tests`
+32872/0 in `build-off`.
+
 Release-over-Debug speedups: `field_walk` ~6.1×, `get_set_by_name` ~5.6×,
 `reflect_roundtrip` ~27.1× (roundtrip benefits most from inlining/LTO).
 
-## 5. Interpretation & limitations (spec D3)
+## 6. Interpretation & limitations (spec D3)
 
 - **~1 ns/op is the measurement floor**: `enum_count` / `template_arg_count`
   are compile-time table reads; 1.02 ns/op in Release reflects the loop-bound
@@ -141,7 +203,7 @@ Release-over-Debug speedups: `field_walk` ~6.1×, `get_set_by_name` ~5.6×,
   build/zero-warning gates are verified by GitHub Actions (ubuntu runner), not
   by local measurement.
 
-## 6. Artefacts (2026-10-09)
+## 7. Artefacts (2026-10-09)
 
 | File | Content |
 | --- | --- |
@@ -149,6 +211,8 @@ Release-over-Debug speedups: `field_walk` ~6.1×, `get_set_by_name` ~5.6×,
 | `docs/benchmarks/2026-10-09-173125-Release-rtti_bench_new.txt` | rtti_bench_new Release raw output |
 | `docs/benchmarks/2026-10-09-172835-Debug-rtti_bench.txt` | rtti_bench Debug raw output (3 rows ops/s) |
 | `docs/benchmarks/2026-10-09-173125-Release-rtti_bench.txt` | rtti_bench Release raw output |
+| `docs/benchmarks/2026-10-09-LTCG-rtti_bench_new.txt` | rtti_bench_new LTCG (build-opt) raw output |
+| `docs/benchmarks/2026-10-09-LTCG-rtti_bench.txt` | rtti_bench LTCG (build-opt) raw output |
 | `docs/benchmarks/2026-10-09-msvc.md` | concise bilingual record of the same run |
 | `bench/bench_reflect.cpp` / `bench/bench_new_apis.cpp` / `bench/bench_timer.hpp` | benchmark sources |
 | `scripts/run_bench.ps1` | one-command reproduction script |
