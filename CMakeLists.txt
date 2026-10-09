@@ -52,7 +52,12 @@ endif()
 if(RTTI_ENABLE_PROTO)
   target_sources(rtti PRIVATE src/proto_schema.cpp)
 endif()
-target_include_directories(rtti PUBLIC include)
+# BUILD_INTERFACE keeps the source-tree include dir for in-tree consumers while
+# INSTALL_INTERFACE makes the exported rtti::rtti target resolve headers from
+# the installed package (find_package must not leak F:/json_xml paths).
+target_include_directories(rtti PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
 target_compile_features(rtti PUBLIC cxx_std_17)
 
 target_compile_definitions(rtti
@@ -82,6 +87,27 @@ if(MSVC)
 else()
   target_compile_options(rtti PUBLIC -Wall -Wextra -Wpedantic)
 endif()
+
+# --- Install rules and find_package package (industrialization plan Task E3) --
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS rtti EXPORT rttiTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(DIRECTORY include/rtti DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT rttiTargets NAMESPACE rtti:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rtti)
+
+configure_package_config_file(
+    cmake/rtti-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/rtti-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rtti)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/rtti-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/rtti-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/rtti-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rtti)
 
 # --- Tests ---------------------------------------------------------------------
 enable_testing()
