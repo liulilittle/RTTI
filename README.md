@@ -65,5 +65,3 @@ never fail spuriously; an unreflected dynamic type is reachable only as its
 exact type. Because the erased source type is not a compile-time polymorphic
 class type, `dynamic_cast` cannot be used on the `instance` path; such
 unreachable conversions fail cleanly and never return a wrong pointer.
-
-## Layout
