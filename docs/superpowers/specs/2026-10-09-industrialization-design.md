@@ -1,7 +1,7 @@
 # 工业化闭环设计:反射完整化 + CI/CD + Benchmark + 工程基础设施
 
 - 日期:2026-10-09
-- 状态:草稿(待用户评审)
+- 状态:定稿(用户 2026-10-09 确认:许可证 MIT;B4「全新操作」即 B1-B3)
 - 基线:HEAD=bc0bda5;主 rtti_tests 55819/0(Debug);proto_ext 160/0;flat_schema 408/0;build-off 存在。C++17;MSVC `/W4 /permissive- /Zc:preprocessor`。
 - 前置:A(cast/as 收尾,Task5)由既有 plan `2026-10-08-cast-as-variance.md` 负责,本文档不含 A。
 
@@ -83,9 +83,9 @@ template <typename T, typename Fn> void for_each_field(T& obj, Fn&& fn);
 - 与 `type_of` 集成:`is_template_instance_v<T>` 与 `template_arg_count<T>()` 的一致性断言。
 - 覆盖:0 参模板、非模板类型(安全空表)、越界索引(编译期 `template_arg_at` 静态断言 + 运行期 `template_arg_desc_of` 返回 nullptr)。
 
-### B4. 「全新操作」(待用户补充具体定义后细化)
+### B4. 「全新操作」
 
-用户原话「这里还要全新的操作」。当前理解:即上述枚举遍历/字段遍历/模板遍历的**新公开操作**。若用户另有所指,须在评审时补充;未明确前本项按 B1-B3 交付。
+用户 2026-10-09 确认:即 B1 枚举遍历、B2 字段遍历、B3 模板类型反射增强,无额外能力。本项不单独交付。
 
 ## 工作流 C:GitHub CI/CD
 
@@ -143,7 +143,7 @@ template <typename T, typename Fn> void for_each_field(T& obj, Fn&& fn);
 
 ### E2. 许可与元数据
 
-- 新增 `LICENSE`(需用户确认许可证类型,默认建议 MIT)。
+- 新增 `LICENSE`(MIT,用户 2026-10-09 确认)。
 - README 加许可章节(中英)。
 
 ### E3. 打包与安装
@@ -183,9 +183,6 @@ template <typename T, typename Fn> void for_each_field(T& obj, Fn&& fn);
 - E:版本单一来源、LICENSE、install/find_package 可用、双语互引文档齐全。
 - 全部:三档(Debug/Release/LTCG)四套件零失败零警告。
 
-## 未决问题(需用户裁决)
+## 未决问题
 
-1. **许可证类型**(默认 MIT?)。
-2. **「全新操作」的准确含义**(若不同于 B1-B3)。
-3. CI 是否需要 clang-cl 或指定 GCC/Clang 版本下限(当前文档称 GCC 11+/Clang 14+)。
-4. 是否需要 Doxygen/在线文档站(还是 README 双语足够)。
+全部已裁决(2026-10-09):许可证 = MIT;B4「全新操作」= B1-B3;CI 平台 = GitHub Actions(Windows MSVC + ubuntu GCC/Clang);Doxygen 在线文档站暂不做(README 双语足够)。
