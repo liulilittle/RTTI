@@ -697,4 +697,23 @@ RTTI_TEST_CASE(JudgeTestInstanceNullWrapped) {
     RTTI_CHECK(inst.cast<JudgeBase>().err.code == rtti::error_code::no_such_field);
 }
 
+RTTI_TEST_CASE(JudgeTestAsCastVirtualBase) {
+    using namespace rtti_test_detail;
+    // Virtual-base UPCAST (non-polymorphic source): legal, offset correct.
+    JudgeVDerived vd;
+    vd.vx = 5;
+    vd.vy = 6;
+    JudgeVBase* vb = rtti::as<JudgeVBase>(&vd);
+    RTTI_CHECK(vb != nullptr && vb->vx == 5);
+    RTTI_CHECK(rtti::cast<JudgeVBase>(&vd).ok());
+
+    // Non-polymorphic DOWNCAST: no runtime check -> clean failure.
+    JudgeDerived jd;
+    jd.x = 1;
+    jd.y = 2;
+    JudgeBase* base_view = static_cast<JudgeBase*>(&jd);
+    RTTI_CHECK(rtti::as<JudgeDerived>(base_view) == nullptr);
+    RTTI_CHECK(rtti::cast<JudgeDerived>(base_view).err.code == rtti::error_code::kind_mismatch);
+}
+
 } // namespace rtti_test_lib

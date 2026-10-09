@@ -12,6 +12,7 @@ introspecting at runtime — is now one macro away.
 - [Introduction](#introduction)
 - [Quick Start](#quick-start)
 - [Core Capabilities](#core-capabilities)
+- [Variance casts](#variance-casts)
 - [Format Adapters](#format-adapters)
 - [Architecture](#architecture)
 - [Supported Containers](#supported-containers)
@@ -294,6 +295,30 @@ A format-agnostic key naming policy carried by each text adapter's `write_config
 - constructor dependency injection: `T`, `T*`/`T&`, `std::shared_ptr<T>`;
   cycle detection fails safely with `kind_mismatch`.
 
+## Variance casts
+
+`rtti::as<T>` and `rtti::cast<T>` mirror C# reference conversions:
+
+- `as<T>(x)` returns `T*` or `nullptr` when the conversion is not possible.
+- `cast<T>(x)` returns `result<T*>`; a failed conversion sets
+  `error_code::kind_mismatch` (a null source sets `no_such_field`).
+
+They accept a raw pointer, an `object_ref<U>`, or a type-erased `instance`.
+Covariant upcasts (derived to base) are compile-time correct, including
+virtual bases and multiple inheritance, regardless of polymorphism.
+Contravariant downcasts are runtime-checked and require a polymorphic
+source; a non-polymorphic source fails cleanly. Const-qualified source or
+target types are rejected at compile time.
+
+For a type-erased `instance`, the runtime dynamic type resolves through the
+reflected base chain (offset-correct). When the dynamic type's chain is
+incomplete (its descriptor was never materialized) the conversion falls back
+to the stored static type's chain, so legal upcasts to a stored static base
+never fail spuriously; an unreflected dynamic type is reachable only as its
+exact type. Because the erased source type is not a compile-time polymorphic
+class type, `dynamic_cast` cannot be used on the `instance` path; such
+unreachable conversions fail cleanly and never return a wrong pointer.
+
 ## Format Adapters
 
 JSON/XML/INI/TOML/FlatBuffers are optional build gates. When enabled the four
@@ -509,9 +534,11 @@ The six gates form a 2^6 = 64-combination strip matrix; **every combination
 is explicitly configured, built and run against the full test suite
 independently** (each in its own scratch directory, with the `CMakeCache.txt`
 `RTTI_ENABLE_*` values verified right after configure). Assertions grow
-monotonically as gates are added — from `32790` all-off to `55696` all-on in
-the 2026-10-08 full 64-combo sweep (all combinations `0 failures`, zero
-warnings). The sweep (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
+monotonically as gates are added. The 2026-10-08 full 64-combo sweep (all
+combinations `0 failures`, zero warnings) ran from `32790` all-off to `55696`
+all-on; the current tree (with the cast/as variance tests) measures `32849`
+all-off and `55823` all-on. The sweep
+(`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
 grouped by gate count:
 
 | Gates on | Combinations run | rtti_tests assertions span |
@@ -523,6 +550,9 @@ grouped by gate count:
 | 4 | 15 | 44631 – 54153 |
 | 5 | 6 | 49903 – 55537 |
 | 6 | 1 | 55696 |
+
+(Intermediate spans are the 2026-10-08 sweep snapshot; only the all-off and
+all-on endpoints have been re-measured since the variance-cast work.)
 
 (In addition, the standalone `rtti_proto_extension_tests` / `rtti_flat_schema_tests`
 executables add `160` / `408` assertions whenever the PROTO / FLAT gate is on;
