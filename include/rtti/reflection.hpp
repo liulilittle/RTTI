@@ -1318,12 +1318,22 @@ struct struct_desc {
     const field_type_desc* fields;
 };
 
+// Offset-correct base-pointer adjuster: converts a pointer to the owning type
+// into a pointer to the base subobject. Non-virtual bases use static_cast
+// (correct offset, computed by the compiler); a virtual base uses dynamic_cast
+// when the owning type is polymorphic and has no legal static_cast. A virtual
+// base on a non-polymorphic type has no legal C++ adjustment, so the adjuster
+// returns nullptr and the caller fails cleanly rather than aliasing the wrong
+// memory.
+using base_adjust_fn = void* (*)(void*);
+
 // Direct base types of a reflected type (spec 19): an array of lazy
 // resolvers, one per registered base, in declaration order. The type_id chain
 // for runtime is_derived_from / dynamic_cast_ref walks these resolvers.
 struct base_type_list {
     std::size_t count;
     const type_resolver* resolve;   // array of `count` lazy resolvers
+    base_adjust_fn const* adjust;   // array of `count` adjusters (parallel)
 };
 
 struct enum_desc {
@@ -1441,14 +1451,38 @@ const type_desc* type_of_impl() noexcept;
 
 namespace detail {
 
+// Detect whether static_cast<Base*>(Derived*) is well-formed. It is ill-formed
+// exactly when Base is a virtual base of Derived; in that case fall back to
+// dynamic_cast (requires Derived polymorphic) or fail.
+template <typename Derived, typename Base, typename = void>
+struct base_adjuster {
+    static void* run(void* p) noexcept {
+        if constexpr (std::is_polymorphic<Derived>::value) {
+            return dynamic_cast<Base*>(static_cast<Derived*>(p));
+        } else {
+            return nullptr;  // virtual base on a non-polymorphic type: unsupported
+        }
+    }
+};
+template <typename Derived, typename Base>
+struct base_adjuster<Derived, Base,
+    std::void_t<decltype(static_cast<Base*>(std::declval<Derived*>()))>> {
+    static void* run(void* p) noexcept {
+        return static_cast<Base*>(static_cast<Derived*>(p));
+    }
+};
+
 // Build the lazy base-type resolver list for a reflected type. A type with no
 // registered bases reports nullptr (no as_bases chain).
-template <typename Bs, std::size_t... I>
+template <typename Derived, typename Bs, std::size_t... I>
 const base_type_list* base_list_impl(std::index_sequence<I...>) noexcept {
     static const type_resolver resolvers[sizeof...(I) > 0 ? sizeof...(I) : 1] = {
         &detail::type_of_impl<std::tuple_element_t<I, Bs>>...,
     };
-    static const base_type_list list{sizeof...(I), resolvers};
+    static const base_adjust_fn adjusters[sizeof...(I) > 0 ? sizeof...(I) : 1] = {
+        &base_adjuster<Derived, std::tuple_element_t<I, Bs>>::run...,
+    };
+    static const base_type_list list{sizeof...(I), resolvers, adjusters};
     return &list;
 }
 
@@ -1458,7 +1492,7 @@ const base_type_list* base_type_list_of() noexcept {
     if constexpr (std::tuple_size<Bs>::value == 0) {
         return nullptr;
     } else {
-        return base_list_impl<Bs>(std::make_index_sequence<std::tuple_size<Bs>::value>{});
+        return base_list_impl<T, Bs>(std::make_index_sequence<std::tuple_size<Bs>::value>{});
     }
 }
 
@@ -2663,6 +2697,39 @@ inline bool derived_from_desc(const type_desc* self, const type_desc* target,
         }
     }
     return false;
+}
+
+// Walk the reflected base chain from `from` toward `target`, composing
+// offset-correct adjusters from `ptr` (which points to the `from` subobject).
+// Returns the target subobject pointer, or nullptr when the target is not
+// reachable through a chain of legal adjustments. Depth-guarded like
+// derived_from_desc.
+inline void* adjust_to(void* ptr, const type_desc* from,
+                       const type_desc* target, std::size_t depth = 0) noexcept {
+    if (ptr == nullptr || from == nullptr || target == nullptr) {
+        return nullptr;
+    }
+    if (same_type_id(from->id, target->id)) {
+        return ptr;
+    }
+    if (depth >= 64 || from->as_bases == nullptr || from->as_bases->adjust == nullptr) {
+        return nullptr;
+    }
+    for (std::size_t i = 0; i < from->as_bases->count; ++i) {
+        const type_desc* b = from->as_bases->resolve[i]();
+        if (b == nullptr) {
+            continue;
+        }
+        void* bp = from->as_bases->adjust[i](ptr);
+        if (bp == nullptr) {
+            continue;
+        }
+        void* r = adjust_to(bp, b, target, depth + 1);
+        if (r != nullptr) {
+            return r;
+        }
+    }
+    return nullptr;
 }
 
 // Runtime scalar-convertibility (spec 19.2: same type / implicitly-convertible

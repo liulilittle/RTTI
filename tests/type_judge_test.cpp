@@ -491,4 +491,20 @@ RTTI_TEST_CASE(JudgeTestErrorPathsNoCrash) {
     RTTI_CHECK(!empty.valid());
 }
 
+RTTI_TEST_CASE(JudgeTestBaseAdjustThunk) {
+    using namespace rtti_test_detail;
+    // Non-virtual single inheritance: D -> Base offset thunk returns a usable
+    // base pointer whose merged field is readable.
+    JudgeDerived d;
+    d.x = 7;
+    d.y = 9;
+    const rtti::type_desc* dd = rtti::type_of<JudgeDerived>();
+    RTTI_CHECK(dd->bases() != nullptr && dd->bases()->count >= 1);
+    RTTI_CHECK(dd->bases()->adjust != nullptr);
+    void* bp = dd->bases()->adjust[0](static_cast<void*>(&d));
+    RTTI_CHECK(bp != nullptr);
+    // The base subobject pointer must alias the base part of d (x == 7).
+    RTTI_CHECK(static_cast<JudgeBase*>(bp)->x == 7);
+}
+
 } // namespace rtti_test_lib
