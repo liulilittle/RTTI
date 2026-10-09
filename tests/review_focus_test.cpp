@@ -39,18 +39,18 @@ struct custom_alloc {
 struct WithAlloc {
     std::vector<int, custom_alloc<int>> v;
     std::set<std::string, std::less<std::string>, custom_alloc<std::string>> s;
-    RTTI_DEFINE_TYPE_INTRUSIVE(WithAlloc, v, s);
+    RTTI_DEFINE_TYPE_INTRUSIVE(WithAlloc, v, s)
 };
 
 struct ReviewDefaults {
     int t = 5;
     std::string h;
-    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ReviewDefaults, t, h);
+    RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ReviewDefaults, t, h)
 };
 
 struct Strict {
     int t = 0;
-    RTTI_DEFINE_TYPE_INTRUSIVE(Strict, t);
+    RTTI_DEFINE_TYPE_INTRUSIVE(Strict, t)
 };
 
 // ADL-converted element type (NOT registered); used inside a container.

@@ -399,7 +399,7 @@ RTTI_TEST_CASE(InstTestFullOpsForEachElement) {
             return true;
         });
     RTTI_CHECK_EQ(ec, rtti::error_code::ok);
-    RTTI_CHECK_EQ(sum, long long(7));
+    RTTI_CHECK_EQ(sum, static_cast<long long>(7));
 
     // E-section element_iterator works on the raw instance through the handle.
     rtti::element_iterator<rtti_test_detail::InstNamed> it;

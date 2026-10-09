@@ -59,7 +59,7 @@ struct IterCustom {
 };
 
 struct IterEmpty {
-    RTTI_DEFINE_TYPE_INTRUSIVE(IterEmpty);
+    RTTI_DEFINE_TYPE_INTRUSIVE(IterEmpty)
 };
 
 struct IterSetReal {

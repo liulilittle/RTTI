@@ -844,7 +844,7 @@ RTTI_TEST_CASE(FlatU64BoundaryRoundTrip) {
                   rtti::error_code::ok);
     RTTI_CHECK(rewired.size() >= 24);
     RTTI_CHECK_EQ(static_cast<unsigned char>(rewired[rewired.size() - 1]),
-                  unsigned char(0x7F));
+                  static_cast<unsigned char>(0x7F));
 }
 
 RTTI_TEST_CASE(FlatU64MaxBoundary) {
@@ -890,7 +890,7 @@ RTTI_TEST_CASE(FlatU64MaxBoundary) {
                   rtti::error_code::ok);
     RTTI_CHECK(rewired.size() >= 8);
     RTTI_CHECK_EQ(static_cast<unsigned char>(rewired[rewired.size() - 1]),
-                  unsigned char(0x7F));
+                  static_cast<unsigned char>(0x7F));
 }
 
 RTTI_TEST_CASE(FlatSlot0OnlyTableRoundtrip) {

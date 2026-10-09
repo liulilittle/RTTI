@@ -153,7 +153,7 @@ struct StringConvAlloc {
 
 struct StringConvLess {
     bool operator()(const std::string& a, const std::string& b) const {
-        return _stricmp(a.c_str(), b.c_str()) < 0;
+        return rtti_test::ci_stricmp(a.c_str(), b.c_str()) < 0;
     }
 };
 
@@ -191,8 +191,8 @@ RTTI_TEST_CASE(StringConvScalarRoundTrip) {
     stringconv_check_scalar_rt<unsigned int>((std::numeric_limits<unsigned int>::max)());
     stringconv_check_scalar_rt<unsigned long long>(
         (std::numeric_limits<unsigned long long>::max)());
-    stringconv_check_scalar_rt<signed char>(signed char(-5));
-    stringconv_check_scalar_rt<unsigned char>(unsigned char(200));
+    stringconv_check_scalar_rt<signed char>(static_cast<signed char>(-5));
+    stringconv_check_scalar_rt<unsigned char>(static_cast<unsigned char>(200));
     stringconv_check_scalar_rt<short>(short(-300));
     stringconv_check_scalar_rt<bool>(true);
     stringconv_check_scalar_rt<bool>(false);

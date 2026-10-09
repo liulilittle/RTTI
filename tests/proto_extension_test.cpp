@@ -45,33 +45,33 @@ std::string ex_pick_path(std::initializer_list<const char*> paths) {
     return std::string();
 }
 
-inline std::string ex_sv(rtti::string_view s) {
+[[maybe_unused]] inline std::string ex_sv(rtti::string_view s) {
     return std::string(s.data(), s.size());
 }
 
 // Handy document node setters.
-inline void ex_set_int(rtti::value_io& doc, const char* key, std::int64_t v) {
+[[maybe_unused]] inline void ex_set_int(rtti::value_io& doc, const char* key, std::int64_t v) {
     rtti::value_io* n = doc.make_node();
     n->make_scalar(rtti::field_value::of(v));
     doc.set_key(rtti::string_view(key), n);
 }
-inline void ex_set_str(rtti::value_io& doc, const char* key,
+[[maybe_unused]] inline void ex_set_str(rtti::value_io& doc, const char* key,
                        const char* s) {
     rtti::value_io* n = doc.make_node();
     n->make_scalar(rtti::field_value::of(rtti::string_view(s)));
     doc.set_key(rtti::string_view(key), n);
 }
-inline void ex_set_bool(rtti::value_io& doc, const char* key, bool b) {
+[[maybe_unused]] inline void ex_set_bool(rtti::value_io& doc, const char* key, bool b) {
     rtti::value_io* n = doc.make_node();
     n->make_scalar(rtti::field_value::of(b));
     doc.set_key(rtti::string_view(key), n);
 }
-inline void ex_set_real(rtti::value_io& doc, const char* key, double d) {
+[[maybe_unused]] inline void ex_set_real(rtti::value_io& doc, const char* key, double d) {
     rtti::value_io* n = doc.make_node();
     n->make_scalar(rtti::field_value::of(d));
     doc.set_key(rtti::string_view(key), n);
 }
-inline void ex_set_raw(rtti::value_io& doc, const char* key, const char* p,
+[[maybe_unused]] inline void ex_set_raw(rtti::value_io& doc, const char* key, const char* p,
                        std::size_t n) {
     rtti::value_io* nd = doc.make_node();
     nd->make_scalar(rtti::field_value::of(rtti::string_view(p, n)));

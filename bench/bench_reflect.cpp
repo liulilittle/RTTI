@@ -19,7 +19,7 @@ struct BenchType {
     double b = 0.0;
     std::string c;
     std::vector<int> d;
-    RTTI_DEFINE_TYPE_INTRUSIVE(BenchType, a, b, c, d);
+    RTTI_DEFINE_TYPE_INTRUSIVE(BenchType, a, b, c, d)
 };
 
 constexpr long long kIterations = 1000000;

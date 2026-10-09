@@ -16,19 +16,19 @@ struct StructA {
     int a = 0;
     std::string b;
     std::vector<int> c;
-    RTTI_DEFINE_TYPE_INTRUSIVE(StructA, a, b, c);
+    RTTI_DEFINE_TYPE_INTRUSIVE(StructA, a, b, c)
 };
 
 struct StructB {
     StructA inner;
     std::map<std::string, StructA> m;
-    RTTI_DEFINE_TYPE_INTRUSIVE(StructB, inner, m);
+    RTTI_DEFINE_TYPE_INTRUSIVE(StructB, inner, m)
 };
 
 struct SelfRef {
     int v = 0;
     std::vector<SelfRef> children;
-    RTTI_DEFINE_TYPE_INTRUSIVE(SelfRef, v, children);
+    RTTI_DEFINE_TYPE_INTRUSIVE(SelfRef, v, children)
 };
 
 enum class Color { red, green, blue };

@@ -146,19 +146,19 @@ struct SaxEvent {
 inline rtti::json::parse_events make_recorder(std::vector<SaxEvent>& out) {
     rtti::json::parse_events ev;
     ev.object_start = [&out]() {
-        out.push_back({SaxKind::object_start});
+        out.push_back({SaxKind::object_start, 0, 0.0, false, {}});
         return true;
     };
     ev.object_end = [&out]() {
-        out.push_back({SaxKind::object_end});
+        out.push_back({SaxKind::object_end, 0, 0.0, false, {}});
         return true;
     };
     ev.array_start = [&out]() {
-        out.push_back({SaxKind::array_start});
+        out.push_back({SaxKind::array_start, 0, 0.0, false, {}});
         return true;
     };
     ev.array_end = [&out]() {
-        out.push_back({SaxKind::array_end});
+        out.push_back({SaxKind::array_end, 0, 0.0, false, {}});
         return true;
     };
     ev.key = [&out](rtti::string_view v) {
@@ -168,7 +168,7 @@ inline rtti::json::parse_events make_recorder(std::vector<SaxEvent>& out) {
         return true;
     };
     ev.string_value = [&out](rtti::string_view v) {
-        out.push_back({SaxKind::string_value});
+        out.push_back({SaxKind::string_value, 0, 0.0, false, {}});
         out.back().s.assign(v.data(), v.size());
         return true;
     };
@@ -191,7 +191,7 @@ inline rtti::json::parse_events make_recorder(std::vector<SaxEvent>& out) {
         return true;
     };
     ev.null_value = [&out]() {
-        out.push_back({SaxKind::null_value});
+        out.push_back({SaxKind::null_value, 0, 0.0, false, {}});
         return true;
     };
     return ev;

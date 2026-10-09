@@ -174,7 +174,6 @@ RTTI_TEST_CASE(scan_unaligned_consistency) {
         "a b c",                                       // short, < 16 bytes (scalar tail only)
     };
     const char_mask json = json_structural_mask();
-    const char_mask ws = char_mask::from_chars(" \t\r\n");
     std::string buf(80, 'z');
     for (int o = 0; o < 16; ++o) {
         for (const char* t : texts) {

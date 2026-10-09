@@ -86,6 +86,13 @@ if(MSVC)
   target_compile_options(rtti PUBLIC /W4 /permissive- /Zc:preprocessor)
 else()
   target_compile_options(rtti PUBLIC -Wall -Wextra -Wpedantic)
+  # Zero-argument macro registrations (empty enum/type/attribute/template
+  # lists) are a documented API feature. Clang's GNU-extension warning would
+  # otherwise turn every such call (e.g. RTTI_DEFINE_ENUM(EmptyEnum)) into a
+  # -Werror rebuild failure; GCC has no equivalent diagnostic.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(rtti PUBLIC -Wno-gnu-zero-variadic-macro-arguments)
+  endif()
 endif()
 
 # --- Install rules and find_package package (industrialization plan Task E3) --

@@ -23,7 +23,7 @@ struct Mutation {
     std::stack<std::string> st;
     std::priority_queue<int> pq;
     int plain = 42;
-    RTTI_DEFINE_TYPE_INTRUSIVE(Mutation, v, l, m, s, q, st, pq, plain);
+    RTTI_DEFINE_TYPE_INTRUSIVE(Mutation, v, l, m, s, q, st, pq, plain)
 };
 
 namespace rtti_test_lib {
@@ -213,7 +213,7 @@ RTTI_TEST_CASE(for_each_sums_vector) {
             return true;
         });
     RTTI_CHECK_EQ(ec, rtti::error_code::ok);
-    RTTI_CHECK_EQ(sum, long long(10));
+    RTTI_CHECK_EQ(sum, static_cast<long long>(10));
     delete scratch;
 }
 
@@ -229,7 +229,7 @@ RTTI_TEST_CASE(for_each_break_early) {
             return count < 3;
         });
     RTTI_CHECK_EQ(ec, rtti::error_code::ok);
-    RTTI_CHECK_EQ(count, long long(3));
+    RTTI_CHECK_EQ(count, static_cast<long long>(3));
     delete scratch;
 }
 
@@ -280,7 +280,7 @@ RTTI_TEST_CASE(for_each_adapter_queue_drains_copy) {
             return true;
         });
     RTTI_CHECK_EQ(ec, rtti::error_code::ok);
-    RTTI_CHECK_EQ(sum, long long(3));
+    RTTI_CHECK_EQ(sum, static_cast<long long>(3));
     RTTI_CHECK_EQ(o.q.size(), size_t(2));
     delete scratch;
 }

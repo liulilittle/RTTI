@@ -399,7 +399,6 @@ private:
 
 template <typename T>
 field_iterator<T> field_begin() noexcept {
-    using U = typename std::decay<T>::type;
     return field_iterator<T>(0, false);
 }
 template <typename T>
@@ -416,7 +415,6 @@ field_iterator<T> field_rbegin() noexcept {
 }
 template <typename T>
 field_iterator<T> field_rend() noexcept {
-    using U = typename std::decay<T>::type;
     return field_iterator<T>(0, true);
 }
 
@@ -985,7 +983,7 @@ struct placement_releaser {
             // closure owns its own copy, so destroy() stays valid even when
             // the caller's allocator object has already been destroyed.
             Alloc snapshot = a;
-            return [snapshot, size, align](void* q) mutable noexcept {
+            return [snapshot](void* q) mutable noexcept {
                 detail::allocator_release<Alloc>::call(snapshot, q, size, align);
             };
         } else {
@@ -994,7 +992,7 @@ struct placement_releaser {
             // An arena-style allocator has no per-object release, so its
             // closure is a no-op and never dereferences this reference.
             Alloc& snapshot = a;
-            return [&snapshot, size, align](void* q) noexcept {
+            return [&snapshot](void* q) noexcept {
                 detail::allocator_release<Alloc>::call(snapshot, q, size, align);
             };
         }

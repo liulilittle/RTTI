@@ -98,7 +98,7 @@ RTTI_TEST_CASE(custom_alloc_queue_roundtrip) {
 // trip through all three formats.
 struct ProbeCiLess {
     bool operator()(const std::string& a, const std::string& b) const {
-        return _stricmp(a.c_str(), b.c_str()) < 0;
+        return rtti_test::ci_stricmp(a.c_str(), b.c_str()) < 0;
     }
 };
 using ProbeLessMap = std::map<std::string, int, ProbeCiLess>;

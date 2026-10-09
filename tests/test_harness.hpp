@@ -4,9 +4,23 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
+#if !defined(_MSC_VER)
+#include <strings.h>
+#endif
 
 namespace rtti_test {
+
+// Case-insensitive ASCII compare shared by the custom-allocator map tests
+// (MSVC spells it _stricmp, POSIX strcasecmp).
+inline int ci_stricmp(const char* a, const char* b) noexcept {
+#if defined(_MSC_VER)
+    return _stricmp(a, b);
+#else
+    return strcasecmp(a, b);
+#endif
+}
 
 inline int& failures() {
     static int f = 0;
