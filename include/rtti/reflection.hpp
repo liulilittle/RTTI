@@ -1319,12 +1319,12 @@ struct struct_desc {
 };
 
 // Offset-correct base-pointer adjuster: converts a pointer to the owning type
-// into a pointer to the base subobject. Non-virtual bases use static_cast
-// (correct offset, computed by the compiler); a virtual base uses dynamic_cast
-// when the owning type is polymorphic and has no legal static_cast. A virtual
-// base on a non-polymorphic type has no legal C++ adjustment, so the adjuster
-// returns nullptr and the caller fails cleanly rather than aliasing the wrong
-// memory.
+// into a pointer to the base subobject. Up-casts (including to a virtual base)
+// are always legal via static_cast and produce the correct offset, so the
+// specialization below always matches. The primary base_adjuster is a
+// defensive fallback that only matches when static_cast is ill-formed (e.g. an
+// inaccessible or ambiguous base); it returns nullptr so the caller fails
+// cleanly rather than aliasing the wrong memory.
 using base_adjust_fn = void* (*)(void*);
 
 // Direct base types of a reflected type (spec 19): an array of lazy
@@ -1451,17 +1451,17 @@ const type_desc* type_of_impl() noexcept;
 
 namespace detail {
 
-// Detect whether static_cast<Base*>(Derived*) is well-formed. It is ill-formed
-// exactly when Base is a virtual base of Derived; in that case fall back to
-// dynamic_cast (requires Derived polymorphic) or fail.
+// Base-pointer adjuster. Up-casts (including to a virtual base) are always
+// legal via static_cast and offset-correct ([conv.ptr]/3), so the
+// specialization below always matches for a registered base. The primary
+// template is a defensive fallback that only matches when
+// static_cast<Base*>(Derived*) is ill-formed (e.g. an inaccessible or
+// ambiguous base); it returns nullptr so the caller fails safely. A virtual
+// base up-cast never reaches the primary template.
 template <typename Derived, typename Base, typename = void>
 struct base_adjuster {
-    static void* run(void* p) noexcept {
-        if constexpr (std::is_polymorphic<Derived>::value) {
-            return dynamic_cast<Base*>(static_cast<Derived*>(p));
-        } else {
-            return nullptr;  // virtual base on a non-polymorphic type: unsupported
-        }
+    static void* run(void*) noexcept {
+        return nullptr;  // no legal static_cast adjustment: fail safely
     }
 };
 template <typename Derived, typename Base>
