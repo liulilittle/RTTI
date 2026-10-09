@@ -1276,6 +1276,29 @@ E enum_from_string(string_view name) noexcept {
     return static_cast<E>(0);
 }
 
+// Enum traversal API (spec B1). Values are the enumerators in registration
+// order (the order the RTTI_DEFINE_ENUM macro lists them), so callers can
+// iterate label/value pairs without knowing the enumerators at compile time.
+template <typename E>
+constexpr std::size_t enum_count() noexcept { return enum_table<E>::count; }
+
+template <typename E>
+const char* enum_name_at(std::size_t i) noexcept {
+    return i < enum_table<E>::count ? enum_table<E>::array[i].name : nullptr;
+}
+
+template <typename E>
+E enum_value_at(std::size_t i) noexcept {
+    return i < enum_table<E>::count ? enum_table<E>::array[i].value : E{};
+}
+
+template <typename E, typename Fn>
+void for_each_enum(Fn&& fn) {
+    for (std::size_t i = 0; i < enum_table<E>::count; ++i) {
+        fn(enum_table<E>::array[i].name, enum_table<E>::array[i].value);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Runtime type description system. rtti::type_of<T>() returns a stable,
 // lazily-created type_desc describing the category of T: scalar, string,
@@ -1340,6 +1363,8 @@ struct base_type_list {
 struct enum_desc {
     std::size_t count;
     const char* const* names;
+    const void* values = nullptr;   // parallel array of E values (raw bytes)
+    std::size_t value_size = 0;     // sizeof(E)
 };
 
 struct type_desc {
@@ -1441,6 +1466,21 @@ const char* const* enum_name_array(std::index_sequence<I...>) {
 template <typename E>
 const char* const* enum_names() {
     return enum_name_array<E>(std::make_index_sequence<enum_table<E>::count>());
+}
+
+// Raw value array for the runtime enum_desc (parallel to enum_names).
+template <typename E, std::size_t... I>
+const void* enum_value_array(std::index_sequence<I...>) {
+    static const E values[] = { enum_table<E>::array[I].value... };
+    return values;
+}
+template <typename E>
+const void* enum_values() {
+    if constexpr (enum_table<E>::count == 0) {
+        return nullptr;
+    } else {
+        return enum_value_array<E>(std::make_index_sequence<enum_table<E>::count>());
+    }
 }
 
 // --- type_of ----------------------------------------------------------------
@@ -1621,7 +1661,8 @@ const type_desc* type_of_impl() noexcept {
         (void)registered;
         return &d;
     } else if constexpr (std::is_enum<T>::value) {
-        static const enum_desc e{enum_table<T>::count, enum_names<T>()};
+        static const enum_desc e{enum_table<T>::count, enum_names<T>(),
+                                 enum_values<T>(), sizeof(T)};
         static const type_desc d{type_kind::enum_type, &typeid(T), typeid(T).name(), nullptr, nullptr, &e};
         return &d;
     } else {

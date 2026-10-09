@@ -26,6 +26,7 @@ set(RTTI_TEST_SOURCES
     attr_test.cpp
     instance_test.cpp
     type_judge_test.cpp
+    enum_reflect_test.cpp
     template_reflect_test.cpp
     method_reflect_test.cpp
     ioc_test.cpp
