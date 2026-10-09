@@ -36,11 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure (GCC, -Werror)
-        # Temporary diagnostic: the Release cfg additionally enables UBSan so
-        # the recurring Release-only segfault aborts at its first UB report.
+        # Temporary diagnostic: gcc Release adds -g so the gdb backtrace below
+        # resolves symbols of the recurring Release-only segfault.
         run: |
           EXTRA=""
-          if [ "${{ matrix.cfg }}" = "Release" ]; then EXTRA="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"; fi
+          if [ "${{ matrix.cfg }}" = "Release" ]; then EXTRA="-g"; fi
           cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror $EXTRA"
       - name: Build
         run: cmake --build build -j
@@ -50,7 +50,7 @@ jobs:
         if: failure() && matrix.cfg == 'Release'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gdb
-          gdb -batch -ex "set pagination off" -ex run -ex "bt 40" --args ./build/tests/rtti_tests || true
+          gdb -batch -ex "set pagination off" -ex "set print frame-arguments all" -ex run -ex "bt 60" --args ./build/tests/rtti_tests || true
 
   linux-clang:
     runs-on: ubuntu-latest
