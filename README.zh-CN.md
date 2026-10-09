@@ -518,3 +518,9 @@ PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被
 
 两个版本章节结构一一对应,并互相链接;上述每个章节在另一版本中都有
 匹配章节。
+
+## 许可证
+
+基于 MIT 许可证授权 —— 完整文本见 [LICENSE](LICENSE)。
+
+版本互引:[README.md](README.md)、[README.en.md](README.en.md)。

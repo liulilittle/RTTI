@@ -578,3 +578,10 @@ they are built and run inside the sweep as well.)
 
 Cross-referenced between editions; every section above has a matching section
 in the Chinese edition.
+
+## License
+
+Licensed under the MIT License — see [LICENSE](LICENSE).
+
+Edition cross-links: [README.md](README.md),
+[README.zh-CN.md](README.zh-CN.md).

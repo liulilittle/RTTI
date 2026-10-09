@@ -6,6 +6,7 @@
 
 #include "test_harness.hpp"
 #include <rtti/reflection.hpp>
+#include <rtti/version.hpp>
 #include <array>
 #include <optional>
 #include <stdexcept>
@@ -30,6 +31,12 @@ RTTI_TEST_CASE(new_type_traits_detect) {
     static_assert(!rtti::is_fixed_sequence<std::vector<int>>::value, "");
     static_assert(!rtti::is_fixed_sequence<std::string>::value, "");
     RTTI_CHECK(true);
+}
+
+// The generated version header must exist and advertise the single-sourced
+// version string (industrialization plan Task E1).
+RTTI_TEST_CASE(VersionMacros) {
+    RTTI_CHECK(std::string(rtti::version()) == std::string(RTTI_VERSION_STRING));
 }
 
 } // namespace rtti_test_lib

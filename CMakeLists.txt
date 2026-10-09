@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.15)
 project(RTTI VERSION 0.1.0 LANGUAGES CXX)
 
+# Single-source version: project() version feeds the generated public header
+# include/rtti/version.hpp (industrialization plan Task E1).
+configure_file(cmake/version.hpp.in ${CMAKE_CURRENT_SOURCE_DIR}/include/rtti/version.hpp @ONLY)
+
 # --- Optional format adapter gates (default ON) -------------------------------
 option(RTTI_ENABLE_JSON "Enable JSON format adapter" ON)
 option(RTTI_ENABLE_XML  "Enable XML format adapter"  ON)

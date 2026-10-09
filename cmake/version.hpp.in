@@ -1,0 +1,6 @@
+#pragma once
+#define RTTI_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define RTTI_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define RTTI_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define RTTI_VERSION_STRING "@PROJECT_VERSION@"
+namespace rtti { inline const char* version() noexcept { return RTTI_VERSION_STRING; } }
