@@ -18,7 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure (MSVC x64)
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        # windows-latest now ships Visual Studio 2026 only (VS2022 removed
+        # 2026-06; see actions/runner-images#14017), so no fixed
+        # "-G Visual Studio 17 2022". CMake auto-detects the newest installed
+        # Visual Studio; -A x64 pins the architecture.
+        run: cmake -S . -B build -A x64
       - name: Build
         run: cmake --build build --config ${{ matrix.cfg }}
       - name: Test

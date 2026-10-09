@@ -1616,59 +1616,69 @@ namespace detail {
 template <typename T>
 const type_desc* type_of_impl() noexcept {
     if constexpr (std::is_same<T, bool>::value) {
-        static const type_desc d{type_kind::boolean, &typeid(T), typeid(T).name()};
+        static const type_desc d{type_kind::boolean, &typeid(T), typeid(T).name(),
+                                 nullptr, nullptr, nullptr};
         return &d;
     } else if constexpr (std::is_integral<T>::value) {
-        static const type_desc d{type_kind::integer, &typeid(T), typeid(T).name()};
+        static const type_desc d{type_kind::integer, &typeid(T), typeid(T).name(),
+                                 nullptr, nullptr, nullptr};
         return &d;
     } else if constexpr (std::is_floating_point<T>::value) {
-        static const type_desc d{type_kind::real, &typeid(T), typeid(T).name()};
+        static const type_desc d{type_kind::real, &typeid(T), typeid(T).name(),
+                                 nullptr, nullptr, nullptr};
         return &d;
     } else if constexpr (std::is_same<T, std::string>::value ||
                          std::is_same<T, string_view>::value) {
-        static const type_desc d{type_kind::string, &typeid(T), typeid(T).name()};
+        static const type_desc d{type_kind::string, &typeid(T), typeid(T).name(),
+                                 nullptr, nullptr, nullptr};
         return &d;
     } else if constexpr (is_map<T>::value) {
         static const container_desc c{
             map_family<T>(),
             []() -> const type_desc* { return type_of<typename T::key_type>(); },
             []() -> const type_desc* { return type_of<typename T::mapped_type>(); }};
-        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(), &c};
+        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(),
+                                 &c, nullptr, nullptr};
         return &d;
     } else if constexpr (is_set<T>::value) {
         static const container_desc c{
             set_family<T>(),
             nullptr,
             []() -> const type_desc* { return type_of<typename T::value_type>(); }};
-        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(), &c};
+        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(),
+                                 &c, nullptr, nullptr};
         return &d;
     } else if constexpr (is_sequence<T>::value) {
         static const container_desc c{
             sequence_family<T>(),
             nullptr,
             []() -> const type_desc* { return type_of<typename T::value_type>(); }};
-        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(), &c};
+        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(),
+                                 &c, nullptr, nullptr};
         return &d;
     } else if constexpr (is_priority_queue<T>::value) {
         static const container_desc c{
             container_family::priority_queue,
             nullptr,
             []() -> const type_desc* { return type_of<typename T::value_type>(); }};
-        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(), &c};
+        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(),
+                                 &c, nullptr, nullptr};
         return &d;
     } else if constexpr (is_queue<T>::value) {
         static const container_desc c{
             container_family::queue,
             nullptr,
             []() -> const type_desc* { return type_of<typename T::value_type>(); }};
-        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(), &c};
+        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(),
+                                 &c, nullptr, nullptr};
         return &d;
     } else if constexpr (is_stack<T>::value) {
         static const container_desc c{
             container_family::stack,
             nullptr,
             []() -> const type_desc* { return type_of<typename T::value_type>(); }};
-        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(), &c};
+        static const type_desc d{type_kind::container, &typeid(T), typeid(T).name(),
+                                 &c, nullptr, nullptr};
         return &d;
     } else if constexpr (is_reflected<T>::value) {
         static const struct_desc s{field_count<T>(), fields_of<T>::desc};
@@ -3284,7 +3294,6 @@ inline error_code member_invoke(M mp, void* self, const ctor_arg* args,
                                 std::size_t count, field_value* out,
                                 value_io* node) noexcept {
     using Tr = member_traits<M>;
-    using Ret = typename Tr::ret;
     using ParamSeq = typename Tr::params;
     using Values = typename decay_tuple<ParamSeq>::type;
     constexpr std::size_t N = std::tuple_size<ParamSeq>::value;
@@ -3329,7 +3338,6 @@ template <typename F>
 inline error_code static_invoke(F fp, const ctor_arg* args, std::size_t count,
                                 field_value* out, value_io* node) noexcept {
     using Tr = static_traits<F>;
-    using Ret = typename Tr::ret;
     using ParamSeq = typename Tr::params;
     using Values = typename decay_tuple<ParamSeq>::type;
     constexpr std::size_t N = std::tuple_size<ParamSeq>::value;
