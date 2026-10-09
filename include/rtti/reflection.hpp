@@ -14,6 +14,7 @@
 #include <functional>
 #include <initializer_list>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -1496,6 +1497,44 @@ const base_type_list* base_type_list_of() noexcept {
     }
 }
 
+// Process-wide registry of reflected type descriptors, keyed by std::type_info
+// value. Populated lazily the first time type_of<T>() materializes a reflected
+// descriptor; used by the type-erased instance cast to resolve a runtime
+// dynamic type to its descriptor (base chain + adjusters). Thread-safe.
+//
+// Declared before type_of_impl below so the reflected branch can register its
+// descriptor at definition-time lookup (spec section: type-erased instance
+// path, full-precision).
+inline std::vector<const type_desc*>& desc_registry() {
+    static std::vector<const type_desc*> v;
+    return v;
+}
+inline std::mutex& desc_registry_mutex() {
+    static std::mutex m;
+    return m;
+}
+inline void register_desc(const type_desc* d) noexcept {
+    if (d == nullptr || d->id == nullptr) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(desc_registry_mutex());
+    for (const type_desc* e : desc_registry()) {
+        if (e != nullptr && e->id != nullptr && *e->id == *d->id) {
+            return;
+        }
+    }
+    desc_registry().push_back(d);
+}
+inline const type_desc* find_desc(const std::type_info& ti) noexcept {
+    std::lock_guard<std::mutex> lk(desc_registry_mutex());
+    for (const type_desc* e : desc_registry()) {
+        if (e != nullptr && e->id != nullptr && *e->id == ti) {
+            return e;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace detail
 
 template <typename T>
@@ -1575,6 +1614,11 @@ const type_desc* type_of_impl() noexcept {
                                  detail::base_type_list_of<T>(),
                                  std::is_abstract<T>::value,
                                  std::is_polymorphic<T>::value};
+        // Register the reflected descriptor once, on first materialization, so
+        // the type-erased instance cast can resolve a runtime dynamic type to
+        // its base chain + offset-correct adjusters (spec type-erased path).
+        static const bool registered = (detail::register_desc(&d), true);
+        (void)registered;
         return &d;
     } else if constexpr (std::is_enum<T>::value) {
         static const enum_desc e{enum_table<T>::count, enum_names<T>()};
@@ -2598,6 +2642,15 @@ private:
     bool owning_ = false;
 };
 
+namespace detail {
+// Forward declaration: instance::as (below) composes the base-chain adjusters
+// through this helper, whose definition follows the class. The call's argument
+// types are non-dependent, so the name must be visible at definition time;
+// depth is passed explicitly (the definition supplies the default).
+inline void* adjust_to(void* ptr, const type_desc* from,
+                       const type_desc* target, std::size_t depth) noexcept;
+} // namespace detail
+
 // Type-erased instance handle for heterogeneous ORM pools (spec 18.2).
 // Wraps any object_ref<T> and exposes a small uniform operation set: type and
 // descriptor query, field get/set by name, and the value_io serialization
@@ -2707,6 +2760,58 @@ public:
         release_ = nullptr;
     }
 
+    // C#-style variance conversions through the type-erased handle. Full
+    // precision: the runtime dynamic type (when the stored type is
+    // polymorphic) resolves to its reflected descriptor, and the base chain's
+    // offset-correct adjusters compute the target subobject. A downcast whose
+    // dynamic descriptor was never materialized (type_of<D>() never called)
+    // falls back to the static chain, which only reaches bases. Failures
+    // return nullptr / error_code, never a wrong pointer (spec section 0).
+    template <typename T>
+    T* as() noexcept {
+        static_assert(!std::is_const<T>::value,
+            "rtti::as/cast do not accept const-qualified source or target types");
+        if (!valid()) {
+            return nullptr;
+        }
+        // rtti:: qualification is required: this class has a non-template
+        // member type_of() that would otherwise shadow the free function.
+        const type_desc* target = rtti::type_of<T>();
+        if (target == nullptr) {
+            return nullptr;
+        }
+        const std::type_info* dt = op_->dynamic_type(obj_);
+        const type_desc* root = type_of_;
+        void* root_ptr = data();
+        if (dt != nullptr && type_of_ != nullptr && type_of_->id != nullptr &&
+            *dt != *type_of_->id) {
+            const type_desc* dd = detail::find_desc(*dt);
+            if (dd != nullptr) {
+                root = dd;
+                root_ptr = op_->most_derived(obj_);
+            }
+        }
+        return static_cast<T*>(detail::adjust_to(root_ptr, root, target, 0));
+    }
+
+    template <typename T>
+    result<T*> cast() noexcept {
+        static_assert(!std::is_const<T>::value,
+            "rtti::as/cast do not accept const-qualified source or target types");
+        result<T*> r;
+        if (!valid()) {
+            r.err.code = error_code::no_such_field;
+            return r;
+        }
+        T* q = as<T>();
+        if (q == nullptr) {
+            r.err.code = error_code::kind_mismatch;
+            return r;
+        }
+        r.value = q;
+        return r;
+    }
+
 private:
     struct ops {
         error_code (*get)(void* obj, const char* name, field_value& out) noexcept;
@@ -2715,6 +2820,8 @@ private:
         error_code (*from)(void* obj, const value_io* src);
         void (*destroy)(void* obj) noexcept;
         void* (*storage)(void* obj) noexcept;
+        void* (*most_derived)(void* obj) noexcept;             // dynamic_cast<void*>
+        const std::type_info* (*dynamic_type)(void* obj) noexcept;
     };
     template <typename T>
     struct ops_impl {
@@ -2736,7 +2843,35 @@ private:
         static void* storage(void* obj) noexcept {
             return static_cast<object_ref<T>*>(obj)->get();
         }
-        static inline const ops table = {get, set, to, from, destroy, storage};
+        // The most-derived object address (dynamic_cast<void*> for polymorphic
+        // T, else the static address). Used to re-root the base-chain walk at
+        // the runtime dynamic type for a full-precision downcast.
+        static void* most_derived(void* obj) noexcept {
+            T* p = static_cast<object_ref<T>*>(obj)->get();
+            if (p == nullptr) {
+                return nullptr;
+            }
+            if constexpr (std::is_polymorphic<T>::value) {
+                return dynamic_cast<void*>(p);
+            } else {
+                return static_cast<void*>(p);
+            }
+        }
+        // The runtime dynamic std::type_info: typeid(*p) when the stored type
+        // is polymorphic (yields the most-derived type), else the static type.
+        static const std::type_info* dynamic_type(void* obj) noexcept {
+            T* p = static_cast<object_ref<T>*>(obj)->get();
+            if (p == nullptr) {
+                return nullptr;
+            }
+            if constexpr (std::is_polymorphic<T>::value) {
+                return &typeid(*p);
+            } else {
+                return &typeid(T);
+            }
+        }
+        static inline const ops table = {get, set, to, from, destroy, storage,
+                                         most_derived, dynamic_type};
     };
 
     void* obj_ = nullptr;

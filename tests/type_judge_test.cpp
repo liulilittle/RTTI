@@ -64,6 +64,9 @@ RTTI_DEFINE_TYPE_DERIVED(rtti_test_detail::JudgeDerived, rtti_test_detail::Judge
 RTTI_DEFINE_TYPE_DERIVED(rtti_test_detail::JudgeDeep, rtti_test_detail::JudgeDerived, z)
 RTTI_DEFINE_TYPE(rtti_test_detail::JudgeVBase, vx)
 RTTI_DEFINE_TYPE_DERIVED(rtti_test_detail::JudgeVDerived, rtti_test_detail::JudgeVBase, vy)
+// JudgePoly is the polymorphic base used by the type-erased downcast test; it
+// must be reflected because instance::from<T> instantiates the field ops.
+RTTI_DEFINE_TYPE(rtti_test_detail::JudgePoly)
 RTTI_DEFINE_TYPE(rtti_test_detail::JudgePolyD, pd)
 RTTI_DEFINE_TYPE(rtti_test_detail::JudgeOther, w)
 
@@ -587,6 +590,52 @@ RTTI_TEST_CASE(JudgeTestAsCastPolymorphic) {
     ab.a = 1; ab.b = 2; ab.c = 3;
     B* pb = rtti::as<B>(&ab);
     RTTI_CHECK(pb != nullptr && pb->b == 2);
+}
+
+RTTI_TEST_CASE(JudgeTestInstanceAsCast) {
+    using namespace rtti_test_detail;
+    // Force the derived descriptors to be materialized/registered.
+    (void)rtti::type_of<JudgeDerived>();
+    (void)rtti::type_of<JudgeDeep>();
+
+    auto h = rtti::make_object<JudgeDeep>();
+    h->x = 1;
+    h->y = 2;
+    h->z = 3;
+    rtti::instance inst = rtti::instance::from(std::move(h));
+
+    // Upcast through two levels (Deep -> Derived -> Base) with correct offsets.
+    JudgeBase* b = inst.as<JudgeBase>();
+    RTTI_CHECK(b != nullptr && b->x == 1);
+    JudgeDerived* d = inst.as<JudgeDerived>();
+    RTTI_CHECK(d != nullptr && d->y == 2);
+    // Exact dynamic type.
+    RTTI_CHECK(inst.as<JudgeDeep>() != nullptr);
+    // Unrelated: clean failure.
+    RTTI_CHECK(inst.as<JudgeOther>() == nullptr);
+    RTTI_CHECK(inst.cast<JudgeOther>().err.code == rtti::error_code::kind_mismatch);
+    // Successful cast.
+    auto c = inst.cast<JudgeDerived>();
+    RTTI_CHECK(c.ok() && c.value == d);
+
+    // Empty handle.
+    rtti::instance empty;
+    RTTI_CHECK(empty.as<JudgeBase>() == nullptr);
+    RTTI_CHECK(empty.cast<JudgeBase>().err.code == rtti::error_code::no_such_field);
+}
+
+RTTI_TEST_CASE(JudgeTestInstanceDowncastPolymorphic) {
+    using namespace rtti_test_detail;
+    (void)rtti::type_of<JudgePolyD>();
+    // Store a derived object behind a base handle, then recover the derived
+    // view through the type-erased instance (downcast).
+    rtti::object_ref<JudgePoly> base_handle = rtti::object_ref<JudgePoly>::adopt(new JudgePolyD());
+    JudgePolyD* raw = dynamic_cast<JudgePolyD*>(base_handle.get());
+    RTTI_CHECK(raw != nullptr);
+    raw->pd = 42;
+    rtti::instance inst = rtti::instance::from(std::move(base_handle));
+    JudgePolyD* rec = inst.as<JudgePolyD>();
+    RTTI_CHECK(rec != nullptr && rec->pd == 42);
 }
 
 } // namespace rtti_test_lib
