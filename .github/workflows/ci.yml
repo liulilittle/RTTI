@@ -41,6 +41,10 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Crash backtrace (Release diagnostic)
+        if: matrix.cfg == 'Release'
+        run: |
+          gdb -batch -ex "set pagination off" -ex run -ex bt --args ./build/tests/rtti_tests || true
 
   linux-clang:
     runs-on: ubuntu-latest
