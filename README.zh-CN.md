@@ -1,5 +1,7 @@
 # RTTI — C++17 运行时类型信息库
 
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+
 [English](README.en.md) | English edition: [README.en.md](README.en.md)
 
 RTTI 是一个零依赖、可移植(MSVC / GCC / Clang)、基于 C++17 的运行时反射库,

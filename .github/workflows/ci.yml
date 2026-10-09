@@ -1,0 +1,61 @@
+# CI: build and test RTTI on MSVC, GCC, Clang plus an ASan/UBSan job.
+# Every job is a real configure -> build -> ctest pipeline; the test targets
+# (rtti_tests, rtti_proto_extension_tests, rtti_flat_schema_tests) are
+# registered via enable_testing() + add_test (CMakeLists.txt, tests/CMakeLists.txt),
+# so `ctest --output-on-failure` is the single runner across platforms.
+name: CI
+
+# `on` as a mapping key is YAML 1.2-safe and is what GitHub Actions expects;
+# the flow-sequence form avoids any YAML 1.1 `on` -> boolean misparse.
+on: [push, pull_request]
+
+jobs:
+  windows-msvc:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        cfg: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (MSVC x64)
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build --config ${{ matrix.cfg }}
+      - name: Test
+        run: ctest --test-dir build -C ${{ matrix.cfg }} --output-on-failure
+
+  linux-gcc:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cfg: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (GCC, -Werror)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.cfg }} -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  linux-clang:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Clang, -Werror)
+        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  linux-asan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (ASan/UBSan)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
