@@ -657,7 +657,45 @@ they are built and run inside the sweep as well.)
 ## Documentation
 
 - [English](README.en.md) — this file.
-- [简体中文](README.zh-CN.md).
+- [中文](README.zh-CN.md).
+- [Docs home](../docs/README.md) — index of all interfaces, design and
+  benchmark documents (bilingual).
+
+### Interface reference (API Reference, bilingual)
+
+- [Reflection core `reflection.hpp`](./docs/interface/en/reflection.md) ·
+  [中文](./docs/interface/zh/reflection.md) — `type_id` / `type_desc` /
+  `instance` / `object_ref` / registration macros / enums / fields / template
+  args / attributes / bases / methods / ctors / `as`/`cast`.
+- [Value conversion `convert.hpp`](./docs/interface/en/convert.md) ·
+  [中文](./docs/interface/zh/convert.md) — `field_value` / `value_io` /
+  `to_value`/`from_value` (+ named) / `converter<T>` / date-time & base lanes /
+  error codes.
+- [Format adapters JSON/XML/INI/TOML](./docs/interface/en/formats.md) ·
+  [中文](./docs/interface/zh/formats.md) — `parse`/`serialize`/
+  `parse_as`/`serialize`/`parse_stream` per format, configs, semantics.
+- [Protocols protobuf / FlatBuffers](./docs/interface/en/proto-flat.md) ·
+  [中文](./docs/interface/zh/proto-flat.md) — `schema<T>` registration, wire
+  codecs, tree bridge, extensions, `.fbs` schema reader.
+- [Tools & support cluster](./docs/interface/en/utils.md) ·
+  [中文](./docs/interface/zh/utils.md) — base_convert / date_time / naming /
+  version / rtti_fwd; also reflect-tools (ORM / IoC / to_string / string_ops).
+
+### Design
+
+- [Design & architecture](./docs/design/en/architecture.md) ·
+  [中文](./docs/design/zh/architecture.md) — layers, core mechanisms
+  (registration model, type erasure, format gating, error model, memory
+  strategy, number formatting), key decisions & rationale.
+
+### Performance & benchmarks
+
+- [Performance report (EN)](./docs/benchmarks/en/performance-report.md) ·
+  [中文](./docs/benchmarks/zh/performance-report.md) — methodology,
+  environment, verbatim numbers (Debug/Release × new/legacy benches),
+  reproduction steps (`scripts/run_bench.ps1`).
+- Raw outputs: `docs/benchmarks/2026-10-09-*.txt`; concise bilingual record:
+  `docs/benchmarks/2026-10-09-msvc.md`.
 
 Cross-referenced between editions; every section above has a matching section
 in the Chinese edition.

@@ -591,6 +591,40 @@ PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被
 
 - [English](README.en.md) —— 英文版。
 - [简体中文](README.zh-CN.md) —— 本文。
+- [docs 文档首页](../docs/README.md) —— 全部接口、设计与性能文档索引(中英双语)。
+
+### 接口参考(API Reference,双语)
+
+- [反射核心 `reflection.hpp`](./docs/interface/en/reflection.md) ·
+  [中文](./docs/interface/zh/reflection.md)—— `type_id` / `type_desc` /
+  `instance` / `object_ref` / 注册宏 / 枚举 / 字段 / 模板实参 / 属性 / 基类 /
+  方法 / 构造 / `as`/`cast`。
+- [值转换 `convert.hpp`](./docs/interface/en/convert.md) ·
+  [中文](./docs/interface/zh/convert.md)—— `field_value` / `value_io` /
+  `to_value`/`from_value`(+named)/ `converter<T>` / 日期时间与进制道 / 错误码。
+- [格式适配器 JSON/XML/INI/TOML](./docs/interface/en/formats.md) ·
+  [中文](./docs/interface/zh/formats.md)—— 各格式 `parse`/`serialize`/
+  `parse_as`/`serialize`/`parse_stream`、配置与语义。
+- [协议 protobuf / FlatBuffers](./docs/interface/en/proto-flat.md) ·
+  [中文](./docs/interface/zh/proto-flat.md)—— `schema<T>` 注册、wire 编解码、
+  树桥、扩展、`.fbs` schema 读取器。
+- [工具与支持簇](./docs/interface/en/utils.md) ·
+  [中文](./docs/interface/zh/utils.md)—— base_convert / date_time / naming /
+  version / rtti_fwd;另含 reflect-tools(ORM / IoC / to_string / string_ops)。
+
+### 设计
+
+- [设计与架构](./docs/design/en/architecture.md) ·
+  [中文](./docs/design/zh/architecture.md)—— 分层、核心机制(注册模型、
+  类型擦除、格式门控、错误模型、内存策略、数字格式化)、关键决策与理由。
+
+### 性能与基准
+
+- [性能报告(EN)](./docs/benchmarks/en/performance-report.md) ·
+  [中文](./docs/benchmarks/zh/performance-report.md)—— 方法学、环境、逐字
+  数字(Debug/Release × 新旧基准)、复现步骤(`scripts/run_bench.ps1`)。
+- 原始输出:`docs/benchmarks/2026-10-09-*.txt`;简明双语记录:
+  `docs/benchmarks/2026-10-09-msvc.md`。
 
 两个版本章节结构一一对应,并互相链接;上述每个章节在另一版本中都有
 匹配章节。

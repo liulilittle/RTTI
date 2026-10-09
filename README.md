@@ -16,8 +16,22 @@ format-agnostic `value_io` abstraction.
 | --- | --- | --- |
 | English | English | [README.en.md](README.en.md) |
 | 简体中文 | Chinese | [README.zh-CN.md](README.zh-CN.md) |
+| Docs home | bilingual | [docs/README.md](docs/README.md) |
 
 Both editions mirror the same section structure and cross-link each heading.
+
+Full documentation lives under `docs/` (bilingual, mutually linked):
+
+- **Interface reference** — `docs/interface/en|zh/`:
+  `reflection.md` (core + macros + `as`/`cast`), `convert.md` (value model +
+  `to_value`/`from_value`), `formats.md` (JSON/XML/INI/TOML), `proto-flat.md`
+  (protobuf + FlatBuffers), `utils.md` (base_convert / date_time / naming /
+  version / gates).
+- **Design & architecture** — `docs/design/en|zh/architecture.md`: layers,
+  core mechanisms, key decisions & rationale.
+- **Performance & benchmarks** — `docs/benchmarks/en|zh/performance-report.md`:
+  methodology, environment, verbatim numbers, reproduction
+  (`scripts/run_bench.ps1`); raw outputs under `docs/benchmarks/`.
 
 ## Layout
 
