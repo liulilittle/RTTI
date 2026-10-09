@@ -305,6 +305,7 @@ public:
 
     kind type() const noexcept { return k_; }
     bool is_none() const noexcept { return k_ == kind::none; }
+    bool is_integer() const noexcept { return k_ == kind::integer; }
 
     // Accessors; each returns a fallback when the stored kind differs.
     bool as_bool() const noexcept { return k_ == kind::boolean ? b_ : false; }
@@ -822,6 +823,28 @@ constexpr std::size_t field_count() noexcept {
 template <typename T>
 const field_access_base* const* fields() noexcept {
     return fields_of<T>::array;
+}
+
+// Visit each reflected field of T in table order (merged base fields first).
+// fn(const char* name, type_id type). No allocation.
+template <typename T, typename Fn>
+void for_each_field(Fn&& fn) {
+    const field_access_base* const* arr = fields<T>();
+    const std::size_t n = field_count<T>();
+    for (std::size_t i = 0; i < n; ++i) {
+        fn(arr[i]->name, arr[i]->type);
+    }
+}
+
+// Visit each field of a concrete object with its current value.
+// fn(const char* name, type_id type, const field_value& value).
+template <typename T, typename Fn>
+void for_each_field(T& obj, Fn&& fn) {
+    const field_access_base* const* arr = fields<T>();
+    const std::size_t n = field_count<T>();
+    for (std::size_t i = 0; i < n; ++i) {
+        fn(arr[i]->name, arr[i]->type, arr[i]->get(&obj));
+    }
 }
 
 // True if the type was registered with a _WITH_DEFAULT macro, meaning missing
