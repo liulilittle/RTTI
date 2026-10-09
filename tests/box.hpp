@@ -23,13 +23,21 @@ struct box : rtti::value_io {
     bool is_array = false;
 
     box() = default;
-    ~box() override {
+    ~box() override { clear_owned(); }
+
+    // The value_io make_* contract (mirrored by the arena adapters, e.g.
+    // json.cpp) is that a structural write resets the node's current content:
+    // reusing a scratch node (element_to / container for_each) must release
+    // the children it already owns, never silently drop their pointers.
+    void clear_owned() noexcept {
         for (box* c : arr) {
             delete c;
         }
         for (auto& kv : obj) {
             delete kv.second;
         }
+        arr.clear();
+        obj.clear();
     }
 
     rtti::value_io::kind type() const noexcept override {
@@ -107,6 +115,7 @@ struct box : rtti::value_io {
         return true;
     }
     rtti::value_io* make_array() override {
+        clear_owned();
         is_array = true;
         is_object = false;
         return this;
@@ -115,6 +124,7 @@ struct box : rtti::value_io {
         arr.push_back(static_cast<box*>(v));
     }
     rtti::value_io* make_object() override {
+        clear_owned();
         is_object = true;
         is_array = false;
         return this;
@@ -123,6 +133,7 @@ struct box : rtti::value_io {
         obj[std::string(k)] = static_cast<box*>(v);
     }
     rtti::value_io* make_scalar(rtti::field_value v) override {
+        clear_owned();
         if (v.type() == rtti::field_value::kind::string) {
             owned.assign(v.as_string().data(), v.as_string().size());
             scalar = rtti::field_value::of(rtti::string_view(owned));
