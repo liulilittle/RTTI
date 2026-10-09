@@ -9,6 +9,11 @@ option(RTTI_ENABLE_TOML "Enable TOML format adapter" ON)
 option(RTTI_ENABLE_PROTO "Enable protobuf format adapter" ON)
 option(RTTI_ENABLE_FLAT  "Enable flatbuffers format adapter" ON)
 
+# Interprocedural optimization (whole-program /GL + /LTCG on MSVC). Enabled for
+# Release only; CMake then links with /LTCG and disables incremental linking,
+# avoiding LNK4075. Default ON so the strongest optimization form is exercised.
+option(RTTI_ENABLE_LTO "Enable link-time optimization in Release builds" ON)
+
 # --- Reflect-core static library ----------------------------------------------
 add_library(rtti STATIC
     src/base_convert.cpp
@@ -55,6 +60,17 @@ target_compile_definitions(rtti
     RTTI_ENABLE_PROTO=$<BOOL:${RTTI_ENABLE_PROTO}>
     RTTI_ENABLE_FLAT=$<BOOL:${RTTI_ENABLE_FLAT}>)
 
+if(RTTI_ENABLE_LTO)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT RTTI_IPO_OK OUTPUT RTTI_IPO_MSG)
+  if(RTTI_IPO_OK)
+    set_property(TARGET rtti PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    set_property(TARGET rtti PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+  else()
+    message(STATUS "RTTI: IPO not supported (${RTTI_IPO_MSG}); building without LTO")
+  endif()
+endif()
+
 if(MSVC)
   # /Zc:preprocessor enables the conformant preprocessor, required for the
   # macro-family argument counting (RTTI_NARG) to expand correctly.
@@ -69,3 +85,14 @@ add_subdirectory(tests)
 
 # --- Benchmark -----------------------------------------------------------------
 add_subdirectory(bench)
+
+# Enable IPO on every executable created above so /LTCG links without the
+# incremental-link conflict (LNK4075) across the whole Release/LTCG build.
+if(RTTI_ENABLE_LTO AND RTTI_IPO_OK)
+  foreach(_t rtti_tests rtti_proto_extension_tests rtti_flat_schema_tests rtti_bench)
+    if(TARGET ${_t})
+      set_property(TARGET ${_t} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+      set_property(TARGET ${_t} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+    endif()
+  endforeach()
+endif()

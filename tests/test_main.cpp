@@ -8,6 +8,5 @@
 int main() {
     // Unbuffered stdout so a crash mid-test still shows the last [TEST] line.
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    rtti_test::summary();
-    return 0;
+    return rtti_test::summary();
 }

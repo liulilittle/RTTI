@@ -18,10 +18,13 @@ inline int& assertions() {
     return a;
 }
 
-inline void summary() {
+// Prints the summary and returns the process exit code (0 = pass). Callers
+// return this value from main(); it does not call std::exit, so main's tail
+// is not unreachable under /GL whole-program optimization (avoids C4702).
+inline int summary() noexcept {
     std::printf("\n%d assertions, %d failures\n", assertions(), failures());
     std::fflush(stdout);
-    std::exit(failures() == 0 ? 0 : 1);
+    return failures() == 0 ? 0 : 1;
 }
 
 } // namespace rtti_test
@@ -73,4 +76,4 @@ inline void summary() {
         }                                                                    \
     } while (0)
 
-#define RTTI_TEST_MAIN() int main() { rtti_test::summary(); return 0; }
+#define RTTI_TEST_MAIN() int main() { return rtti_test::summary(); }
