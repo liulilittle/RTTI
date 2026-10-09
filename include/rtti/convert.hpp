@@ -699,10 +699,10 @@ error_code sequence_to(value_io* dst, const Seq& in) {
         for (const auto& item : in) {
             value_io* child = dst->make_node();
             const error_code e = to_value(child, item);
+            dst->push_back(child);
             if (e != error_code::ok) {
                 return e;
             }
-            dst->push_back(child);
         }
     }
     return error_code::ok;
@@ -740,10 +740,10 @@ error_code map_to(value_io* dst, const Map& in) {
     for (const auto& kv : in) {
         value_io* child = dst->make_node();
         const error_code e = to_value(child, kv.second);
+        dst->set_key(key_traits<typename Map::key_type>::view(kv.first), child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->set_key(key_traits<typename Map::key_type>::view(kv.first), child);
     }
     return error_code::ok;
 }
@@ -777,10 +777,10 @@ error_code set_to(value_io* dst, const Set& in) {
     for (const auto& item : in) {
         value_io* child = dst->make_node();
         const error_code e = to_value(child, item);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
     }
     return error_code::ok;
 }
@@ -821,10 +821,10 @@ error_code queue_to(value_io* dst, const Q& in) {
     while (!copy.empty()) {
         value_io* child = dst->make_node();
         const error_code e = to_value(child, copy.front());
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
         copy.pop();
     }
     return error_code::ok;
@@ -862,10 +862,10 @@ error_code stack_to(value_io* dst, const S& in) {
     while (!copy.empty()) {
         value_io* child = dst->make_node();
         const error_code e = to_value(child, copy.top());
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
         copy.pop();
     }
     return error_code::ok;
@@ -904,10 +904,10 @@ error_code priority_queue_to(value_io* dst, const PQ& in) {
     while (!copy.empty()) {
         value_io* child = dst->make_node();
         const error_code e = to_value(child, copy.top());
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
         copy.pop();
     }
     return error_code::ok;
@@ -1145,10 +1145,10 @@ error_code carray_to(value_io* dst, const T (&in)[N]) {
     for (std::size_t i = 0; i < N; ++i) {
         value_io* child = dst->make_node();
         const error_code e = to_value(child, in[i]);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
     }
     return error_code::ok;
 }
@@ -1260,10 +1260,10 @@ error_code reflect_to(value_io* dst, const T& in) {
         const field_access_base* fa = f[i];
         value_io* child = dst->make_node();
         const error_code e = fa->get_value(static_cast<const void*>(&in), child);
+        dst->set_key(fa->name, child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->set_key(fa->name, child);
     }
     return error_code::ok;
 }
@@ -1490,10 +1490,10 @@ error_code reflect_to_named(value_io* dst, const T& in,
         value_io* child = dst->make_node();
         const error_code e =
             fa->get_value_named(static_cast<const void*>(&in), child, np);
+        dst->set_key(rtti::detail::apply_naming(fa->name, np), child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->set_key(rtti::detail::apply_naming(fa->name, np), child);
     }
     return error_code::ok;
 }
@@ -1725,10 +1725,10 @@ error_code carray_to_named(value_io* dst, const T (&in)[N],
     for (std::size_t i = 0; i < N; ++i) {
         value_io* child = dst->make_node();
         const error_code e = to_value_named(child, in[i], np);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
     }
     return error_code::ok;
 }
@@ -1815,10 +1815,10 @@ error_code sequence_to_named(value_io* dst, const Seq& in,
         for (const auto& item : in) {
             value_io* child = dst->make_node();
             const error_code e = to_value_named(child, item, np);
+            dst->push_back(child);
             if (e != error_code::ok) {
                 return e;
             }
-            dst->push_back(child);
         }
     }
     return error_code::ok;
@@ -1854,10 +1854,10 @@ error_code map_to_named(value_io* dst, const Map& in,
     for (const auto& kv : in) {
         value_io* child = dst->make_node();
         const error_code e = to_value_named(child, kv.second, np);
+        dst->set_key(key_traits<typename Map::key_type>::view(kv.first), child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->set_key(key_traits<typename Map::key_type>::view(kv.first), child);
     }
     return error_code::ok;
 }
@@ -1895,10 +1895,10 @@ error_code set_to_named(value_io* dst, const Set& in,
     for (const auto& item : in) {
         value_io* child = dst->make_node();
         const error_code e = to_value_named(child, item, np);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
     }
     return error_code::ok;
 }
@@ -1934,10 +1934,10 @@ error_code queue_to_named(value_io* dst, const Q& in,
     while (!copy.empty()) {
         value_io* child = dst->make_node();
         const error_code e = to_value_named(child, copy.front(), np);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
         copy.pop();
     }
     return error_code::ok;
@@ -1975,10 +1975,10 @@ error_code stack_to_named(value_io* dst, const S& in,
     while (!copy.empty()) {
         value_io* child = dst->make_node();
         const error_code e = to_value_named(child, copy.top(), np);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
         copy.pop();
     }
     return error_code::ok;
@@ -2016,10 +2016,10 @@ error_code priority_queue_to_named(value_io* dst, const PQ& in,
     while (!copy.empty()) {
         value_io* child = dst->make_node();
         const error_code e = to_value_named(child, copy.top(), np);
+        dst->push_back(child);
         if (e != error_code::ok) {
             return e;
         }
-        dst->push_back(child);
         copy.pop();
     }
     return error_code::ok;

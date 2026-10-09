@@ -219,12 +219,18 @@ RTTI_TEST_CASE(convert_recursive_to_value_too_deep) {
 
     box* dst = new box;
     RTTI_CHECK_EQ(rtti::to_value(dst, root), rtti::error_code::too_deep);
+    // The failed child stays owned by its parent: every node created by
+    // make_node is attached before the error propagates, so nothing is
+    // orphaned (and the box dtor can reclaim the partial tree).
+    rtti::value_io* chain = nullptr;
+    RTTI_CHECK(dst->get_key("children", chain));
     delete dst;
 
     box* dst2 = new box;
     const rtti::detail::naming_policy np;
     RTTI_CHECK_EQ(rtti::to_value_named(dst2, root, np),
                   rtti::error_code::too_deep);
+    RTTI_CHECK(dst2->get_key("children", chain));
     delete dst2;
 
     // to_string builds through the same write path: returns empty, no crash.
@@ -330,6 +336,32 @@ RTTI_TEST_CASE(convert_u64_overflow_not_truncated) {
     holder.big = max;
     RTTI_CHECK_EQ(rtti::to_value(h, holder), rtti::error_code::overflow);
     delete h;
+
+    // map_to / sequence_to / reflect_to attach the failing child to the
+    // parent before propagating the error; otherwise the make_node'd node
+    // is orphaned and leaks (value_io has no free, adapters reclaim only
+    // tree-attached nodes).
+    box* m = new box;
+    const std::map<std::string, std::uint64_t> mm{{"big", max}};
+    RTTI_CHECK_EQ(rtti::to_value(m, mm), rtti::error_code::overflow);
+    rtti::value_io* m_node = nullptr;
+    RTTI_CHECK(m->get_key("big", m_node));
+    delete m;
+
+    // Note: `s` above tests the scalar-overflow lane; a distinct sequence lane
+    // is checked here.
+    box* sq = new box;
+    const std::vector<std::uint64_t> sv{max};
+    RTTI_CHECK_EQ(rtti::to_value(sq, sv), rtti::error_code::overflow);
+    RTTI_CHECK(sq->size() == 1);
+    RTTI_CHECK(sq->at(0) != nullptr);
+    delete sq;
+
+    box* h2 = new box;
+    RTTI_CHECK_EQ(rtti::to_value(h2, holder), rtti::error_code::overflow);
+    rtti::value_io* big_node = nullptr;
+    RTTI_CHECK(h2->get_key("big", big_node));
+    delete h2;
 
     // In-range unsigned scalar and container paths keep working.
     box* ok = new box;
