@@ -1651,7 +1651,7 @@ private:
     const char* end_;
     const char* src_start_;
     document& doc_;
-    const parse_config& cfg_;
+    const parse_config cfg_;  // value copy: callers may pass a temporary
     const parse_events* ev_ = nullptr;  // non-null => streaming SAX mode
     bool streaming_ = false;
     bool cancelled_ = false;

@@ -1283,7 +1283,7 @@ bool parser::parse_array(node*& out, std::size_t depth) {
         }
         if (src[pos] == ']') {
             ++pos;
-            if (!fire(events->array_end)) {
+            if (events != nullptr && !fire(events->array_end)) {
                 return false;
             }
             out = n;
@@ -1307,7 +1307,7 @@ bool parser::parse_array(node*& out, std::size_t depth) {
         }
         if (src[pos] == ']') {
             ++pos;
-            if (!fire(events->array_end)) {
+            if (events != nullptr && !fire(events->array_end)) {
                 return false;
             }
             out = n;
@@ -1408,7 +1408,8 @@ bool parser::parse_value(node*& out, std::size_t depth) {
                                  rtti::string_view(decoded.data(),
                                                    decoded.size()));
         }
-        if (!fire(events->string_value,
+        if (events != nullptr &&
+            !fire(events->string_value,
                   rtti::string_view(decoded.data(), decoded.size()))) {
             return false;
         }
@@ -1431,7 +1432,8 @@ bool parser::parse_value(node*& out, std::size_t depth) {
                                  rtti::string_view(decoded.data(),
                                                    decoded.size()));
         }
-        if (!fire(events->string_value,
+        if (events != nullptr &&
+            !fire(events->string_value,
                   rtti::string_view(decoded.data(), decoded.size()))) {
             return false;
         }

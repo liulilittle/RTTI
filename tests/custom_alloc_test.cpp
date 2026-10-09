@@ -126,10 +126,6 @@ RTTI_TEST_CASE(custom_alloc_key_map_three_formats) {
 // through all three formats as reflected-struct members (allocator-agnostic
 // container conversion; the adapters bind the struct root to an object).
 RTTI_TEST_CASE(custom_alloc_containers_three_formats) {
-    using Deq = std::deque<int, ProbeAlloc<int>>;
-    using Vec = std::vector<int, ProbeAlloc<int>>;
-    using Set = std::set<int, std::less<int>, ProbeAlloc<int>>;
-
     CustomContainers in;
     in.v = {1, 2, 3};
     in.s = {5, 9};

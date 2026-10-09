@@ -26,6 +26,12 @@ constexpr long long kIterations = 1000000;
 
 // Field walk over the registered table.
 long long bench_field_walk() {
+    // The reflection table carries three parallel static arrays; this bench
+    // walks only the accessor table, so reference the metadata statics too
+    // (odr-use) to keep clang's -Wunused-const-variable quiet in a TU that
+    // never touches them otherwise.
+    (void)&BenchType::rtti_registration::members;
+    (void)&BenchType::rtti_registration::desc[0];
     const auto* const* arr = rtti::fields<BenchType>();
     const std::size_t n = rtti::field_count<BenchType>();
     long long acc = 0;
