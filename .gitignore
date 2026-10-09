@@ -21,8 +21,8 @@ cmake-build-*/
 # SDD / superpowers scratch
 .superpowers/
 
-# W3 backups (pre-edit snapshots)
-.opencode/backups/
+# opencode agent workspace (memory/backups/scripts) — never committed
+.opencode/
 
 # Git worktrees
 .worktrees/
