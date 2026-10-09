@@ -12,15 +12,15 @@
 
 namespace rtti_test_lib {
 
-struct Inner {
+struct RecursionInner {
     int a = 0;
     std::string b;
 };
 
 struct Outer {
     int n = 0;
-    Inner in;
-    std::vector<Inner> list;
+    RecursionInner in;
+    std::vector<RecursionInner> list;
 };
 
 struct Defaults {
@@ -49,7 +49,7 @@ void to_value(rtti::value_io* dst, const Custom& c, rtti::error_code& e) {
 
 } // namespace rtti_test_lib
 
-RTTI_DEFINE_TYPE(rtti_test_lib::Inner, a, b)
+RTTI_DEFINE_TYPE(rtti_test_lib::RecursionInner, a, b)
 RTTI_DEFINE_TYPE(rtti_test_lib::Outer, n, in, list)
 RTTI_DEFINE_TYPE_WITH_DEFAULT(rtti_test_lib::Defaults, t, h)
 
