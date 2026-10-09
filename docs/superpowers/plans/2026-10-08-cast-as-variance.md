@@ -408,8 +408,9 @@ Expected: 编译失败(`rtti::as` 未定义)。
 //   as<T>(p)   : nullptr on failure; no error payload.
 //   cast<T>(p) : result<T*> with kind_mismatch on failure and no_such_field
 //                for a null source.
-// Covariant upcasts use the compiler's offset-correct static_cast (virtual
-// bases via dynamic_cast, see detail::base_adjuster). Contravariant downcasts
+// Covariant upcasts use the compiler's offset-correct static_cast, including
+// virtual bases and multiple inheritance (see detail::base_adjuster).
+// Contravariant downcasts
 // require the static source type to be polymorphic (dynamic_cast); a
 // non-polymorphic source cannot be checked at runtime and fails cleanly.
 // Unrelated polymorphic types may still succeed through a dynamic_cast
@@ -490,6 +491,95 @@ Expected: 0 警告;新增用例通过,`0 failures`。
 ```bash
 git add include/rtti/reflection.hpp tests/type_judge_test.cpp
 git commit -m "feat(reflect): as/cast for raw pointers and object_ref"
+```
+
+---
+
+## Task 3-fix: 审阅修复(const 拒绝 / 注释 / 多态覆盖)
+
+来源:Task 3 独立审阅 `task-3-review.md`(I-1/I-2/I-3 + M-1/M-2)。Task 3 实现逐字照抄原 Step 3/4,故缺陷在计划层,本段为权威修订。
+
+**Files:** Modify `include/rtti/reflection.hpp`、`tests/type_judge_test.cpp`。
+
+- [ ] **Step 1: I-1 编译期拒绝 const 源/目标**
+
+在 `as` 函数体开头(`if (p == nullptr)` 之前)插入:
+```cpp
+    static_assert(!std::is_const<T>::value && !std::is_const<U>::value,
+        "rtti::as/cast do not accept const-qualified source or target types");
+```
+理由:Review Focus 明示"仅接受非 const 源与目标,避免 const 丢失";现状 `const PD*` 会在 `reflection.hpp:2302` 抛出指向库内部的 C2440,改为调用点可读的静态断言。
+
+- [ ] **Step 2: I-2 修正头注释(虚基机制)**
+
+`reflection.hpp:2286-2287` 现文 `virtual bases via dynamic_cast` 与实现相反(虚基上转走 `base_adjuster` 偏特化 static_cast)。改为:
+```
+// Covariant upcasts use the compiler's offset-correct static_cast, including
+// virtual bases and multiple inheritance (see detail::base_adjuster).
+```
+
+- [ ] **Step 3: M-1 补 object_ref const 重载**
+
+在 `object_ref` 现有 `as`/`cast` 之后补 const 版本(与 `get`/`operator*`/`valid` 一致):
+```cpp
+    template <typename Target>
+    Target* as() const noexcept { return rtti::as<Target>(p_); }
+    template <typename Target>
+    result<Target*> cast() const noexcept { return rtti::cast<Target>(p_); }
+```
+
+- [ ] **Step 4: I-3 + M-2 补测试(多态下转命中/未命中、多继承跨转、非零偏移上转)**
+
+在 `tests/type_judge_test.cpp` 末尾(`namespace rtti_test_lib` 内、最后 `}` 之前)追加。辅助类型用函数内局部类(合法且有虚函数,dynamic_cast 可用),无需注册:
+```cpp
+RTTI_TEST_CASE(JudgeTestAsCastPolymorphic) {
+    using namespace rtti_test_detail;
+
+    // Polymorphic downcast hit: dynamic_cast succeeds on the exact dynamic type.
+    JudgePolyD pd;
+    pd.pd = 42;
+    JudgePoly* pbase = &pd;
+    JudgePolyD* hit = rtti::as<JudgePolyD>(pbase);
+    RTTI_CHECK(hit != nullptr && hit->pd == 42);
+    RTTI_CHECK(rtti::cast<JudgePolyD>(pbase).ok());
+
+    // Polymorphic downcast miss: dynamic type is the base, not the derived.
+    JudgePoly base_obj;
+    RTTI_CHECK(rtti::as<JudgePolyD>(&base_obj) == nullptr);
+    RTTI_CHECK(rtti::cast<JudgePolyD>(&base_obj).err.code == rtti::error_code::kind_mismatch);
+
+    // Unrelated polymorphic cross-cast: Right* -> Left* succeeds via dynamic_cast.
+    struct Left  { virtual ~Left() {} };
+    struct Right { virtual ~Right() {} };
+    struct Both  : Left, Right { int tag = 0; };
+    Both both;
+    Right* right = &both;
+    Left* left = rtti::as<Left>(right);
+    RTTI_CHECK(left != nullptr);
+    RTTI_CHECK(rtti::as<Right>(left) == right);
+
+    // Multiple inheritance upcast to a non-first base: offset must be correct.
+    struct A { int a = 0; };
+    struct B { int b = 0; };
+    struct AB : A, B { int c = 0; };
+    AB ab;
+    ab.a = 1; ab.b = 2; ab.c = 3;
+    B* pb = rtti::as<B>(&ab);
+    RTTI_CHECK(pb != nullptr && pb->b == 2);
+}
+```
+说明:const 源/目标的拒绝是 `static_assert` 编译期行为,无法在运行期用例中断言;由独立负向编译探针验证(修复报告附探针命令与 C2338 输出)。
+
+- [ ] **Step 5: 运行 + commit**
+
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Debug --target rtti_tests
+.\build\tests\Debug\rtti_tests.exe
+```
+Expected:0 warning 0 error;新增断言全绿(基线 55791 → 预期 +7)。
+```bash
+git add include/rtti/reflection.hpp tests/type_judge_test.cpp
+git commit -m "fix(reflect): reject const in as/cast; correct vbase comment; poly coverage"
 ```
 
 ---
@@ -804,10 +894,10 @@ Expected: `0 failures`。
 
 They accept a raw pointer, an `object_ref<U>`, or a type-erased `instance`.
 Covariant upcasts (derived to base) are compile-time correct, including
-virtual bases when the source is polymorphic. Contravariant downcasts are
-runtime-checked and require a polymorphic source; a non-polymorphic source
-fails cleanly. A virtual base of a non-polymorphic type has no legal pointer
-adjustment and also fails cleanly rather than aliasing the wrong memory.
+virtual bases and multiple inheritance, regardless of polymorphism.
+Contravariant downcasts are runtime-checked and require a polymorphic
+source; a non-polymorphic source fails cleanly. Const-qualified source or
+target types are rejected at compile time.
 ```
 ```markdown
 ## 变体转换
@@ -819,9 +909,9 @@ adjustment and also fails cleanly rather than aliasing the wrong memory.
   (空源设 `no_such_field`)。
 
 三者均支持:原始指针、`object_ref<U>`、类型擦除的 `instance`。协变上转
-(派生到基)编译期正确,源多态时含虚基类。逆变下转运行时检查,要求源多态;
-非多态源干净失败。非多态类型的虚基类无合法指针调整,同样干净失败,绝不
-返回错误偏移的指针。
+(派生到基)编译期正确,含虚基类与多继承,与是否多态无关。逆变下转运行时
+检查,要求源多态;非多态源干净失败。const 限定的源或目标类型在编译期被
+拒绝,绝不返回错误偏移的指针。
 ```
 
 - [ ] **Step 4: 全量三档终验**
