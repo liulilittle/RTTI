@@ -9,6 +9,7 @@
 
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -2214,5 +2215,577 @@ inline void format_real(double value, std::string& out) {
 }
 
 } // namespace detail
+
+// ---------------------------------------------------------------------------
+// Value-semantics strong-cast bridge (rtti::convert::as / cast / to).
+//
+// A numeric "value bridge" over the scalar lanes already implemented above:
+//   rtti::convert::as<T>(src)   -> optional<T>, nullopt on any failure
+//   rtti::convert::cast<T>(src) -> result<T>, distinguishable error codes
+//   rtti::convert::to<T>(src)   -> alias of cast (single unified entry)
+//
+// Sources: native scalars (bool / integers / floating point), string_view /
+// std::string, field_value, and value_io-derived pointers (including const).
+// Targets: scalar int family, floating point, std::string / string_view,
+// registered enums, and single-layer std::vector<scalar>.
+//
+// Error mapping: kind_mismatch for incompatible lanes, overflow for numeric
+// range violations (truncation toward zero, never wrap), invalid_number for
+// malformed numeric/label text (the library's documented ill-formed-literal
+// code), and no_such_field for null / null-kind sources.
+//
+// The bridge lives in its own namespace so the existing pointer
+// rtti::as<T>(U*) / rtti::cast<T>(U*) overloads are never shadowed; the
+// entry-point SFINAE additionally excludes non-value_io pointers so an
+// unrelated pointer source is a hard compile error instead of a silent lane.
+namespace convert {
+
+namespace detail {
+
+// True for the scalar target families the bridge converts to.
+template <typename T>
+struct is_scalar_target : std::bool_constant<
+    std::is_same<T, bool>::value || std::is_integral<T>::value ||
+    std::is_floating_point<T>::value || std::is_same<T, std::string>::value ||
+    std::is_same<T, string_view>::value || is_registered_enum<T>::value> {};
+
+// True for a single-layer std::vector whose elements are scalar bridge
+// targets (the only container the bridge accepts). Defined as a partial
+// specialization so the trait never accesses `value_type` for a non-vector
+// target (a plain `T::value_type` in an &&-guarded condition would still be a
+// hard substitution error inside an if constexpr instantiation).
+template <typename T, typename = void>
+struct is_vector_of_scalar : std::false_type {};
+template <typename U, typename A>
+struct is_vector_of_scalar<std::vector<U, A>,
+                           std::enable_if_t<is_scalar_target<U>::value>>
+    : std::true_type {};
+
+// Entry gate: the target is not a pointer and the source is either a
+// non-pointer value, a character pointer (string literal / C string text), or
+// a value_io-derived pointer. This keeps the bridge out of the existing
+// rtti::as<T>(U*) / rtti::cast<T>(U*) pointer overload space while still
+// accepting value_io* / const value_io* sources and C-string literals.
+template <typename T, typename Src>
+struct bridge_ok : std::bool_constant<
+    !std::is_pointer<T>::value &&
+    (!std::is_pointer<std::decay_t<Src>>::value ||
+     std::is_convertible<std::decay_t<Src>, const char*>::value ||
+     std::is_convertible<std::decay_t<Src>, const value_io*>::value)> {};
+
+// Trim ASCII whitespace (spec: " 42 " parses as 42) without allocating.
+inline string_view trim_view(string_view s) noexcept {
+    const std::size_t n = s.size();
+    std::size_t b = 0;
+    while (b < n && (s[b] == ' ' || s[b] == '\t' || s[b] == '\n' ||
+                     s[b] == '\r')) {
+        ++b;
+    }
+    std::size_t e = n;
+    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' ||
+                     s[e - 1] == '\n' || s[e - 1] == '\r')) {
+        --e;
+    }
+    return s.substr(b, e - b);
+}
+
+// Normalized source lane shared by every target dispatch.
+enum class lane_kind : uint8_t {
+    none,
+    boolean,
+    integer,
+    uinteger,  // uint64 above INT64_MAX keeps its exact unsigned lane
+    real,
+    text,
+    array
+};
+
+struct src_lane {
+    lane_kind kind = lane_kind::none;
+    bool b = false;
+    std::int64_t i = 0;
+    std::uint64_t u = 0;
+    double d = 0.0;
+    string_view s;
+    const value_io* node = nullptr;  // array source (element iteration)
+};
+
+// Normalize any supported source into a src_lane. `e` receives the failure
+// code for sources that carry no scalar lane (null / kind-mismatch).
+template <typename Src>
+inline src_lane extract_lane(Src&& src, error_code& e) noexcept {
+    using S = std::decay_t<Src>;
+    src_lane l;
+    if constexpr (std::is_pointer<S>::value) {
+        if constexpr (std::is_convertible<S, const char*>::value) {
+            const char* cp = src;
+            if (cp == nullptr) {
+                e = error_code::no_such_field;
+                return l;
+            }
+            l.kind = lane_kind::text;
+            l.s = string_view(cp);
+            return l;
+        } else if constexpr (std::is_convertible<S, const value_io*>::value) {
+            const value_io* node = src;
+            if (node == nullptr) {
+                e = error_code::no_such_field;
+                return l;
+            }
+            switch (node->type()) {
+                case value_io::kind::null:
+                    e = error_code::no_such_field;
+                    return l;
+                case value_io::kind::boolean: {
+                    bool v = false;
+                    if (node->as_bool(v)) {
+                        l.kind = lane_kind::boolean;
+                        l.b = v;
+                        return l;
+                    }
+                    break;
+                }
+                case value_io::kind::integer: {
+                    std::int64_t v = 0;
+                    if (node->as_integer(v)) {
+                        l.kind = lane_kind::integer;
+                        l.i = v;
+                        return l;
+                    }
+                    break;
+                }
+                case value_io::kind::real: {
+                    double v = 0.0;
+                    if (node->as_real(v)) {
+                        l.kind = lane_kind::real;
+                        l.d = v;
+                        return l;
+                    }
+                    break;
+                }
+                case value_io::kind::string: {
+                    string_view v;
+                    if (node->as_string(v)) {
+                        l.kind = lane_kind::text;
+                        l.s = v;
+                        return l;
+                    }
+                    break;
+                }
+                case value_io::kind::array:
+                    l.kind = lane_kind::array;
+                    l.node = node;
+                    return l;
+                default:
+                    break;
+            }
+            e = error_code::kind_mismatch;
+            return l;
+        } else {
+            // Unreachable through the public entry points (bridge_ok excludes
+            // unrelated object pointers); keep the internals total.
+            e = error_code::kind_mismatch;
+            return l;
+        }
+    } else if constexpr (std::is_same<S, std::nullptr_t>::value) {
+        (void)src;
+        e = error_code::no_such_field;
+        return l;
+    } else if constexpr (std::is_same<S, field_value>::value) {
+        const field_value& f = src;
+        switch (f.type()) {
+            case field_value::kind::boolean:
+                l.kind = lane_kind::boolean;
+                l.b = f.as_bool();
+                return l;
+            case field_value::kind::integer:
+                l.kind = lane_kind::integer;
+                l.i = f.as_integer();
+                return l;
+            case field_value::kind::real:
+                l.kind = lane_kind::real;
+                l.d = f.as_real();
+                return l;
+            case field_value::kind::string:
+                l.kind = lane_kind::text;
+                l.s = f.as_string();
+                return l;
+            default:
+                break;
+        }
+        e = error_code::kind_mismatch;
+        return l;
+    } else if constexpr (std::is_same<S, bool>::value) {
+        l.kind = lane_kind::boolean;
+        l.b = src;
+        return l;
+    } else if constexpr (std::is_integral<S>::value) {
+        if constexpr (std::is_signed<S>::value) {
+            l.kind = lane_kind::integer;
+            l.i = static_cast<std::int64_t>(src);
+        } else {
+            const std::uint64_t u = static_cast<std::uint64_t>(src);
+            if (u <= static_cast<std::uint64_t>(
+                         (std::numeric_limits<std::int64_t>::max)())) {
+                l.kind = lane_kind::integer;
+                l.i = static_cast<std::int64_t>(u);
+            } else {
+                l.kind = lane_kind::uinteger;
+                l.u = u;
+            }
+        }
+        return l;
+    } else if constexpr (std::is_floating_point<S>::value) {
+        l.kind = lane_kind::real;
+        l.d = static_cast<double>(src);
+        return l;
+    } else if constexpr (std::is_same<S, string_view>::value) {
+        l.kind = lane_kind::text;
+        l.s = src;
+        return l;
+    } else if constexpr (std::is_same<S, std::string>::value) {
+        l.kind = lane_kind::text;
+        l.s = string_view(src.data(), src.size());
+        return l;
+    } else {
+        e = error_code::kind_mismatch;
+        return l;
+    }
+}
+
+// Text -> integral T. The whole trimmed text must be a number: malformed text
+// is invalid_number (the documented ill-formed-numeric-literal code), an
+// out-of-range value is overflow. Integer text reads exactly through the
+// uint64 then int64 lanes (so UINT64_MAX loses no precision in a double);
+// fractional/exponent text goes through the truncated real path.
+template <typename T>
+inline error_code text_to_integral(string_view s, T& out) noexcept {
+    if (s.empty()) {
+        return error_code::invalid_number;
+    }
+    std::uint64_t uv = 0;
+    const auto ures = std::from_chars(s.data(), s.data() + s.size(), uv);
+    if (ures.ec == std::errc() && ures.ptr == s.data() + s.size()) {
+        return rtti::detail::scalar_uint64_to_integral<T>(uv, out);
+    }
+    std::int64_t iv = 0;
+    const auto ires = std::from_chars(s.data(), s.data() + s.size(), iv);
+    if (ires.ec == std::errc() && ires.ptr == s.data() + s.size()) {
+        return rtti::detail::scalar_int64_to_integral<T>(iv, out);
+    }
+    double dv = 0.0;
+    const auto rres = std::from_chars(s.data(), s.data() + s.size(), dv);
+    if (rres.ec == std::errc::result_out_of_range) {
+        return error_code::overflow;
+    }
+    if (rres.ec != std::errc() || rres.ptr != s.data() + s.size()) {
+        return error_code::invalid_number;
+    }
+    return rtti::detail::scalar_real_to_integral<T>(dv, out);
+}
+
+// Text -> floating T through the existing scalar lane, with malformed text
+// remapped from the converter's kind_mismatch to the bridge's invalid_number.
+template <typename T>
+inline error_code text_to_real(string_view s, T& out) noexcept {
+    if (s.empty()) {
+        return error_code::invalid_number;
+    }
+    const error_code e = rtti::detail::scalar_text_to_real<T>(s, out);
+    return e == error_code::kind_mismatch ? error_code::invalid_number : e;
+}
+
+// Integral target: every scalar lane applies its own conversion rule.
+template <typename T>
+inline result<T> lane_to_integral(const src_lane& l) noexcept {
+    switch (l.kind) {
+        case lane_kind::boolean: {
+            T out{};
+            const error_code e =
+                rtti::detail::scalar_int64_to_integral<T>(l.b ? 1 : 0, out);
+            return e == error_code::ok ? make_ok<T>(out) : make_error<T>(e);
+        }
+        case lane_kind::integer: {
+            T out{};
+            const error_code e =
+                rtti::detail::scalar_int64_to_integral<T>(l.i, out);
+            return e == error_code::ok ? make_ok<T>(out) : make_error<T>(e);
+        }
+        case lane_kind::uinteger: {
+            T out{};
+            const error_code e =
+                rtti::detail::scalar_uint64_to_integral<T>(l.u, out);
+            return e == error_code::ok ? make_ok<T>(out) : make_error<T>(e);
+        }
+        case lane_kind::real: {
+            T out{};
+            const error_code e =
+                rtti::detail::scalar_real_to_integral<T>(l.d, out);
+            return e == error_code::ok ? make_ok<T>(out) : make_error<T>(e);
+        }
+        case lane_kind::text: {
+            const string_view t = trim_view(l.s);
+            T out{};
+            const error_code e = text_to_integral<T>(t, out);
+            return e == error_code::ok ? make_ok<T>(out) : make_error<T>(e);
+        }
+        default:
+            return make_error<T>(error_code::kind_mismatch);
+    }
+}
+
+// Floating target: integer/real lanes cast directly (IEEE precision loss
+// accepted, mirroring the scalar real-from lane); text is parsed.
+template <typename T>
+inline result<T> lane_to_real(const src_lane& l) noexcept {
+    switch (l.kind) {
+        case lane_kind::boolean:
+            return make_error<T>(error_code::kind_mismatch);
+        case lane_kind::integer:
+            return make_ok<T>(static_cast<T>(l.i));
+        case lane_kind::uinteger:
+            return make_ok<T>(static_cast<T>(l.u));
+        case lane_kind::real:
+            return make_ok<T>(static_cast<T>(l.d));
+        case lane_kind::text: {
+            const string_view t = trim_view(l.s);
+            T out{};
+            const error_code e = text_to_real<T>(t, out);
+            return e == error_code::ok ? make_ok<T>(out) : make_error<T>(e);
+        }
+        default:
+            return make_error<T>(error_code::kind_mismatch);
+    }
+}
+
+// Bool target: integer lane via the int<->bool rule (0 false, nonzero true);
+// text accepts the "true"/"false"/"1"/"0" tokens; real has no bool lane.
+inline result<bool> lane_to_bool(const src_lane& l) noexcept {
+    switch (l.kind) {
+        case lane_kind::boolean:
+            return make_ok<bool>(l.b);
+        case lane_kind::integer:
+            return make_ok<bool>(l.i != 0);
+        case lane_kind::uinteger:
+            return make_ok<bool>(l.u != 0);
+        case lane_kind::real:
+            return make_error<bool>(error_code::kind_mismatch);
+        case lane_kind::text: {
+            const string_view t = trim_view(l.s);
+            if (t == "true" || t == "1") {
+                return make_ok<bool>(true);
+            }
+            if (t == "false" || t == "0") {
+                return make_ok<bool>(false);
+            }
+            return make_error<bool>(error_code::invalid_number);
+        }
+        default:
+            return make_error<bool>(error_code::kind_mismatch);
+    }
+}
+
+// String target: text copies directly; integer/real lanes format through the
+// existing numeric text lanes. The noexcept contract is kept by turning an
+// allocation failure into a clean error instead of a thrown exception.
+inline result<std::string> lane_to_string(const src_lane& l) noexcept {
+    switch (l.kind) {
+        case lane_kind::boolean:
+            return make_error<std::string>(error_code::kind_mismatch);
+        case lane_kind::integer:
+            try {
+                return make_ok<std::string>(std::to_string(l.i));
+            } catch (...) {
+                return make_error<std::string>(error_code::invalid_number);
+            }
+        case lane_kind::uinteger:
+            try {
+                return make_ok<std::string>(std::to_string(l.u));
+            } catch (...) {
+                return make_error<std::string>(error_code::invalid_number);
+            }
+        case lane_kind::real: {
+            std::string s;
+            rtti::detail::scalar_format_real(l.d, s);
+            return make_ok<std::string>(std::move(s));
+        }
+        case lane_kind::text:
+            return make_ok<std::string>(std::string(l.s.data(), l.s.size()));
+        default:
+            return make_error<std::string>(error_code::kind_mismatch);
+    }
+}
+
+// string_view target: only a text source is accepted (the view always points
+// into the source's storage, so the caller owns its lifetime), matching the
+// converter<string_view> lane.
+inline result<string_view> lane_to_string_view(const src_lane& l) noexcept {
+    switch (l.kind) {
+        case lane_kind::text:
+            return make_ok<string_view>(l.s);
+        default:
+            return make_error<string_view>(error_code::kind_mismatch);
+    }
+}
+
+// Registered-enum target: label text via the enum table, or an integer lane
+// range-checked against the enum's underlying type. Unregistered enums never
+// reach this lane (the target dispatch reports kind_mismatch).
+template <typename T>
+inline result<T> lane_to_enum(const src_lane& l) noexcept {
+    using UT = std::underlying_type_t<T>;
+    switch (l.kind) {
+        case lane_kind::text: {
+            const string_view t = trim_view(l.s);
+            for (std::size_t i = 0; i < enum_table<T>::count; ++i) {
+                if (string_view(enum_table<T>::array[i].name) == t) {
+                    return make_ok<T>(enum_table<T>::array[i].value);
+                }
+            }
+            return make_error<T>(error_code::invalid_number);
+        }
+        case lane_kind::integer: {
+            const std::int64_t iv = l.i;
+            if constexpr (std::is_unsigned<UT>::value) {
+                if (iv < 0 ||
+                    static_cast<std::uint64_t>(iv) >
+                        static_cast<std::uint64_t>(
+                            (std::numeric_limits<UT>::max)())) {
+                    return make_error<T>(error_code::overflow);
+                }
+            } else {
+                if (iv < static_cast<std::int64_t>(
+                             (std::numeric_limits<UT>::min)()) ||
+                    iv > static_cast<std::int64_t>(
+                             (std::numeric_limits<UT>::max)())) {
+                    return make_error<T>(error_code::overflow);
+                }
+            }
+            return make_ok<T>(static_cast<T>(static_cast<UT>(iv)));
+        }
+        case lane_kind::uinteger: {
+            const std::uint64_t uv = l.u;
+            if (uv >
+                static_cast<std::uint64_t>(
+                    (std::numeric_limits<UT>::max)())) {
+                return make_error<T>(error_code::overflow);
+            }
+            return make_ok<T>(static_cast<T>(static_cast<UT>(uv)));
+        }
+        default:
+            return make_error<T>(error_code::kind_mismatch);
+    }
+}
+
+// Dispatch a normalized lane onto the target scalar family.
+template <typename T>
+inline result<T> lane_to(const src_lane& l) noexcept {
+    if constexpr (std::is_same<T, bool>::value) {
+        return lane_to_bool(l);
+    } else if constexpr (std::is_integral<T>::value) {
+        return lane_to_integral<T>(l);
+    } else if constexpr (std::is_floating_point<T>::value) {
+        return lane_to_real<T>(l);
+    } else if constexpr (std::is_same<T, std::string>::value) {
+        return lane_to_string(l);
+    } else if constexpr (std::is_same<T, string_view>::value) {
+        return lane_to_string_view(l);
+    } else if constexpr (is_registered_enum<T>::value) {
+        return lane_to_enum<T>(l);
+    } else {
+        return make_error<T>(error_code::kind_mismatch);
+    }
+}
+
+// std::vector<scalar> target: an array source converts element by element
+// (propagating the first element failure), any non-array scalar source wraps
+// into a single-element vector.
+template <typename T>
+inline result<T> lane_to_vector(const src_lane& l) noexcept {
+    using U = typename T::value_type;
+    T out;
+    if (l.kind == lane_kind::array) {
+        const value_io* node = l.node;
+        const std::size_t n = node->size();
+        out.reserve(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            value_io* child = node->at(i);
+            if (child == nullptr) {
+                return make_error<T>(error_code::kind_mismatch);
+            }
+            error_code e = error_code::ok;
+            const src_lane cl = extract_lane(child, e);
+            if (e != error_code::ok) {
+                return make_error<T>(e);
+            }
+            const result<U> r = lane_to<U>(cl);
+            if (!r.ok()) {
+                return make_error<T>(r.err.code);
+            }
+            out.push_back(std::move(r.value));
+        }
+        return make_ok<T>(std::move(out));
+    }
+    if (l.kind == lane_kind::none) {
+        return make_error<T>(error_code::kind_mismatch);
+    }
+    const result<U> r = lane_to<U>(l);
+    if (!r.ok()) {
+        return make_error<T>(r.err.code);
+    }
+    out.push_back(std::move(r.value));
+    return make_ok<T>(std::move(out));
+}
+
+// Shared strict-conversion body used by cast/to (and, through them, as).
+template <typename T, typename Src>
+inline result<T> cast_impl(Src&& src) noexcept {
+    if constexpr (is_scalar_target<T>::value) {
+        error_code e = error_code::ok;
+        const src_lane l = extract_lane(src, e);
+        if (e != error_code::ok) {
+            return make_error<T>(e);
+        }
+        return lane_to<T>(l);
+    } else if constexpr (is_vector_of_scalar<T>::value) {
+        error_code e = error_code::ok;
+        const src_lane l = extract_lane(src, e);
+        if (e != error_code::ok) {
+            return make_error<T>(e);
+        }
+        return lane_to_vector<T>(l);
+    } else {
+        return make_error<T>(error_code::kind_mismatch);
+    }
+}
+
+} // namespace detail
+
+// Loose conversion: nullopt on any failure, never throws.
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+std::optional<T> as(Src&& src) noexcept {
+    result<T> r = detail::cast_impl<T>(src);
+    if (!r.ok()) {
+        return std::nullopt;
+    }
+    return std::optional<T>(std::move(r.value));
+}
+
+// Strict conversion: result<T> with a distinguishable error_code.
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+result<T> cast(Src&& src) noexcept {
+    return detail::cast_impl<T>(std::forward<Src>(src));
+}
+
+// Unified entry alias: identical to cast.
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+result<T> to(Src&& src) noexcept {
+    return detail::cast_impl<T>(std::forward<Src>(src));
+}
+
+} // namespace convert
 
 } // namespace rtti

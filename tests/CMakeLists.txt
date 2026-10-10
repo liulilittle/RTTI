@@ -6,6 +6,7 @@ set(RTTI_TEST_SOURCES
     reflection_table_test.cpp
     macro_test.cpp
     convert_test.cpp
+    convert_cast_test.cpp
     recursion_test.cpp
     runtime_api_test.cpp
     review_focus_test.cpp
