@@ -2453,35 +2453,19 @@ inline src_lane extract_lane(Src&& src, error_code& e) noexcept {
     }
 }
 
-// Text -> integral T. The whole trimmed text must be a number: malformed text
-// is invalid_number (the documented ill-formed-numeric-literal code), an
-// out-of-range value is overflow. Integer text reads exactly through the
-// uint64 then int64 lanes (so UINT64_MAX loses no precision in a double);
-// fractional/exponent text goes through the truncated real path.
+// Text -> integral T through the existing scalar lane, with malformed text
+// remapped from the converter's kind_mismatch to the bridge's invalid_number
+// (the documented ill-formed-numeric-literal code); an out-of-range value is
+// overflow. Integer text reads exactly through the uint64 then int64 lanes
+// (so UINT64_MAX loses no precision in a double); fractional/exponent text
+// goes through the truncated real path.
 template <typename T>
 inline error_code text_to_integral(string_view s, T& out) noexcept {
     if (s.empty()) {
         return error_code::invalid_number;
     }
-    std::uint64_t uv = 0;
-    const auto ures = std::from_chars(s.data(), s.data() + s.size(), uv);
-    if (ures.ec == std::errc() && ures.ptr == s.data() + s.size()) {
-        return rtti::detail::scalar_uint64_to_integral<T>(uv, out);
-    }
-    std::int64_t iv = 0;
-    const auto ires = std::from_chars(s.data(), s.data() + s.size(), iv);
-    if (ires.ec == std::errc() && ires.ptr == s.data() + s.size()) {
-        return rtti::detail::scalar_int64_to_integral<T>(iv, out);
-    }
-    double dv = 0.0;
-    const auto rres = std::from_chars(s.data(), s.data() + s.size(), dv);
-    if (rres.ec == std::errc::result_out_of_range) {
-        return error_code::overflow;
-    }
-    if (rres.ec != std::errc() || rres.ptr != s.data() + s.size()) {
-        return error_code::invalid_number;
-    }
-    return rtti::detail::scalar_real_to_integral<T>(dv, out);
+    const error_code e = rtti::detail::scalar_text_to_integral<T>(s, out);
+    return e == error_code::kind_mismatch ? error_code::invalid_number : e;
 }
 
 // Text -> floating T through the existing scalar lane, with malformed text
@@ -2646,31 +2630,42 @@ inline result<T> lane_to_enum(const src_lane& l) noexcept {
         }
         case lane_kind::integer: {
             const std::int64_t iv = l.i;
-            if constexpr (std::is_unsigned<UT>::value) {
-                if (iv < 0 ||
-                    static_cast<std::uint64_t>(iv) >
-                        static_cast<std::uint64_t>(
-                            (std::numeric_limits<UT>::max)())) {
-                    return make_error<T>(error_code::overflow);
-                }
-            } else {
+            if constexpr (rtti::detail::is_plain_char<UT>::value) {
+                // Plain char keeps its own signed-byte gate: the scalar lane
+                // treats char as an ASCII byte (0..255), which is not the enum
+                // underlying-type range, so reuse would change behavior here.
                 if (iv < static_cast<std::int64_t>(
                              (std::numeric_limits<UT>::min)()) ||
                     iv > static_cast<std::int64_t>(
                              (std::numeric_limits<UT>::max)())) {
                     return make_error<T>(error_code::overflow);
                 }
+                return make_ok<T>(static_cast<T>(static_cast<UT>(iv)));
             }
-            return make_ok<T>(static_cast<T>(static_cast<UT>(iv)));
+            UT tmp{};
+            const error_code e =
+                rtti::detail::scalar_int64_to_integral<UT>(iv, tmp);
+            if (e != error_code::ok) {
+                return make_error<T>(e);
+            }
+            return make_ok<T>(static_cast<T>(tmp));
         }
         case lane_kind::uinteger: {
             const std::uint64_t uv = l.u;
-            if (uv >
-                static_cast<std::uint64_t>(
-                    (std::numeric_limits<UT>::max)())) {
-                return make_error<T>(error_code::overflow);
+            if constexpr (rtti::detail::is_plain_char<UT>::value) {
+                if (uv > static_cast<std::uint64_t>(
+                             (std::numeric_limits<UT>::max)())) {
+                    return make_error<T>(error_code::overflow);
+                }
+                return make_ok<T>(static_cast<T>(static_cast<UT>(uv)));
             }
-            return make_ok<T>(static_cast<T>(static_cast<UT>(uv)));
+            UT tmp{};
+            const error_code e =
+                rtti::detail::scalar_uint64_to_integral<UT>(uv, tmp);
+            if (e != error_code::ok) {
+                return make_error<T>(e);
+            }
+            return make_ok<T>(static_cast<T>(tmp));
         }
         default:
             return make_error<T>(error_code::kind_mismatch);
