@@ -761,7 +761,7 @@ const rtti::detail::char_mask& xml_entity_scan_mask() noexcept {
     return m;
 }
 
-// Duplicate-attribute guard for one element. Small elements (< 8 attributes)
+// Duplicate-attribute guard for one element. Small elements (< 20 attributes)
 // keep the check on a stack array; wide elements promote to a hash set once
 // the stack overflows, so the per-element duplicate scan stays near-linear
 // instead of O(a^2). A duplicate is reported as soon as its name is read,
@@ -796,7 +796,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t kStack = 8;
+    static constexpr std::size_t kStack = 20;
     string_view small_[kStack];
     std::size_t n_ = 0;
     std::unique_ptr<std::unordered_set<string_view>> set_;

@@ -881,6 +881,88 @@ RTTI_TEST_CASE(xml_wide_attribute_dup_check) {
     }
 }
 
+// H2 boundary: the stack threshold is 20 attributes. Exactly 20 distinct
+// attributes on one element stay on the stack (full, no promotion), 24 distinct
+// attributes ride the promoted hash-set path, and a duplicate reports
+// duplicate_attribute with the historical error offset in both regimes (stack
+// at the boundary, set past it). DOM and SAX behave identically.
+RTTI_TEST_CASE(xml_attr_dup_stack_threshold_boundary) {
+    // Exactly 20 distinct attributes: stack path at its full capacity.
+    {
+        const auto r = rtti::xml::parse(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\" q=\"17\" r=\"18\" s=\"19\" t=\"20\"/>");
+        RTTI_CHECK(r.ok());
+        if (!r.ok()) {
+            return;
+        }
+        rtti::value_io* v = nullptr;
+        RTTI_CHECK(r.value.get_key("t", v));
+        if (v != nullptr) {
+            RTTI_CHECK_EQ(string_of(v), std::string("20"));
+        }
+    }
+    // 24 distinct attributes: past the threshold, set path still parses.
+    {
+        const auto r = rtti::xml::parse(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\" q=\"17\" r=\"18\" s=\"19\" t=\"20\" "
+            "u=\"21\" v=\"22\" w=\"23\" x=\"24\"/>");
+        RTTI_CHECK(r.ok());
+    }
+    // Duplicate at the boundary: 20th attribute repeats the 1st; the stack path
+    // must report duplicate_attribute with the offset at the repeated name.
+    {
+        const std::string src =
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\" q=\"17\" r=\"18\" s=\"19\" a=\"dup\"/>";
+        const auto r = rtti::xml::parse(src);
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::duplicate_attribute);
+        RTTI_CHECK_EQ(r.err.offset, src.find(" a=\"dup\"") + 2);
+    }
+    // Duplicate past the threshold: set path reports the same code and offset.
+    {
+        const std::string src =
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\" q=\"17\" r=\"18\" s=\"19\" t=\"20\" "
+            "u=\"21\" v=\"22\" w=\"23\" a=\"dup\"/>";
+        const auto r = rtti::xml::parse(src);
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::duplicate_attribute);
+        RTTI_CHECK_EQ(r.err.offset, src.find(" a=\"dup\"") + 2);
+    }
+    // SAX: 20 distinct attributes stream fine; a boundary duplicate errors with
+    // the same code as the DOM path.
+    {
+        rtti::xml::parse_events ev;
+        int attrs = 0;
+        ev.attribute = [&](rtti::string_view, rtti::string_view) {
+            ++attrs;
+            return true;
+        };
+        const auto r = rtti::xml::parse_stream(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\" q=\"17\" r=\"18\" s=\"19\" t=\"20\"/>", ev);
+        RTTI_CHECK(r.ok());
+        if (!r.ok()) {
+            return;
+        }
+        RTTI_CHECK_EQ(attrs, 20);
+        const auto r2 = rtti::xml::parse_stream(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\" q=\"17\" r=\"18\" s=\"19\" a=\"dup\"/>", ev);
+        RTTI_CHECK(!r2.ok());
+        RTTI_CHECK(r2.err.code == rtti::error_code::duplicate_attribute);
+    }
+}
+
 // H3: read_name classifies name bytes through a static lookup table instead of
 // per-byte std::isalpha/std::isalnum. The table must behave identically:
 // letters/digits/'.'/'-'/'_'/':' are name characters (never as a leading
