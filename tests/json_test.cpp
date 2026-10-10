@@ -866,4 +866,54 @@ RTTI_TEST_CASE(json_serialize_nonfinite_rejected) {
     RTTI_CHECK_EQ(buf, std::string());
 }
 
+// P1a: a moved document must keep building correctly through value_io (the
+// per-node owner back-pointer is re-pointed on move). Build a tree, move the
+// document, extend the tree, then serialize; also move-assign a second time.
+RTTI_TEST_CASE(json_document_move_then_build) {
+    auto r = rtti::json::parse("{\"a\":1}");
+    RTTI_CHECK(r.ok());
+
+    rtti::json::document moved = std::move(r.value);
+    RTTI_CHECK_EQ(rtti::json::serialize(moved, rtti::json::write_config{0, false}),
+                  std::string("{\"a\":1}"));
+
+    // Continue building after the move: the moved-to arena/pool must serve
+    // make_node/set_key/make_scalar.
+    rtti::value_io* b = moved.make_node();
+    RTTI_CHECK(b != nullptr);
+    b->make_scalar(rtti::field_value::of(rtti::string_view("hi")));
+    moved.set_key("b", b);
+    RTTI_CHECK_EQ(rtti::json::serialize(moved, rtti::json::write_config{0, false}),
+                  std::string("{\"a\":1,\"b\":\"hi\"}"));
+
+    // Nested array built after the move (make_node on a child node).
+    rtti::value_io* root = &moved;
+    RTTI_CHECK(root->type() == rtti::value_io::kind::object);
+    rtti::value_io* arr = root->make_node();
+    arr->make_array();
+    rtti::value_io* el = arr->make_node();
+    el->make_scalar(rtti::field_value::of(int64_t(7)));
+    arr->push_back(el);
+    moved.set_key("arr", arr);
+    RTTI_CHECK_EQ(rtti::json::serialize(moved, rtti::json::write_config{0, false}),
+                  std::string("{\"a\":1,\"b\":\"hi\",\"arr\":[7]}"));
+
+    // Move-assignment to another document, then read back through the tree.
+    rtti::json::document dst;
+    dst = std::move(moved);
+    rtti::value_io* found = nullptr;
+    RTTI_CHECK(dst.get_key("arr", found));
+    RTTI_CHECK(found != nullptr);
+    RTTI_CHECK_EQ(rtti::json::serialize(dst, rtti::json::write_config{0, false}),
+                  std::string("{\"a\":1,\"b\":\"hi\",\"arr\":[7]}"));
+
+    // get_key after moves still matches (linear-scan first-wins).
+    rtti::value_io* got = nullptr;
+    RTTI_CHECK(dst.get_key("b", got));
+    RTTI_CHECK(got != nullptr);
+    rtti::string_view sv;
+    RTTI_CHECK(got->as_string(sv));
+    RTTI_CHECK_EQ(sv, rtti::string_view("hi"));
+}
+
 } // namespace rtti_test_lib

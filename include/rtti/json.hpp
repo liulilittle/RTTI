@@ -150,6 +150,7 @@ public:
 
 private:
     friend struct detail::parser;
+    friend struct detail::node;
     detail::node* new_node();
     void destroy_nodes() noexcept;
 

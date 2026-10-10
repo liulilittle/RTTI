@@ -29,16 +29,13 @@ struct node : public rtti::value_io {
     std::size_t slen = 0;                                // payload length in bytes
     std::vector<node*> arr;                              // array children
     std::vector<std::pair<const char*, node*>> obj;      // object entries, key in arena
-    // Lazy key index for large objects. Keys are string_views over the
-    // arena-duplicated key bytes, so they stay valid for the document
-    // lifetime; the index is built on first get_key once the object grows
-    // past kHashThreshold and stays in sync on set_key. Small objects keep
-    // the linear scan (no per-node allocation overhead).
-    mutable std::unordered_map<string_view, node*> hash_;
-    mutable bool hash_valid_ = false;
-
-    rtti::memory_arena* arena = nullptr;                 // owning document's arena
-    std::vector<node*>* owned = nullptr;                 // document's node pool
+    // Single owner back-pointer (the owning document) in place of the former
+    // arena + node-pool pair: this node's string payloads live in the owner's
+    // arena and the node is registered in the owner's pool, so the pool walk
+    // that releases the child vectors needs no extra per-node pointer. It is a
+    // construction-time handle only; this node never participates in its own
+    // destruction through a back-pointer.
+    document* owner = nullptr;
 
     node() noexcept = default;
 
@@ -124,15 +121,11 @@ struct node : public rtti::value_io {
         return this;
     }
     void set_key(string_view key, value_io* v) override {
-        if (k != rtti::value_io::kind::object || arena == nullptr) {
+        if (k != rtti::value_io::kind::object || owner == nullptr) {
             return;
         }
-        const char* kp = arena->dup(key.data(), key.size());
+        const char* kp = owner->arena_.dup(key.data(), key.size());
         obj.emplace_back(kp, static_cast<node*>(v));
-        if (hash_valid_) {
-            // Keep the lazy index in sync so a later get_key stays O(1).
-            hash_.emplace(string_view(kp, key.size()), static_cast<node*>(v));
-        }
     }
     value_io* make_scalar(field_value v) override {
         reset();
@@ -150,9 +143,9 @@ struct node : public rtti::value_io {
                 d = v.as_real();
                 break;
             case field_value::kind::string:
-                if (arena != nullptr) {
+                if (owner != nullptr) {
                     const string_view sv = v.as_string();
-                    s = arena->dup(sv.data(), sv.size());
+                    s = owner->arena_.dup(sv.data(), sv.size());
                     slen = sv.size();
                     k = rtti::value_io::kind::string;
                 }
@@ -163,19 +156,10 @@ struct node : public rtti::value_io {
         return this;
     }
     value_io* make_node() override {
-        if (arena == nullptr) {
+        if (owner == nullptr) {
             return nullptr;
         }
-        node* raw = arena->alloc_obj<node>();
-        if (raw == nullptr) {
-            return nullptr;
-        }
-        raw->arena = arena;
-        raw->owned = owned;
-        if (owned != nullptr) {
-            owned->push_back(raw);
-        }
-        return raw;
+        return owner->make_node();
     }
 
 private:
@@ -188,35 +172,14 @@ private:
         slen = 0;
         arr.clear();
         obj.clear();
-        hash_.clear();
-        hash_valid_ = false;
-    }
-    void build_index() const {
-        hash_.reserve(obj.size());
-        for (const auto& e : obj) {
-            // emplace keeps the first entry on duplicate keys, matching the
-            // first-match semantics of the linear scan.
-            hash_.emplace(
-                string_view(e.first, std::char_traits<char>::length(e.first)),
-                e.second);
-        }
-        hash_valid_ = true;
     }
     bool get_key_impl(string_view key, value_io*& out) const {
         if (k != rtti::value_io::kind::object) {
             return false;
         }
-        if (!hash_valid_ && obj.size() > kHashThreshold) {
-            build_index();
-        }
-        if (hash_valid_) {
-            const auto it = hash_.find(key);
-            if (it != hash_.end()) {
-                out = it->second;
-                return true;
-            }
-            return false;
-        }
+        // Small objects (the parse norm) always take the linear scan; the
+        // first entry on a duplicated key wins, exactly like the former lazy
+        // hash index, so set_key order and get_key results are unchanged.
         for (const auto& e : obj) {
             if (string_view(e.first, std::char_traits<char>::length(e.first)) ==
                 key) {
@@ -226,7 +189,6 @@ private:
         }
         return false;
     }
-    static constexpr std::size_t kHashThreshold = 8;
 };
 
 } // namespace detail
@@ -246,8 +208,7 @@ detail::node* document::new_node() {
     if (raw == nullptr) {
         return nullptr;
     }
-    raw->arena = &arena_;
-    raw->owned = &owned_;
+    raw->owner = this;
     owned_.push_back(raw);
     return raw;
 }
@@ -274,12 +235,13 @@ document::document(document&& other) noexcept
       owned_(std::move(other.owned_)),
       root_(other.root_) {
     other.root_ = nullptr;
-    // The arena/node blocks move, but node back-pointers must track the new
-    // document object so make_node keeps working after a move.
+    // The arena/node blocks move, but each node's owner back-pointer must
+    // track the new document object so make_node/set_key keep working after a
+    // move. One store per node (the former arena+pool pair collapsed into a
+    // single owner handle).
     for (const auto& p : owned_) {
         if (p != nullptr) {
-            p->arena = &arena_;
-            p->owned = &owned_;
+            p->owner = this;
         }
     }
 }
@@ -295,8 +257,7 @@ document& document::operator=(document&& other) noexcept {
         other.root_ = nullptr;
         for (const auto& p : owned_) {
             if (p != nullptr) {
-                p->arena = &arena_;
-                p->owned = &owned_;
+                p->owner = this;
             }
         }
     }

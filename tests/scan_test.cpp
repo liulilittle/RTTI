@@ -28,6 +28,7 @@ using rtti::detail::is_structural_or_string;
 using rtti::detail::json_structural_mask;
 using rtti::detail::json_string_mask;
 using rtti::detail::xml_special_mask;
+using rtti::detail::whitespace_mask;
 
 // Scalar reference implementations (documented semantics of scan.hpp):
 // bytes >= 128 are never in the mask; the NUL byte is a normal byte whose
@@ -262,6 +263,62 @@ RTTI_TEST_CASE(scan_xml_special_mask) {
     RTTI_CHECK_EQ(k, std::size_t(7));
     // Nothing special after the last '&'.
     RTTI_CHECK_EQ(find_first_of(&s[18], s + n, xml), s + n);
+}
+
+RTTI_TEST_CASE(scan_find_first_of_mask_equivalence) {
+    // Cross-checks the accelerated implementation against the scalar reference
+    // over a wide sweep of mask shapes and buffer lengths (0..100 bytes, targets
+    // at block boundaries and in the scalar tail). Guards the P2 rewrite
+    // (target expansion + short-body fast path) against behavior drift: the
+    // helper must keep returning the same pointer as the reference for every
+    // mask/buffer combination, exactly as before.
+    const std::size_t lens[] = {0, 1, 2, 3, 7, 8, 15, 16, 17, 31, 32, 33, 47, 63,
+                                64, 65, 100};
+    const int hits[] = {-1, 0, 1, 2, 8, 15, 16, 17, 31, 47, 63};
+    for (const char* text : {"alpha beta gamma", "\"a\\b\"", "<a href=\"x\">"}) {
+        const std::string t = text;
+        for (const std::size_t len : lens) {
+            if (len > t.size()) {
+                continue;
+            }
+            char_mask masks[8] = {
+                char_mask{},
+                char_mask::from_chars("\""),
+                char_mask::from_chars("\"\\"),
+                char_mask::from_chars(",}"),
+                json_string_mask(),
+                json_structural_mask(),
+                xml_special_mask(),
+                whitespace_mask(),
+            };
+            char_mask all;
+            for (int i = 0; i < 128; ++i) all.set(i);
+            for (char_mask m : masks) {
+                RTTI_CHECK_EQ(find_first_of(t.data(), t.data() + len, m),
+                              ref_first_of(t.data(), t.data() + len, m));
+                RTTI_CHECK_EQ(find_first_not_of(t.data(), t.data() + len, m),
+                              ref_first_not_of(t.data(), t.data() + len, m));
+            }
+            RTTI_CHECK_EQ(find_first_of(t.data(), t.data() + len, all),
+                          ref_first_of(t.data(), t.data() + len, all));
+            // Single target planted at an explicit offset (inside the SIMD
+            // block, at its 15/16 boundary, and in the scalar tail). The
+            // buffer is quote-free so the planted byte is the first hit.
+            for (const int hit : hits) {
+                if (hit < 0 || static_cast<std::size_t>(hit) >= len) {
+                    continue;
+                }
+                std::string buf(static_cast<std::size_t>(len), 'a');
+                buf[static_cast<std::size_t>(hit)] = '\"';
+                char_mask q;
+                q.set('\"');
+                RTTI_CHECK_EQ(find_first_of(buf.data(), buf.data() + len, q),
+                              ref_first_of(buf.data(), buf.data() + len, q));
+                RTTI_CHECK_EQ(find_first_of(buf.data(), buf.data() + len, q),
+                              buf.data() + static_cast<std::size_t>(hit));
+            }
+        }
+    }
 }
 
 } // namespace rtti_test_lib

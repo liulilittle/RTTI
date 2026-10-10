@@ -41,19 +41,41 @@ inline std::uint32_t first_set_bit(std::uint32_t m) noexcept {
     return i;
 }
 
+// Index of the lowest set bit in a 64-bit word (v must be non-zero).
+inline std::uint32_t lowest_bit_index(std::uint64_t v) noexcept {
+#if defined(_MSC_VER) && defined(_M_X64)
+    unsigned long idx = 0;
+    _BitScanForward64(&idx, v);
+    return static_cast<std::uint32_t>(idx);
+#elif defined(_MSC_VER)
+    unsigned long idx = 0;
+    if ((v & 0xFFFFFFFFu) != 0u) {
+        _BitScanForward(&idx, static_cast<unsigned long>(v & 0xFFFFFFFFu));
+    } else {
+        _BitScanForward(&idx, static_cast<unsigned long>(v >> 32));
+        return static_cast<std::uint32_t>(idx) + 32u;
+    }
+    return static_cast<std::uint32_t>(idx);
+#else
+    return static_cast<std::uint32_t>(__builtin_ctzll(v));
+#endif
+}
+
 // Fill out with every byte value present in the mask (up to 128 entries)
-// and return the count. This is the list of cmpeq probe values.
+// and return the count. This is the list of cmpeq probe values. The bits are
+// harvested with trailing-zero scans, so the loop steps only over the target
+// bytes actually present (2 for a two-byte mask instead of the full 64).
 inline std::uint32_t collect_targets(char_mask m, unsigned char* out) noexcept {
     std::uint32_t n = 0;
-    const std::uint64_t lo = m.lo;
-    const std::uint64_t hi = m.hi;
-    for (int i = 0; i < 64; ++i) {
-        if ((lo & (std::uint64_t{1} << i)) != 0) {
-            out[n++] = static_cast<unsigned char>(i);
-        }
-        if ((hi & (std::uint64_t{1} << i)) != 0) {
-            out[n++] = static_cast<unsigned char>(64 + i);
-        }
+    std::uint64_t lo = m.lo;
+    std::uint64_t hi = m.hi;
+    while (lo != 0u) {
+        out[n++] = static_cast<unsigned char>(lowest_bit_index(lo));
+        lo &= lo - 1u;  // clear the lowest set bit
+    }
+    while (hi != 0u) {
+        out[n++] = static_cast<unsigned char>(64u + lowest_bit_index(hi));
+        hi &= hi - 1u;
     }
     return n;
 }
@@ -78,19 +100,26 @@ inline std::uint32_t sse2_match_block(const char* p,
 const char* find_first_of(const char* begin, const char* end,
                           char_mask mask) noexcept {
 #if defined(RTTI_DETAIL_HAS_SSE2)
+    // Short bodies never reach the SIMD block setup or the target-expansion
+    // pass: a plain membership loop over the range is faster than the fixed
+    // per-call overhead, which dominated every call below 16 bytes.
+    if (end - begin < 16) {
+        for (const char* p = begin; p < end; ++p) {
+            if (mask.test(static_cast<unsigned char>(*p))) return p;
+        }
+        return end;
+    }
     unsigned char targets[128];
     const std::uint32_t n = collect_targets(mask, targets);
     if (n == 0) return end;
     const char* p = begin;
-    if (end - begin >= 16) {
-        const char* last = end - 16;
-        while (p <= last) {
-            const std::uint32_t m = sse2_match_block(p, targets, n);
-            if (m != 0) {
-                return p + static_cast<std::ptrdiff_t>(first_set_bit(m));
-            }
-            p += 16;
+    const char* last = end - 16;
+    while (p <= last) {
+        const std::uint32_t m = sse2_match_block(p, targets, n);
+        if (m != 0) {
+            return p + static_cast<std::ptrdiff_t>(first_set_bit(m));
         }
+        p += 16;
     }
     while (p < end) {
         if (mask.test(static_cast<unsigned char>(*p))) return p;
@@ -110,19 +139,24 @@ const char* find_first_of(const char* begin, const char* end,
 const char* find_first_not_of(const char* begin, const char* end,
                               char_mask mask) noexcept {
 #if defined(RTTI_DETAIL_HAS_SSE2)
+    // Short-body fast path mirroring find_first_of: skip target expansion.
+    if (end - begin < 16) {
+        for (const char* p = begin; p < end; ++p) {
+            if (!mask.test(static_cast<unsigned char>(*p))) return p;
+        }
+        return end;
+    }
     unsigned char targets[128];
     const std::uint32_t n = collect_targets(mask, targets);
     const char* p = begin;
-    if (end - begin >= 16) {
-        const char* last = end - 16;
-        while (p <= last) {
-            const std::uint32_t m = sse2_match_block(p, targets, n);
-            const std::uint32_t nm = (~m) & 0xFFFFu;
-            if (nm != 0) {
-                return p + static_cast<std::ptrdiff_t>(first_set_bit(nm));
-            }
-            p += 16;
+    const char* last = end - 16;
+    while (p <= last) {
+        const std::uint32_t m = sse2_match_block(p, targets, n);
+        const std::uint32_t nm = (~m) & 0xFFFFu;
+        if (nm != 0) {
+            return p + static_cast<std::ptrdiff_t>(first_set_bit(nm));
         }
+        p += 16;
     }
     while (p < end) {
         if (!mask.test(static_cast<unsigned char>(*p))) return p;
