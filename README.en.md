@@ -1,6 +1,6 @@
 # RTTI — Runtime Type Information for C++17
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/liulilittle/RTTI/actions/workflows/ci.yml/badge.svg)](https://github.com/liulilittle/RTTI/actions/workflows/ci.yml)
 
 [简体中文](README.zh-CN.md) | 中文版见 [README.zh-CN.md](README.zh-CN.md)
 

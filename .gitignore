@@ -20,6 +20,7 @@ cmake-build-*/
 
 # SDD / superpowers scratch
 .superpowers/
+docs/superpowers/
 
 # opencode agent workspace (memory/backups/scripts) — never committed
 .opencode/

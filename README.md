@@ -2,7 +2,7 @@
 
 <!-- CI badge: replace OWNER/REPO with the actual repository slug after the
      workflow is pushed. Keep this line above the paragraph below. -->
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/liulilittle/RTTI/actions/workflows/ci.yml/badge.svg)](https://github.com/liulilittle/RTTI/actions/workflows/ci.yml)
 
 A dependency-free, standard portable C++17 runtime-reflection library that
 compensates for C++'s lack of first-class reflection: register your structs
