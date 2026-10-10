@@ -890,4 +890,31 @@ RTTI_TEST_CASE(toml_deep_inline_table_path_too_deep) {
     RTTI_CHECK_EQ(r.err.code, rtti::error_code::too_deep);
 }
 
+// T-D #3: toml::serialize must support scalar roots (bare token) and array
+// roots (inline array), matching the other adapters (json=5, ini="5\n",
+// xml="<root>5</root>").
+RTTI_TEST_CASE(toml_serialize_scalar_and_array_root) {
+    RTTI_CHECK_EQ(rtti::toml::serialize(5), std::string("5"));
+    RTTI_CHECK_EQ(rtti::toml::serialize(3.14), std::string("3.14"));
+    RTTI_CHECK_EQ(rtti::toml::serialize(true), std::string("true"));
+
+    const std::string arr = rtti::toml::serialize(std::vector<int>{1, 2, 3});
+    RTTI_CHECK_EQ(arr, std::string("[1, 2, 3]"));
+
+    const std::string str = rtti::toml::serialize(std::string("hi"));
+    RTTI_CHECK_EQ(str, std::string("\"hi\""));
+}
+
+// T-D #4: a numeric float that overflows to inf must be rejected like JSON
+// (invalid_number), never silently parsed back as a finite-looking inf.
+RTTI_TEST_CASE(toml_float_overflow_rejected) {
+    const auto r = rtti::toml::parse("x = 1e400\n");
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK_EQ(r.err.code, rtti::error_code::invalid_number);
+
+    const auto r2 = rtti::toml::parse("x = -1e400\n");
+    RTTI_CHECK(!r2.ok());
+    RTTI_CHECK_EQ(r2.err.code, rtti::error_code::invalid_number);
+}
+
 } // namespace rtti_test_lib

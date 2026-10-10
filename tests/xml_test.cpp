@@ -793,4 +793,29 @@ RTTI_TEST_CASE(xml_parse_depth_boundary) {
     RTTI_CHECK(r.ok());
 }
 
+// T-D #7: an element/attribute name whose first byte is >= 0x80 (a UTF-8
+// name) is legal XML and must parse instead of failing on the first byte.
+RTTI_TEST_CASE(xml_utf8_name_first_byte) {
+    // "élan" encoded as UTF-8: C3 A9 6C 61 6E (high first byte).
+    const char* elem = "<\xC3\xA9lan>x</\xC3\xA9lan>";
+    const auto r1 = rtti::xml::parse(elem);
+    RTTI_CHECK(r1.ok());
+
+    const char* attr = "<root \xC3\xA9=\"1\"/>";
+    const auto r2 = rtti::xml::parse(attr);
+    RTTI_CHECK(r2.ok());
+}
+
+// T-D #8: a '[' or '>' inside a SYSTEM/PUBLIC quoted literal must not
+// terminate the DOCTYPE scan early.
+RTTI_TEST_CASE(xml_doctype_system_public_quoted) {
+    const char* sys = "<!DOCTYPE root SYSTEM \"http://a>b\">\n<root/>";
+    const auto r1 = rtti::xml::parse(sys);
+    RTTI_CHECK(r1.ok());
+
+    const char* pub = "<!DOCTYPE root PUBLIC \"-//a[b//EN\" \"z[q\">\n<root/>";
+    const auto r2 = rtti::xml::parse(pub);
+    RTTI_CHECK(r2.ok());
+}
+
 } // namespace rtti_test_lib

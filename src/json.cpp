@@ -235,8 +235,8 @@ private:
 
 namespace detail {
 // Recursive serializer; definition below (after the parser helpers it needs).
-void serialize_node(const node& n, const write_config& cfg, int level,
-                    std::string& out);
+error_code serialize_node(const node& n, const write_config& cfg, int level,
+                          std::string& out);
 } // namespace detail
 
 void document::adopt_root(detail::node* root) noexcept { root_ = root; }
@@ -378,7 +378,12 @@ value_io* document::make_node() { return new_node(); }
 std::string document::write(const write_config& cfg) const {
     std::string out;
     if (root_ != nullptr) {
-        detail::serialize_node(*root_, cfg, 0, out);
+        if (detail::serialize_node(*root_, cfg, 0, out) != error_code::ok) {
+            // A non-representable value (e.g. a non-finite double) fails the
+            // whole serialization: empty output, never a silently corrupted
+            // document (consistent with serialize<T>'s empty-on-failure).
+            return std::string();
+        }
     } else {
         out += "null";
     }
@@ -387,7 +392,9 @@ std::string document::write(const write_config& cfg) const {
 
 void document::write(const write_config& cfg, std::string& out) const {
     if (root_ != nullptr) {
-        detail::serialize_node(*root_, cfg, 0, out);
+        if (detail::serialize_node(*root_, cfg, 0, out) != error_code::ok) {
+            out.clear();
+        }
     } else {
         out += "null";
     }
@@ -1086,32 +1093,34 @@ void append_newline_indent(const write_config& cfg, int level,
                cfg.indent_char);
 }
 
-// Shortest round-tripping real; JSON has no Inf/NaN, so those become null.
-void append_real(double value, std::string& out) {
+// Shortest round-tripping real. JSON has no Inf/NaN literal, so a non-finite
+// double cannot be serialized faithfully: report invalid_number instead of
+// silently emitting "null" (which the parser would read back as a null node,
+// never as a double — an unreadable round trip, T-D #5).
+error_code append_real(double value, std::string& out) {
     if (!std::isfinite(value)) {
-        out += "null";
-        return;
+        return error_code::invalid_number;
     }
     rtti::detail::format_real(value, out);
+    return error_code::ok;
 }
-void serialize_node(const node& n, const write_config& cfg, int level,
-                    std::string& out) {
+error_code serialize_node(const node& n, const write_config& cfg, int level,
+                          std::string& out) {
     switch (n.k) {
         case value_io::kind::null:
             out += "null";
-            break;
+            return error_code::ok;
         case value_io::kind::boolean:
             out += n.b ? "true" : "false";
-            break;
+            return error_code::ok;
         case value_io::kind::integer:
             out += std::to_string(n.i);
-            break;
+            return error_code::ok;
         case value_io::kind::real:
-            append_real(n.d, out);
-            break;
+            return append_real(n.d, out);
         case value_io::kind::string:
             append_string_escaped(n.s, n.slen, out);
-            break;
+            return error_code::ok;
         case value_io::kind::array: {
             out.push_back('[');
             for (std::size_t i = 0; i < n.arr.size(); ++i) {
@@ -1119,13 +1128,17 @@ void serialize_node(const node& n, const write_config& cfg, int level,
                     out.push_back(',');
                 }
                 append_newline_indent(cfg, level + 1, out);
-                serialize_node(*n.arr[i], cfg, level + 1, out);
+                const error_code e =
+                    serialize_node(*n.arr[i], cfg, level + 1, out);
+                if (e != error_code::ok) {
+                    return e;
+                }
             }
             if (!n.arr.empty()) {
                 append_newline_indent(cfg, level, out);
             }
             out.push_back(']');
-            break;
+            return error_code::ok;
         }
         case value_io::kind::object: {
             out.push_back('{');
@@ -1154,15 +1167,20 @@ void serialize_node(const node& n, const write_config& cfg, int level,
                 if (cfg.indent > 0) {
                     out.push_back(' ');
                 }
-                serialize_node(*n.obj[idx].second, cfg, level + 1, out);
+                const error_code e = serialize_node(
+                    *n.obj[idx].second, cfg, level + 1, out);
+                if (e != error_code::ok) {
+                    return e;
+                }
             }
             if (count != 0) {
                 append_newline_indent(cfg, level, out);
             }
             out.push_back('}');
-            break;
+            return error_code::ok;
         }
     }
+    return error_code::ok;
 }
 
 } // namespace detail

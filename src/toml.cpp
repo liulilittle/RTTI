@@ -1179,7 +1179,13 @@ bool parser::classify_bare(const std::string& token, node* out) {
         return true;
     }
     if (toml_float_grammar(text)) {
+        errno = 0;
         const double v = std::strtod(text.c_str(), nullptr);
+        if (errno == ERANGE || !std::isfinite(v)) {
+            // Overflow (e.g. 1e400) or underflow: strtod clamped to inf/0
+            // silently; reject like JSON does for the same input (T-D #4).
+            return false;
+        }
         std::string canon;
         rtti::detail::format_real(v, canon);
         out->set_scalar_parsed(rtti::field_value::kind::real, false,
@@ -1745,8 +1751,15 @@ void serialize(const document& doc, std::string& out,
                const write_config& cfg) {
     out.clear();
     (void)cfg;
-    if (doc.root_->is_object()) {
-        detail::emit_object(out, doc.root_, std::string());
+    const detail::node* root = doc.root_;
+    if (root->is_object()) {
+        detail::emit_object(out, root, std::string());
+    } else if (root->is_scalar()) {
+        // Scalar root: write the bare token directly.
+        detail::scalar_text_into(root, out);
+    } else if (root->is_array()) {
+        // Array root: emit as an inline array.
+        detail::inline_array_into(root, out);
     }
 }
 

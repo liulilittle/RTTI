@@ -1406,8 +1406,21 @@ private:
         }
         skip_ws();
         if (starts_with("SYSTEM") || starts_with("PUBLIC")) {
+            // Quote-aware scan: a '[' or '>' inside a quoted literal must not
+            // terminate the DOCTYPE early (T-D #8).
             while (p_ < end_ && *p_ != '[' && *p_ != '>') {
-                ++p_;
+                if (*p_ == '"' || *p_ == '\'') {
+                    const char q = *p_;
+                    ++p_;
+                    while (p_ < end_ && *p_ != q) {
+                        ++p_;
+                    }
+                    if (p_ < end_) {
+                        ++p_;  // consume the closing quote
+                    }
+                } else {
+                    ++p_;
+                }
             }
             if (p_ >= end_) {
                 return error_code::unexpected_token;
@@ -1575,14 +1588,7 @@ private:
             return string_view();
         }
         const unsigned char c0 = static_cast<unsigned char>(*p_);
-        if (c0 >= 0x80) {
-            // High bytes are accepted as name characters (UTF-8 lenient).
-            while (p_ < end_ && (static_cast<unsigned char>(*p_) & 0x80u) != 0u) {
-                ++p_;
-            }
-            return string_view();
-        }
-        if (!(std::isalpha(c0) || c0 == '_' || c0 == ':')) {
+        if (!(std::isalpha(c0) || c0 == '_' || c0 == ':' || c0 >= 0x80)) {
             return string_view();
         }
         const char* s = p_;

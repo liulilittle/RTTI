@@ -23,6 +23,7 @@
 #include <stack>
 #include <unordered_map>
 #include <cstdint>
+#include <limits>
 
 namespace rtti_test_lib {
 
@@ -33,7 +34,20 @@ struct Inner {
     RTTI_DEFINE_TYPE_INTRUSIVE(Inner, a, b)
 };
 
+// Reflected struct holding a non-owning string_view member (T-D #1). A view is
+// a text scalar, not a fixed char-code sequence: serialize must emit a JSON
+// string ({"s":"hello"}), and the parsed node must be a string.
+struct JsonStringViewDoc {
+    std::string_view s;
+    RTTI_DEFINE_TYPE_INTRUSIVE(JsonStringViewDoc, s)
+};
+
 enum class JsonColor { red = 1, green = 2, blue = 3 };
+
+struct JsonInfHolder {
+    double d = 0.0;
+    RTTI_DEFINE_TYPE_INTRUSIVE(JsonInfHolder, d)
+};
 
 struct Player {
     int id = 0;
@@ -802,6 +816,54 @@ RTTI_TEST_CASE(json_shared_stream_dot_zero) {
     RTTI_CHECK(s.find("2.0") != std::string::npos);
     const std::string s2 = rtti::json::serialize(std::vector<double>{2.0, 1.5});
     RTTI_CHECK(s2.find("2.0") != std::string::npos);
+}
+
+RTTI_TEST_CASE(string_view_member_serializes_as_string) {
+    // T-D #1: a string_view member must serialize as a JSON string scalar,
+    // never as a char-code array ([104,101,...]).
+    rtti_test_lib::JsonStringViewDoc doc;
+    doc.s = "hello";
+    const rtti::json::write_config compact{0, false};
+    const std::string j = rtti::json::serialize(doc, compact);
+    RTTI_CHECK_EQ(j, std::string("{\"s\":\"hello\"}"));
+
+    // The parsed node for the member is a string, not an array.
+    auto parsed = rtti::json::parse(j);
+    RTTI_CHECK(parsed.ok());
+    rtti::value_io* n = nullptr;
+    RTTI_CHECK(parsed.value.get_key("s", n));
+    RTTI_CHECK(n != nullptr);
+    RTTI_CHECK(n->type() == rtti::value_io::kind::string);
+    rtti::string_view got;
+    RTTI_CHECK(n->as_string(got));
+    RTTI_CHECK_EQ(got, rtti::string_view("hello"));
+}
+
+// T-D #5: a non-finite double must not serialize to "null" (which cannot be
+// read back — the parser has no null->double channel). Serialization must
+// fail (empty output) instead of silently emitting an unreadable "null".
+RTTI_TEST_CASE(json_serialize_nonfinite_rejected) {
+    const rtti::json::write_config compact{0, false};
+
+    JsonInfHolder inf;
+    inf.d = std::numeric_limits<double>::infinity();
+    RTTI_CHECK_EQ(rtti::json::serialize(inf, compact), std::string());
+
+    JsonInfHolder ninf;
+    ninf.d = -std::numeric_limits<double>::infinity();
+    RTTI_CHECK_EQ(rtti::json::serialize(ninf, compact), std::string());
+
+    JsonInfHolder nan;
+    nan.d = std::numeric_limits<double>::quiet_NaN();
+    RTTI_CHECK_EQ(rtti::json::serialize(nan, compact), std::string());
+
+    // The buffer overload must also fail (leave the buffer empty), never
+    // fall back to "null" that parse_as<double> cannot read back.
+    rtti::json::document nd;
+    RTTI_CHECK_EQ(rtti::to_value(&nd, nan), rtti::error_code::ok);
+    std::string buf = "stale-prefix";
+    rtti::json::serialize(nd, buf, compact);
+    RTTI_CHECK_EQ(buf, std::string());
 }
 
 } // namespace rtti_test_lib
