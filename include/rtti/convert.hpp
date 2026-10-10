@@ -395,6 +395,30 @@ struct converter<std::basic_string<Char, Traits, Alloc>> {
     }
 };
 
+// Non-owning char text (std::basic_string_view), routed onto the string lane
+// like basic_string (is_fixed_sequence intentionally excludes it). The read
+// side accepts the string lane directly and refuses the integer/real -> text
+// lanes of basic_string (spec §23.1): a view cannot own a temporary
+// conversion buffer, so the view always points into the source node's storage.
+template <typename Char, typename Traits>
+struct converter<std::basic_string_view<Char, Traits>> {
+    static error_code from(const value_io* src,
+                           std::basic_string_view<Char, Traits>& out) {
+        rtti::string_view v;
+        if (!src->as_string(v)) {
+            return error_code::kind_mismatch;
+        }
+        out = std::basic_string_view<Char, Traits>(v.data(), v.size());
+        return error_code::ok;
+    }
+    static error_code to(value_io* dst,
+                         const std::basic_string_view<Char, Traits>& in) {
+        dst->make_scalar(
+            field_value::of(rtti::string_view(in.data(), in.size())));
+        return error_code::ok;
+    }
+};
+
 // Registered enums (RTTI_DEFINE_ENUM) convert through their label text.
 // Specialized here (not in any format adapter header) so every format shares
 // one definition and multiple adapters can be included in the same TU.
@@ -1702,8 +1726,13 @@ error_code fixed_sequence_from_named(const value_io* src, A& out,
     if (src->type() != value_io::kind::array) {
         return error_code::kind_mismatch;
     }
-    const std::size_t n = src->size() < out.size() ? src->size() : out.size();
-    for (std::size_t i = 0; i < n; ++i) {
+    // Match fixed_sequence_from (spec 12.2): an element count that differs
+    // from the fixed compile-time extent is kind_mismatch, never a silent
+    // truncation to the prefix or a stale tail.
+    if (src->size() != out.size()) {
+        return error_code::kind_mismatch;
+    }
+    for (std::size_t i = 0; i < out.size(); ++i) {
         value_io* child = src->at(i);
         if (child == nullptr) {
             return error_code::kind_mismatch;

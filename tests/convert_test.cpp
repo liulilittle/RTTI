@@ -5,6 +5,7 @@
 #include "test_harness.hpp"
 #include <rtti/convert.hpp>
 #include <rtti/memory.hpp>
+#include <rtti/reflect.hpp>
 #include <rtti/to_string.hpp>
 #include <array>
 #include <cstdint>
@@ -48,6 +49,22 @@ struct ConvertU64Set {
 struct ConvertU64Holder {
     std::uint64_t big = 0;
     RTTI_DEFINE_TYPE_INTRUSIVE(ConvertU64Holder, big)
+};
+
+// Narrow-integer members for the set_field range check (T-D #6): char / int8
+// must reject out-of-range sources instead of silently truncating.
+struct ConvertNarrow {
+    char c = 0;
+    std::int8_t i8 = 0;
+    std::uint8_t u8 = 0;
+    RTTI_DEFINE_TYPE_INTRUSIVE(ConvertNarrow, c, i8, u8)
+};
+
+// Reflected struct holding a string_view member (T-D #1): the registration
+// must compile and the member must convert through the string lane.
+struct ConvertStringViewMember {
+    std::string_view label;
+    RTTI_DEFINE_TYPE_INTRUSIVE(ConvertStringViewMember, label)
 };
 
 namespace rtti_test_lib {
@@ -378,6 +395,91 @@ RTTI_TEST_CASE(convert_u64_overflow_not_truncated) {
     RTTI_CHECK(rtti::to_string(std::vector<std::uint64_t>{max}).empty());
     // Reflected serialization likewise fails closed.
     RTTI_CHECK(rtti::to_string(holder).empty());
+}
+
+// --- string_view is a string scalar, not a fixed char sequence (T-D #1) ------
+// is_fixed_sequence<string_view> used to be true (value_type/begin/end with no
+// push_back), so to_value emitted a char-code array and from_value instantiated
+// a const-char element path that failed to compile. The view must ride the
+// basic_string lane: string scalar on both directions.
+RTTI_TEST_CASE(string_view_roundtrip_as_string) {
+    box* dst = new box;
+    const std::string_view sv = "hello";
+    RTTI_CHECK_EQ(rtti::to_value(dst, sv), rtti::error_code::ok);
+    RTTI_CHECK(dst->type() == rtti::value_io::kind::string);
+    rtti::string_view got;
+    RTTI_CHECK(dst->as_string(got));
+    RTTI_CHECK_EQ(got, rtti::string_view("hello"));
+    delete dst;
+
+    // from_value: a string source fills the view (the box owns its string, so
+    // the view stays valid for the box's lifetime).
+    box* src = make_str("world");
+    std::string_view out;
+    RTTI_CHECK_EQ(rtti::from_value(src, out), rtti::error_code::ok);
+    RTTI_CHECK_EQ(out, std::string_view("world"));
+    delete src;
+
+    // A reflected type holding a string_view member compiles and converts.
+    ConvertStringViewMember holder;
+    holder.label = "member";
+    box* r = new box;
+    RTTI_CHECK_EQ(rtti::to_value(r, holder), rtti::error_code::ok);
+    rtti::value_io* sub = nullptr;
+    RTTI_CHECK(r->get_key("label", sub));
+    RTTI_CHECK(sub->type() == rtti::value_io::kind::string);
+    delete r;
+}
+
+// --- fixed_sequence_from_named is strict like the plain path (T-D #2) --------
+// The named variant used to fill the min(src,out) prefix and return ok,
+// silently truncating data; fixed_sequence_from returns kind_mismatch. The
+// named variant must match.
+RTTI_TEST_CASE(named_fixed_sequence_strict_size) {
+    box* src = make_arr();
+    src->push_back(make_int(1));
+    src->push_back(make_int(2));
+    src->push_back(make_int(3));
+    src->push_back(make_int(4));
+    const rtti::detail::naming_policy np;
+
+    std::array<int, 3> out{};
+    RTTI_CHECK_EQ(rtti::from_value_named(src, out, np),
+                  rtti::error_code::kind_mismatch);
+
+    // The matching-size named path still converts.
+    std::array<int, 4> ok{};
+    RTTI_CHECK_EQ(rtti::from_value_named(src, ok, np), rtti::error_code::ok);
+    RTTI_CHECK_EQ(ok[0], 1);
+    RTTI_CHECK_EQ(ok[3], 4);
+    delete src;
+}
+
+// --- set_field on narrow integers is range-checked (T-D #6) ------------------
+// field_value_to used to static_cast the int64 source into char/int8 with no
+// range check (set_field("c", 300) -> true, c=44), unlike the value_io
+// conversion lane which reports overflow. Narrow targets must reject
+// out-of-range sources.
+RTTI_TEST_CASE(set_field_narrow_integer_range_check) {
+    ConvertNarrow obj;
+
+    RTTI_CHECK(!rtti::set_field(obj, "c", rtti::field_value::of(int64_t(300))));
+    RTTI_CHECK_EQ(static_cast<unsigned char>(obj.c), 0u);
+    RTTI_CHECK(!rtti::set_field(obj, "c", rtti::field_value::of(int64_t(-1))));
+    RTTI_CHECK(rtti::set_field(obj, "c", rtti::field_value::of(int64_t(255))));
+    RTTI_CHECK_EQ(static_cast<unsigned char>(obj.c), 255u);
+
+    RTTI_CHECK(!rtti::set_field(obj, "i8", rtti::field_value::of(int64_t(-129))));
+    RTTI_CHECK(!rtti::set_field(obj, "i8", rtti::field_value::of(int64_t(128))));
+    RTTI_CHECK(rtti::set_field(obj, "i8", rtti::field_value::of(int64_t(-128))));
+    RTTI_CHECK_EQ(static_cast<int>(obj.i8), -128);
+    RTTI_CHECK(rtti::set_field(obj, "i8", rtti::field_value::of(int64_t(127))));
+    RTTI_CHECK_EQ(static_cast<int>(obj.i8), 127);
+
+    RTTI_CHECK(!rtti::set_field(obj, "u8", rtti::field_value::of(int64_t(-1))));
+    RTTI_CHECK(!rtti::set_field(obj, "u8", rtti::field_value::of(int64_t(256))));
+    RTTI_CHECK(rtti::set_field(obj, "u8", rtti::field_value::of(int64_t(255))));
+    RTTI_CHECK_EQ(static_cast<int>(obj.u8), 255);
 }
 
 } // namespace rtti_test_lib

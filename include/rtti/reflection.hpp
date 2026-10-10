@@ -84,6 +84,18 @@ struct is_char_string : std::false_type {};
 template <typename Char, typename Traits, typename Alloc>
 struct is_char_string<std::basic_string<Char, Traits, Alloc>> : std::true_type {};
 
+// Non-owning char text (std::basic_string_view). Like basic_string it is a
+// scalar (text) type for conversion purposes: a view matches the fixed-size
+// sequence shape (value_type/begin/end, no push_back), so is_fixed_sequence
+// must exclude it or the converter would treat a view as an index-addressable
+// char-code array (and from_value would instantiate a const-char element path
+// that fails to compile). Defined next to is_char_string so both text types
+// sit together.
+template <typename T>
+struct is_string_view : std::false_type {};
+template <typename Char, typename Traits>
+struct is_string_view<std::basic_string_view<Char, Traits>> : std::true_type {};
+
 // Has push_back(value_type) + begin/end: vector, list, deque.
 // std::basic_string is excluded via is_char_string: it satisfies the shape
 // but is a scalar (string) type for conversion purposes.
@@ -201,17 +213,19 @@ struct is_pair<T, std::void_t<decltype(std::declval<T&>().first),
     : std::true_type {};
 
 // Fixed-size sequence: value_type + begin/end but no push_back (std::array).
-// basic_string is excluded via is_char_string; optional/variant/tuple have no
-// begin/end, so they cannot match. Associative containers (map/set) expose
-// value_type + begin/end without push_back too, but they are key-based, not
-// index-addressable sequences, so is_associative excludes them (otherwise a
-// fixed-sequence converter would try out[i] on std::map and fail to compile).
+// basic_string and basic_string_view are excluded via is_char_string /
+// is_string_view: both are scalar text types, not index-addressable numeric
+// sequences. optional/variant/tuple have no begin/end, so they cannot match.
+// Associative containers (map/set) expose value_type + begin/end without
+// push_back too, but they are key-based, not index-addressable sequences, so
+// is_associative excludes them (otherwise a fixed-sequence converter would try
+// out[i] on std::map and fail to compile).
 template <typename T, typename = void>
 struct is_fixed_sequence : std::false_type {};
 template <typename T>
 struct is_fixed_sequence<T, std::enable_if_t<
-    !is_char_string<T>::value && !has_push_back<T>::value &&
-        !is_associative<T>::value,
+    !is_char_string<T>::value && !is_string_view<T>::value &&
+        !has_push_back<T>::value && !is_associative<T>::value,
     std::void_t<typename T::value_type,
                 decltype(std::declval<T&>().begin()),
                 decltype(std::declval<T&>().end())>>> : std::true_type {};
@@ -325,7 +339,9 @@ private:
 
 // Converts a field_value into a typed destination. Returns false on kind
 // mismatch. Single template with compile-time dispatch (no overload sets, so
-// MSVC cannot report ambiguous calls for int-like member types).
+// MSVC cannot report ambiguous calls for int-like member types). Narrow
+// integral targets are range-checked (mirroring the value_io integer lane):
+// an out-of-range int64 source is false, never a silent truncation.
 template <typename M>
 inline bool field_value_to(M& out, const field_value& v) noexcept {
     if constexpr (std::is_same<M, bool>::value) {
@@ -338,8 +354,31 @@ inline bool field_value_to(M& out, const field_value& v) noexcept {
         if (v.type() != field_value::kind::integer) {
             return false;
         }
-        out = static_cast<M>(v.as_integer());
-        return true;
+        const std::int64_t iv = v.as_integer();
+        if constexpr (std::is_same<M, char>::value) {
+            // char keeps its ASCII byte lane 0..255 (spec §23.1), matching the
+            // value_io converter and the scalar_int64_to_integral range gate.
+            if (iv < 0 || static_cast<std::uint64_t>(iv) > 255u) {
+                return false;
+            }
+            out = static_cast<M>(static_cast<unsigned char>(iv));
+            return true;
+        } else if constexpr (std::is_unsigned<M>::value) {
+            if (iv < 0 ||
+                static_cast<std::uint64_t>(iv) >
+                    static_cast<std::uint64_t>((std::numeric_limits<M>::max)())) {
+                return false;
+            }
+            out = static_cast<M>(iv);
+            return true;
+        } else {
+            if (iv < static_cast<std::int64_t>((std::numeric_limits<M>::min)()) ||
+                iv > static_cast<std::int64_t>((std::numeric_limits<M>::max)())) {
+                return false;
+            }
+            out = static_cast<M>(iv);
+            return true;
+        }
     } else if constexpr (std::is_floating_point<M>::value) {
         if (v.type() != field_value::kind::real) {
             return false;
@@ -1915,14 +1954,33 @@ void for_each_base(Fn&& fn) {
     }
 }
 
+template <typename D, typename C, typename M>
+using member_cast_t = decltype(static_cast<M D::*>(std::declval<M C::*>()));
+
+// True when `M C::*` converts to `M D::*` (non-virtual base of D). Standard
+// C++ makes the conversion ill-formed when C is a virtual base of D, so this
+// SFINAE probe tells the two base kinds apart without a non-portable
+// is_virtual_base trait. MSVC widens the conversion (accepts it even for
+// virtual bases, with correct runtime member-pointer adjustment), so on MSVC
+// the fast D-anchored path also serves virtual bases.
+template <typename D, typename C, typename M, typename = void>
+struct is_member_cast_ok : std::false_type {};
+template <typename D, typename C, typename M>
+struct is_member_cast_ok<D, C, M,
+                         std::void_t<member_cast_t<D, C, M>>>
+    : std::true_type {};
+
 // The D-anchored accessor for the OwnIndex-th OWN field of the base type C.
-// Converting `M C::*` into `M D::*` is ill-formed when C is a virtual base of
-// D (standard C++), so the accessor stays C-anchored (declaring base) and
-// carries a D->C adjust thunk: typed_field_access<C, M>::get first converts the
-// void* obj (a D object) to the C subobject via static_cast -- always
-// well-formed and compiler-adjusted for virtual bases -- then dereferences C's
-// own member pointer. One static instance per (D, C, OwnIndex), so fields
-// sharing a member type stay distinct.
+// Non-virtual base: the member pointer converts at compile time
+// (M C::* -> M D::*), so typed_field_access<D, M> accesses the field with zero
+// runtime adjustment -- the fast path, restored for the common case. Virtual
+// base (the conversion is ill-formed on GCC/Clang): the accessor stays
+// C-anchored (declaring base) and carries a D->C adjust thunk:
+// typed_field_access<C, M>::get first converts the void* obj (a D object) to
+// the C subobject via static_cast -- always well-formed and compiler-adjusted
+// for virtual bases -- then dereferences C's own member pointer. One static
+// instance per (D, C, OwnIndex), so fields sharing a member type stay
+// distinct.
 template <typename D, typename C, std::size_t OwnIndex>
 const field_access_base* derived_accessor() noexcept {
     constexpr std::size_t off = base_field_count<C>();
@@ -1930,15 +1988,23 @@ const field_access_base* derived_accessor() noexcept {
     using M = typename member_pointer_traits<Mp>::value;
     static_assert(std::is_base_of<C, D>::value,
                   "rtti: a reflected derived type must derive from its base");
-    const void* (*to_c)(const void*) = [](const void* p) noexcept -> const void* {
-        return static_cast<const C*>(static_cast<const D*>(p));
-    };
-    static const typed_field_access<C, M> inst{
-        fields_of<C>::desc[off + OwnIndex].name,
-        std::get<OwnIndex>(fields_of<C>::members),
-        &typeid(M),
-        to_c};
-    return &inst;
+    if constexpr (is_member_cast_ok<D, C, M>::value) {
+        static const typed_field_access<D, M> inst{
+            fields_of<C>::desc[off + OwnIndex].name,
+            static_cast<M D::*>(std::get<OwnIndex>(fields_of<C>::members)),
+            &typeid(M)};
+        return &inst;
+    } else {
+        const void* (*to_c)(const void*) = [](const void* p) noexcept -> const void* {
+            return static_cast<const C*>(static_cast<const D*>(p));
+        };
+        static const typed_field_access<C, M> inst{
+            fields_of<C>::desc[off + OwnIndex].name,
+            std::get<OwnIndex>(fields_of<C>::members),
+            &typeid(M),
+            to_c};
+        return &inst;
+    }
 }
 
 template <typename D, typename C, std::size_t... I>
