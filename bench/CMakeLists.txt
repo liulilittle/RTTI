@@ -13,7 +13,13 @@ target_link_libraries(rtti_bench_new PRIVATE rtti)
 target_include_directories(rtti_bench_new PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 target_compile_features(rtti_bench_new PRIVATE cxx_std_17)
 
-foreach(_t rtti_bench rtti_bench_new)
+# JSON/XML parse throughput (document parse only, ~1 MB source, MB/s + it/s).
+add_executable(rtti_bench_parse bench_parse.cpp)
+target_link_libraries(rtti_bench_parse PRIVATE rtti)
+target_include_directories(rtti_bench_parse PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+target_compile_features(rtti_bench_parse PRIVATE cxx_std_17)
+
+foreach(_t rtti_bench rtti_bench_new rtti_bench_parse)
   if(MSVC)
     target_compile_options(${_t} PRIVATE /W4 /permissive- /Zc:preprocessor)
   else()
@@ -25,7 +31,7 @@ endforeach()
 # executable the same whole-program treatment so /LTCG links without the
 # incremental-link conflict (LNK4075), mirroring the root CMakeLists policy.
 if(RTTI_ENABLE_LTO AND RTTI_IPO_OK)
-  foreach(_t rtti_bench rtti_bench_new)
+  foreach(_t rtti_bench rtti_bench_new rtti_bench_parse)
     if(TARGET ${_t})
       set_property(TARGET ${_t} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
       set_property(TARGET ${_t} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)

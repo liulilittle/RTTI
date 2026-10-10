@@ -1,0 +1,27 @@
+﻿benchmark   : rtti_bench_new
+compiler    : MSVC 19.44.35229
+config      : Release (NDEBUG defined)
+cpu         : AMD Ryzen 9 7945HX with Radeon Graphics
+logical cpus: 32
+method      : steady_clock wall time; 7 timed samples, median ns/op
+timed iters: 20000000 per sample (warm-up 312500)
+
+== enum traversal (count/name/value) ==
+enum_count<Color>                        1.15 ns/op  (20000000 iters, median of 7)
+enum_name_at<Color>                      1.13 ns/op  (20000000 iters, median of 7)
+enum_value_at<Color>                     1.31 ns/op  (20000000 iters, median of 7)
+for_each_enum<Color>                     1.59 ns/op  (20000000 iters, median of 7)
+
+== empty enums (count 0) ==
+enum_count<Empty>                        1.11 ns/op  (20000000 iters, median of 7)
+for_each_enum<Empty>                     1.07 ns/op  (20000000 iters, median of 7)
+
+== for_each_field (base+derived, 4 merged fields) ==
+for_each_field<Derived> names            1.55 ns/op  (20000000 iters, median of 7)
+for_each_field(obj, values)             13.45 ns/op  (20000000 iters, median of 7)
+
+== for_each_template_arg ==
+template_arg_count<pair<int,string>>       1.25 ns/op  (20000000 iters, median of 7)
+for_each_template_arg<pair<int,string>>       4.62 ns/op  (20000000 iters, median of 7)
+template_arg_count<int> (unreg.)         1.21 ns/op  (20000000 iters, median of 7)
+

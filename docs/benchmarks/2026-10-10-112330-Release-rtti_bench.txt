@@ -1,0 +1,4 @@
+﻿field_walk                   446727719.5 ops/s  (0.002 s, 394000000 total)
+get_set_by_name              109203686.7 ops/s  (0.009 s, 999999 total)
+reflect_roundtrip             1230284.1 ops/s  (0.813 s, 500001500000 total)
+
