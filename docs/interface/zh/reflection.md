@@ -620,7 +620,7 @@ struct has_default<T, std::void_t<typename T::rtti_has_default>>
 - `RTTI_DEFINE_TYPE_ATTRS(T, ...)` / `RTTI_DEFINE_FIELD_ATTRS(T, ...)` — 注册宏。
 - 查询:`attr` 查找函数族(按名/索引/键),见头文件 `reflection.hpp` §6。
 
-> 本章与 §7–§17 的完整逐项签名、示例与提取行号见英文版 [`docs/interface/en/reflection.md`](../en/reflection.md) 对应章节(结构与本章一一对应);中文版以下各节为详尽中文概述,并在关键名称处保留英文签名以便对照。
+> 中文版以下各节与英文版结构一一对应,已含完整逐项签名、示例与提取行号(中文文档索引中文文档)。如需对照英文术语,可经每章末语言切换链接或本页头部 [`English edition`](../en/reflection.md) 查看平行英文版。
 
 ---
 
