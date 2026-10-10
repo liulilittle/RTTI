@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,6 +21,17 @@
 
 namespace rtti::ini {
 namespace detail {
+
+// Copy `s` into the arena. Throws std::bad_alloc when the arena cannot grow,
+// matching the std::string assignment the arena replaces (the parse paths
+// never observe a null text/name view).
+const char* dup_or_throw(rtti::memory_arena& a, rtti::string_view s) {
+    const char* p = a.dup(s.data(), s.size());
+    if (p == nullptr) {
+        throw std::bad_alloc();
+    }
+    return p;
+}
 
 bool is_ws(char c) noexcept {
     return c == ' ' || c == '\t';
@@ -131,8 +143,12 @@ std::string quote_value(rtti::string_view s) {
 }
 
 node* pool_alloc(pool* p) {
-    p->nodes.push_back(std::unique_ptr<node>(new node(p)));
-    return p->nodes.back().get();
+    node* n = p->arena_.alloc_obj<node>(p);
+    if (n == nullptr) {
+        throw std::bad_alloc();
+    }
+    p->all_.push_back(n);
+    return n;
 }
 
 node::node(pool* o) noexcept : owner(o) {}
@@ -150,7 +166,17 @@ bool node::is_array() const noexcept {
 }
 
 rtti::string_view node::text() const noexcept {
-    return rtti::string_view(owned.data(), owned.size());
+    // A scalar whose text was never set (e.g. make_scalar with no kind) reads
+    // as the empty string; never hand the serializer a null data pointer.
+    if (text_data == nullptr) {
+        return rtti::string_view("", 0);
+    }
+    return rtti::string_view(text_data, text_len);
+}
+
+void node::set_text(rtti::string_view s) {
+    text_data = dup_or_throw(owner->arena_, s);
+    text_len = s.size();
 }
 
 rtti::value_io::kind node::type() const noexcept {
@@ -279,8 +305,8 @@ bool node::get_key_at(std::size_t index, rtti::string_view& key,
     if (!is_object() || index >= entries.size()) {
         return false;
     }
-    key = rtti::string_view(entries[index].name.data(),
-                            entries[index].name.size());
+    key = rtti::string_view(entries[index].name,
+                            entries[index].name_len);
     out = entries[index].child;
     return true;
 }
@@ -288,7 +314,8 @@ bool node::get_key_at(std::size_t index, rtti::string_view& key,
 rtti::value_io* node::make_array() {
     r = role_t::array;
     skind = rtti::field_value::kind::none;
-    owned.clear();
+    text_data = nullptr;
+    text_len = 0;
     entries.clear();
     elems.clear();
     return this;
@@ -301,7 +328,8 @@ void node::push_back(rtti::value_io* v) {
 rtti::value_io* node::make_object() {
     r = role_t::object;
     skind = rtti::field_value::kind::none;
-    owned.clear();
+    text_data = nullptr;
+    text_len = 0;
     entries.clear();
     elems.clear();
     return this;
@@ -313,28 +341,31 @@ void node::set_key(rtti::string_view name, rtti::value_io* v) {
 
 rtti::value_io* node::make_scalar(rtti::field_value v) {
     r = role_t::scalar;
-    owned.clear();
+    text_data = nullptr;
+    text_len = 0;
     switch (v.type()) {
         case rtti::field_value::kind::boolean:
             skind = rtti::field_value::kind::boolean;
-            owned = v.as_bool() ? "true" : "false";
+            set_text(v.as_bool() ? "true" : "false");
             break;
         case rtti::field_value::kind::integer: {
             skind = rtti::field_value::kind::integer;
             char buf[32];
             std::snprintf(buf, sizeof(buf), "%lld",
                           static_cast<long long>(v.as_integer()));
-            owned.assign(buf);
+            set_text(buf);
             break;
         }
         case rtti::field_value::kind::real: {
             skind = rtti::field_value::kind::real;
-            rtti::detail::format_real(v.as_real(), owned);
+            std::string tmp;
+            rtti::detail::format_real(v.as_real(), tmp);
+            set_text(tmp);
             break;
         }
         case rtti::field_value::kind::string: {
             skind = rtti::field_value::kind::string;
-            owned.assign(v.as_string().data(), v.as_string().size());
+            set_text(rtti::string_view(v.as_string()));
             break;
         }
         default:
@@ -352,12 +383,13 @@ rtti::value_io* node::make_node() {
 void node::set_scalar_text(rtti::string_view s) {
     r = role_t::scalar;
     skind = rtti::field_value::kind::string;
-    owned.assign(s.data(), s.size());
+    set_text(s);
 }
 
-node* node::find_child(const std::string& name) {
+node* node::find_child(rtti::string_view name) {
     for (auto& e : entries) {
-        if (e.name == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             return e.child;
         }
     }
@@ -368,7 +400,8 @@ node* node::find_child(const std::string& name) {
 // array slot holding every occurrence; a repeated array appends.
 void node::set_key_impl(rtti::string_view name, node* child) {
     for (auto& e : entries) {
-        if (e.name == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             if (e.child->is_array()) {
                 e.child->elems.push_back(child);
                 return;
@@ -385,17 +418,20 @@ void node::set_key_impl(rtti::string_view name, node* child) {
             return;
         }
     }
-    entries.push_back(entry{std::string(name.data(), name.size()), child});
+    const char* np = dup_or_throw(owner->arena_, name);
+    entries.push_back(entry{np, name.size(), child});
 }
 
-void node::replace_child(const std::string& name, node* child) {
+void node::replace_child(rtti::string_view name, node* child) {
     for (auto& e : entries) {
-        if (e.name == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             e.child = child;
             return;
         }
     }
-    entries.push_back(entry{name, child});
+    const char* np = dup_or_throw(owner->arena_, name);
+    entries.push_back(entry{np, name.size(), child});
 }
 
 bool node::get_key_impl(rtti::string_view name, rtti::value_io*& out) const {
@@ -403,7 +439,8 @@ bool node::get_key_impl(rtti::string_view name, rtti::value_io*& out) const {
         return false;
     }
     for (const auto& e : entries) {
-        if (rtti::string_view(e.name.data(), e.name.size()) == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             out = e.child;
             return true;
         }
@@ -517,8 +554,7 @@ detail::node* open_section(detail::node* current, rtti::string_view name,
             too_deep = true;
             return nullptr;
         }
-        const std::string cname(comp.data(), comp.size());
-        detail::node* child = current->find_child(cname);
+        detail::node* child = current->find_child(comp);
         if (!last) {
             if (child != nullptr && child->is_array()) {
                 current = child->elems.back();
@@ -528,7 +564,7 @@ detail::node* open_section(detail::node* current, rtti::string_view name,
             if (child == nullptr || !child->is_object()) {
                 detail::node* o = detail::pool_alloc(pool);
                 o->make_object();
-                current->replace_child(cname, o);
+                current->replace_child(comp, o);
                 child = o;
             }
             current = child;
@@ -548,7 +584,7 @@ detail::node* open_section(detail::node* current, rtti::string_view name,
             extra->make_object();
             arr->elems.push_back(child);
             arr->elems.push_back(extra);
-            current->replace_child(cname, arr);
+            current->replace_child(comp, arr);
             return extra;
         }
         if (child->is_array()) {
@@ -559,7 +595,7 @@ detail::node* open_section(detail::node* current, rtti::string_view name,
         }
         detail::node* o = detail::pool_alloc(pool);
         o->make_object();
-        current->replace_child(cname, o);
+        current->replace_child(comp, o);
         return o;
     }
     return nullptr;
@@ -603,7 +639,9 @@ result<document> parse(rtti::string_view src) {
 
         if (first == ';' || first == '#') {
             const rtti::string_view ctext = line.substr(i);
-            current->comments.push_back(std::string(ctext.data(), ctext.size()));
+            current->comments.push_back(detail::node::comment{
+                detail::dup_or_throw(current->owner->arena_, ctext),
+                ctext.size()});
             any_content = true;
             pos = next;
             continue;
@@ -1022,8 +1060,8 @@ void write_key_value(std::string& out, rtti::string_view key,
 void write_section_header(std::string& out, const write_config& cfg,
                           const node* sec, rtti::string_view name,
                           const std::string& parent_path) {
-    for (const std::string& c : sec->comments) {
-        emit_comment(out, cfg, rtti::string_view(c.data(), c.size()));
+    for (const detail::node::comment& c : sec->comments) {
+        emit_comment(out, cfg, rtti::string_view(c.text, c.len));
     }
     std::string full =
         parent_path.empty() ? static_cast<std::string>(name)
@@ -1039,20 +1077,20 @@ void write_section_body(std::string& out, const write_config& cfg,
     for (const auto& e : sec->entries) {
         const node* c = e.child;
         if (c->is_scalar() || (!c->is_object() && !c->is_array())) {
-            write_key_value(out, rtti::string_view(e.name.data(), e.name.size()), c);
+            write_key_value(out, rtti::string_view(e.name, e.name_len), c);
         } else if (c->is_array() && !c->elems.empty() && !c->elems[0]->is_object()) {
             for (const node* el : c->elems) {
-                write_key_value(out, rtti::string_view(e.name.data(), e.name.size()), el);
+                write_key_value(out, rtti::string_view(e.name, e.name_len), el);
             }
         }
     }
     for (const auto& e : sec->entries) {
         const node* c = e.child;
         if (c->is_object()) {
-            write_section_header(out, cfg, c, rtti::string_view(e.name.data(), e.name.size()), path);
+            write_section_header(out, cfg, c, rtti::string_view(e.name, e.name_len), path);
         } else if (c->is_array() && !c->elems.empty() && c->elems[0]->is_object()) {
             for (const node* el : c->elems) {
-                write_section_header(out, cfg, el, rtti::string_view(e.name.data(), e.name.size()), path);
+                write_section_header(out, cfg, el, rtti::string_view(e.name, e.name_len), path);
             }
         }
     }
@@ -1068,8 +1106,8 @@ void write_section_body(std::string& out, const write_config& cfg,
 void serialize(const document& doc, std::string& out, const write_config& cfg) {
     out.clear();
     const detail::node* root = doc.root_;
-    for (const std::string& c : root->comments) {
-        detail::emit_comment(out, cfg, rtti::string_view(c.data(), c.size()));
+    for (const detail::node::comment& c : root->comments) {
+        detail::emit_comment(out, cfg, rtti::string_view(c.text, c.len));
     }
     if (root->is_scalar()) {
         out += root->text();

@@ -53,6 +53,7 @@
 
 #include <rtti/convert.hpp>
 #include <rtti/error.hpp>
+#include <rtti/memory.hpp>
 #include <rtti/naming.hpp>
 
 #include <cerrno>
@@ -104,16 +105,23 @@ public:
     enum class role_t { unset, scalar, object, array };
 
     struct entry {
-        std::string name;
+        const char* name = nullptr;   // arena-owned key text
+        std::size_t name_len = 0;
         node* child = nullptr;
+    };
+
+    struct comment {
+        const char* text = nullptr;   // arena-owned comment text
+        std::size_t len = 0;
     };
 
     role_t r = role_t::unset;
     rtti::field_value::kind skind = rtti::field_value::kind::none;
-    std::string owned;       // scalar text (always owned; no source views)
+    const char* text_data = nullptr;  // scalar text, arena-owned
+    std::size_t text_len = 0;
     std::vector<entry> entries;   // object children (ordered)
     std::vector<node*> elems;     // array elements
-    std::vector<std::string> comments;  // whole-line comments
+    std::vector<comment> comments;    // whole-line comments
     pool* owner = nullptr;
 
     explicit node(pool* o) noexcept;
@@ -123,6 +131,11 @@ public:
     bool is_array() const noexcept;
 
     rtti::string_view text() const noexcept;
+
+    // Copy `s` into the owner arena as this node's scalar text. Throws
+    // std::bad_alloc on allocation failure (matching the former std::string
+    // assignment behaviour), so the parse error paths never see a null view.
+    void set_text(rtti::string_view s);
 
     // --- value_io read ------------------------------------------------------
 
@@ -168,20 +181,31 @@ public:
     // Parse a scalar text value into owned storage (parser path).
     void set_scalar_text(rtti::string_view s);
 
-    node* find_child(const std::string& name);
+    node* find_child(rtti::string_view name);
 
     // Register a child under `name`. A repeated scalar replaces itself with an
     // array slot holding every occurrence; a repeated array appends.
     void set_key_impl(rtti::string_view name, node* child);
 
-    void replace_child(const std::string& name, node* child);
+    void replace_child(rtti::string_view name, node* child);
 
 private:
     bool get_key_impl(rtti::string_view name, rtti::value_io*& out) const;
 };
 
 struct pool {
-    std::vector<std::unique_ptr<node>> nodes;
+    rtti::memory_arena arena_;   // nodes, scalar text, keys and comments
+    std::vector<node*> all_;     // every arena node, for explicit teardown
+
+    // Nodes are carved from arena blocks that reclaim their bytes without
+    // running destructors; each node's vector members hold their own heap
+    // buffers, so every node gets an explicit destructor call here before the
+    // arena frees the blocks.
+    ~pool() {
+        for (node* n : all_) {
+            n->~node();
+        }
+    }
 };
 
 } // namespace detail

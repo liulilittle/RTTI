@@ -54,6 +54,7 @@
 
 #include <rtti/convert.hpp>
 #include <rtti/error.hpp>
+#include <rtti/memory.hpp>
 #include <rtti/naming.hpp>
 
 #include <cerrno>
@@ -116,13 +117,15 @@ public:
     enum class role_t { unset, scalar, object, array };
 
     struct entry {
-        std::string name;
+        const char* name = nullptr;   // arena-owned key text
+        std::size_t name_len = 0;
         node* child = nullptr;
     };
 
     role_t r = role_t::unset;
     rtti::field_value::kind skind = rtti::field_value::kind::none;
-    std::string owned;          // scalar text (all scalar payloads copied here)
+    const char* text_data = nullptr;  // scalar text, arena-owned
+    std::size_t text_len = 0;
     bool is_datetime = false;   // parsed date/time kept unquoted on output
     std::vector<entry> entries; // object children (ordered)
     std::vector<node*> elems;   // array elements
@@ -136,8 +139,13 @@ public:
 
     rtti::string_view text() const noexcept;
 
-    node* find_child(const std::string& name);
-    void set_child(const std::string& name, node* child);
+    // Copy `s` into the owner arena as this node's scalar text. Throws
+    // std::bad_alloc on allocation failure (matching the former std::string
+    // assignment behaviour), so the parse error paths never see a null view.
+    void set_text(rtti::string_view s);
+
+    node* find_child(rtti::string_view name);
+    void set_child(rtti::string_view name, node* child);
 
     // --- value_io read ------------------------------------------------------
 
@@ -175,7 +183,18 @@ private:
 };
 
 struct pool {
-    std::vector<std::unique_ptr<node>> nodes;
+    rtti::memory_arena arena_;   // nodes, scalar text and keys
+    std::vector<node*> all_;     // every arena node, for explicit teardown
+
+    // Nodes are carved from arena blocks that reclaim their bytes without
+    // running destructors; each node's vector members hold their own heap
+    // buffers, so every node gets an explicit destructor call here before the
+    // arena frees the blocks.
+    ~pool() {
+        for (node* n : all_) {
+            n->~node();
+        }
+    }
 };
 
 } // namespace detail

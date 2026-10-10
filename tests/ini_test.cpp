@@ -731,4 +731,67 @@ RTTI_TEST_CASE(ini_nonfinite_readback) {
     RTTI_CHECK(pa.ok() && std::isnan(pa.value.d));
 }
 
+// I5: nodes and strings live in the document arena. A large multi-section
+// document parses, moves out of the result (arena blocks stay valid across
+// the move), and still reads every key/value/comment correctly.
+RTTI_TEST_CASE(ini_arena_large_document) {
+    std::string src;
+    for (int i = 0; i < 2000; ++i) {
+        src += "[section";
+        src += std::to_string(i);
+        src += "]\n; comment line ";
+        src += std::to_string(i);
+        src += "\nkey = value string here\nnum = 12345\nflag = true\n";
+    }
+    auto r = rtti::ini::parse(rtti::string_view(src));
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    rtti::ini::document d = std::move(r.value);
+    RTTI_CHECK_EQ(d.size(), std::size_t(2000));
+    rtti::value_io* sec = nullptr;
+    RTTI_CHECK(d.get_key("section1999", sec));
+    if (sec == nullptr) {
+        return;
+    }
+    RTTI_CHECK(sec->type() == rtti::value_io::kind::object);
+    rtti::value_io* v = nullptr;
+    std::string s;
+    RTTI_CHECK(sec->get_key("key", v));
+    if (v != nullptr) {
+        RTTI_CHECK(scalar_str(v, s));
+        RTTI_CHECK_EQ(s, std::string("value string here"));
+    }
+    std::int64_t x = 0;
+    RTTI_CHECK(sec->get_key("num", v));
+    if (v != nullptr) {
+        RTTI_CHECK(scalar_int(v, x));
+        RTTI_CHECK_EQ(x, std::int64_t(12345));
+    }
+    // Round-trip serialization keeps the wide content (keys/comments escaped
+    // verbatim because they are plain ASCII here).
+    const std::string out = rtti::ini::serialize(d);
+    RTTI_CHECK(out.find("key = value string here") != std::string::npos);
+    RTTI_CHECK(out.find("[section1999]") != std::string::npos);
+    // With the comment switch on, the arena-stored comment round-trips too.
+    const std::string outc = rtti::ini::serialize(d, rtti::ini::write_config{true});
+    RTTI_CHECK(outc.find("; comment line 1999") != std::string::npos);
+}
+
+// I5: a syntax error late in a large document still tears the arena tree down
+// cleanly (the parse error path frees every node) and reports the right code.
+RTTI_TEST_CASE(ini_arena_error_after_many_nodes) {
+    std::string src;
+    for (int i = 0; i < 1000; ++i) {
+        src += "[s";
+        src += std::to_string(i);
+        src += "]\nk = v\n";
+    }
+    src += "bad line without a separator\n";
+    auto r = rtti::ini::parse(rtti::string_view(src));
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK(r.err.code == rtti::error_code::ini_bad_line);
+}
+
 } // namespace rtti_test_lib

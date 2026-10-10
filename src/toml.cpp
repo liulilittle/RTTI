@@ -17,6 +17,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +28,17 @@ namespace rtti {
 namespace toml {
 namespace detail {
 
+// Copy `s` into the arena. Throws std::bad_alloc when the arena cannot grow,
+// matching the std::string assignment the arena replaces (the parse paths
+// never observe a null text/name view).
+const char* dup_or_throw(rtti::memory_arena& a, rtti::string_view s) {
+    const char* p = a.dup(s.data(), s.size());
+    if (p == nullptr) {
+        throw std::bad_alloc();
+    }
+    return p;
+}
+
 node::node(pool* o) noexcept : owner(o) {}
 
 bool node::is_scalar() const noexcept { return r == role_t::scalar; }
@@ -36,12 +48,23 @@ bool node::is_object() const noexcept { return r == role_t::object; }
 bool node::is_array() const noexcept { return r == role_t::array; }
 
 rtti::string_view node::text() const noexcept {
-    return rtti::string_view(owned.data(), owned.size());
+    // A scalar whose text was never set reads as the empty string; never hand
+    // the serializer a null data pointer.
+    if (text_data == nullptr) {
+        return rtti::string_view("", 0);
+    }
+    return rtti::string_view(text_data, text_len);
 }
 
-node* node::find_child(const std::string& name) {
+void node::set_text(rtti::string_view s) {
+    text_data = dup_or_throw(owner->arena_, s);
+    text_len = s.size();
+}
+
+node* node::find_child(rtti::string_view name) {
     for (auto& e : entries) {
-        if (e.name == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             return e.child;
         }
     }
@@ -49,19 +72,25 @@ node* node::find_child(const std::string& name) {
 }
 
 // Replace an existing child (later-wins) or append a new one.
-void node::set_child(const std::string& name, node* child) {
+void node::set_child(rtti::string_view name, node* child) {
     for (auto& e : entries) {
-        if (e.name == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             e.child = child;
             return;
         }
     }
-    entries.push_back(entry{name, child});
+    const char* np = dup_or_throw(owner->arena_, name);
+    entries.push_back(entry{np, name.size(), child});
 }
 
 node* pool_alloc(pool* p) {
-    p->nodes.push_back(std::unique_ptr<node>(new node(p)));
-    return p->nodes.back().get();
+    node* n = p->arena_.alloc_obj<node>(p);
+    if (n == nullptr) {
+        throw std::bad_alloc();
+    }
+    p->all_.push_back(n);
+    return n;
 }
 
 // --- node value_io read -----------------------------------------------------
@@ -91,11 +120,11 @@ bool node::as_bool(bool& out) const noexcept {
     if (!is_scalar() || skind != rtti::field_value::kind::boolean) {
         return false;
     }
-    if (owned == "true") {
+    if (text() == "true") {
         out = true;
         return true;
     }
-    if (owned == "false") {
+    if (text() == "false") {
         out = false;
         return true;
     }
@@ -105,13 +134,15 @@ bool node::as_integer(std::int64_t& out) const noexcept {
     if (!is_scalar() || skind != rtti::field_value::kind::integer) {
         return false;
     }
-    if (owned.empty()) {
+    // Arena-duplicated text is NUL-terminated, like the std::string it
+    // replaced; the empty and null cases read as no conversion.
+    if (text_data == nullptr || text_len == 0) {
         return false;
     }
     char* end = nullptr;
     errno = 0;
-    const long long v = std::strtoll(owned.c_str(), &end, 10);
-    if (errno == ERANGE || end == owned.c_str() || *end != '\0') {
+    const long long v = std::strtoll(text_data, &end, 10);
+    if (errno == ERANGE || end == text_data || *end != '\0') {
         return false;
     }
     out = static_cast<std::int64_t>(v);
@@ -122,22 +153,25 @@ bool node::as_real(double& out) const noexcept {
     if (!is_scalar() || skind != rtti::field_value::kind::real) {
         return false;
     }
-    if (owned == "inf") {
+    if (text() == "inf") {
         out = HUGE_VAL;
         return true;
     }
-    if (owned == "-inf") {
+    if (text() == "-inf") {
         out = -HUGE_VAL;
         return true;
     }
-    if (owned == "nan") {
+    if (text() == "nan") {
         out = NAN;
         return true;
     }
+    if (text_data == nullptr) {
+        return false;
+    }
     char* end = nullptr;
     errno = 0;
-    const double v = std::strtod(owned.c_str(), &end);
-    if (errno == ERANGE || end == owned.c_str() || *end != '\0') {
+    const double v = std::strtod(text_data, &end);
+    if (errno == ERANGE || end == text_data || *end != '\0') {
         return false;
     }
     out = v;
@@ -183,8 +217,8 @@ bool node::get_key_at(std::size_t index, rtti::string_view& key,
     if (!is_object() || index >= entries.size()) {
         return false;
     }
-    key = rtti::string_view(entries[index].name.data(),
-                            entries[index].name.size());
+    key = rtti::string_view(entries[index].name,
+                            entries[index].name_len);
     out = entries[index].child;
     return true;
 }
@@ -194,7 +228,8 @@ rtti::value_io* node::make_array() {
     r = role_t::array;
     skind = rtti::field_value::kind::none;
     is_datetime = false;
-    owned.clear();
+    text_data = nullptr;
+    text_len = 0;
     entries.clear();
     elems.clear();
     return this;
@@ -210,41 +245,45 @@ rtti::value_io* node::make_object() {
     r = role_t::object;
     skind = rtti::field_value::kind::none;
     is_datetime = false;
-    owned.clear();
+    text_data = nullptr;
+    text_len = 0;
     entries.clear();
     elems.clear();
     return this;
 }
 
 void node::set_key(rtti::string_view name, rtti::value_io* v) {
-    set_child(std::string(name.data(), name.size()), static_cast<node*>(v));
+    set_child(name, static_cast<node*>(v));
 }
 
 rtti::value_io* node::make_scalar(rtti::field_value v) {
     r = role_t::scalar;
     is_datetime = false;
-    owned.clear();
+    text_data = nullptr;
+    text_len = 0;
     switch (v.type()) {
         case rtti::field_value::kind::boolean:
             skind = rtti::field_value::kind::boolean;
-            owned = v.as_bool() ? "true" : "false";
+            set_text(v.as_bool() ? "true" : "false");
             break;
         case rtti::field_value::kind::integer: {
             skind = rtti::field_value::kind::integer;
             char buf[32];
             std::snprintf(buf, sizeof(buf), "%lld",
                           static_cast<long long>(v.as_integer()));
-            owned.assign(buf);
+            set_text(buf);
             break;
         }
         case rtti::field_value::kind::real: {
             skind = rtti::field_value::kind::real;
-            rtti::detail::format_real(v.as_real(), owned);
+            std::string tmp;
+            rtti::detail::format_real(v.as_real(), tmp);
+            set_text(tmp);
             break;
         }
         case rtti::field_value::kind::string: {
             skind = rtti::field_value::kind::string;
-            owned.assign(v.as_string().data(), v.as_string().size());
+            set_text(rtti::string_view(v.as_string()));
             break;
         }
         default:
@@ -263,7 +302,7 @@ void node::set_scalar_parsed(rtti::field_value::kind k, bool dt,
     r = role_t::scalar;
     skind = k;
     is_datetime = dt;
-    owned.assign(s.data(), s.size());
+    set_text(s);
 }
 
 bool node::get_key_impl(rtti::string_view name, rtti::value_io*& out) const {
@@ -271,7 +310,8 @@ bool node::get_key_impl(rtti::string_view name, rtti::value_io*& out) const {
         return false;
     }
     for (const auto& e : entries) {
-        if (rtti::string_view(e.name.data(), e.name.size()) == name) {
+        if (e.name_len == name.size() &&
+            std::memcmp(e.name, name.data(), name.size()) == 0) {
             out = e.child;
             return true;
         }
@@ -543,7 +583,7 @@ void scalar_text_into(const node* n, std::string& out) {
     if (n->skind == rtti::field_value::kind::string && !n->is_datetime) {
         quote_string_into(n->text(), out);
     } else {
-        out += n->owned;
+        out += n->text();
     }
 }
 void inline_value_into(const node* n, std::string& out);
@@ -568,8 +608,8 @@ void inline_object_into(const node* n, std::string& out) {
         if (i != 0) {
             out += ", ";
         }
-        out += quote_key(rtti::string_view(n->entries[i].name.data(),
-                                           n->entries[i].name.size()));
+        out += quote_key(rtti::string_view(n->entries[i].name,
+                                           n->entries[i].name_len));
         out += " = ";
         inline_value_into(n->entries[i].child, out);
     }
@@ -725,7 +765,11 @@ struct parser {
     bool cancelled = false;
     std::size_t max_depth = 512;
     node* current = nullptr;  // DOM: active table
-    node stream_marker{nullptr};
+    // The streaming sentinel carries the currently classified scalar. Its text
+    // is written into `stream_pool_` (a per-parse arena, freed with the
+    // parser), so it needs no document pool in streaming mode.
+    pool stream_pool_;
+    node stream_marker{&stream_pool_};
     error_info err;
 
     // Streaming section tracking.
@@ -1209,10 +1253,10 @@ bool parser::fire_scalar_node(const node* n) {
     }
     switch (n->skind) {
         case rtti::field_value::kind::boolean:
-            return fire(events->bool_value, n->owned == "true");
+            return fire(events->bool_value, n->text() == "true");
         case rtti::field_value::kind::integer:
             return fire(events->integer_value, static_cast<std::int64_t>(
-                          std::strtoll(n->owned.c_str(), nullptr, 10)));
+                          std::strtoll(n->text_data, nullptr, 10)));
         case rtti::field_value::kind::real:
             return fire(events->real_value, node_real(n));
         case rtti::field_value::kind::string:
@@ -1223,16 +1267,16 @@ bool parser::fire_scalar_node(const node* n) {
 }
 
 double parser::node_real(const node* n) const {
-    if (n->owned == "inf") {
+    if (n->text() == "inf") {
         return HUGE_VAL;
     }
-    if (n->owned == "-inf") {
+    if (n->text() == "-inf") {
         return -HUGE_VAL;
     }
-    if (n->owned == "nan") {
+    if (n->text() == "nan") {
         return NAN;
     }
-    return std::strtod(n->owned.c_str(), nullptr);
+    return std::strtod(n->text_data, nullptr);
 }
 bool parser::parse_bare_scalar(node*& out) {
     const std::size_t start = pos;
@@ -1607,7 +1651,7 @@ void emit_object(std::string& out, const node* sec,
         const node* c = e.child;
         if (c->is_scalar() || (c->is_array() && !is_table_array(c))) {
             out += quote_key(
-                rtti::string_view(e.name.data(), e.name.size()));
+                rtti::string_view(e.name, e.name_len));
             out += " = ";
             if (c->is_scalar()) {
                 scalar_text_into(c, out);
@@ -1621,9 +1665,9 @@ void emit_object(std::string& out, const node* sec,
         const node* c = e.child;
         const std::string full =
             path.empty()
-                ? quote_key(rtti::string_view(e.name.data(), e.name.size()))
+                ? quote_key(rtti::string_view(e.name, e.name_len))
                 : (path + "." +
-                   quote_key(rtti::string_view(e.name.data(), e.name.size())));
+                   quote_key(rtti::string_view(e.name, e.name_len)));
         if (c->is_object()) {
             out.push_back('[');
             out += full;

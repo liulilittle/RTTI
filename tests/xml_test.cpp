@@ -818,4 +818,101 @@ RTTI_TEST_CASE(xml_doctype_system_public_quoted) {
     RTTI_CHECK(r2.ok());
 }
 
+// H2: the per-element attribute duplicate check keeps a small stack array and
+// promotes to a hash set past a threshold. Verify a wide element with distinct
+// attributes still parses (no false duplicates), a duplicate anywhere in the
+// wide set still reports duplicate_attribute (both DOM and SAX), and the
+// parser reports the first duplicate rather than only the highest-index one.
+RTTI_TEST_CASE(xml_wide_attribute_dup_check) {
+    // 16 distinct attributes on one element parse fine (exercises the set
+    // path beyond the stack threshold).
+    {
+        const auto r = rtti::xml::parse(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\" m=\"13\" n=\"14\" "
+            "o=\"15\" p=\"16\"/>");
+        RTTI_CHECK(r.ok());
+        if (!r.ok()) {
+            return;
+        }
+        rtti::value_io* v = nullptr;
+        RTTI_CHECK(r.value.get_key("p", v));
+        if (v != nullptr) {
+            RTTI_CHECK_EQ(string_of(v), std::string("16"));
+        }
+    }
+    // Duplicate that sits past the stack threshold must be caught by the
+    // hash-set path.
+    {
+        const auto r = rtti::xml::parse(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" a=\"dup\"/>");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::duplicate_attribute);
+    }
+    // Duplicate at attribute index 0 reports duplicate_attribute.
+    {
+        const auto r = rtti::xml::parse("<root a=\"1\" a=\"2\" b=\"3\" c=\"4\"/>");
+        RTTI_CHECK(!r.ok());
+        RTTI_CHECK(r.err.code == rtti::error_code::duplicate_attribute);
+    }
+    // SAX: wide distinct attributes parse; wide duplicate still errors and the
+    // duplicate scan fires the same error code without an event explosion.
+    {
+        rtti::xml::parse_events ev;
+        int attrs = 0;
+        ev.attribute = [&](rtti::string_view, rtti::string_view) {
+            ++attrs;
+            return true;
+        };
+        const auto r = rtti::xml::parse_stream(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" l=\"12\"/>", ev);
+        RTTI_CHECK(r.ok());
+        if (!r.ok()) {
+            return;
+        }
+        RTTI_CHECK_EQ(attrs, 12);
+        const auto r2 = rtti::xml::parse_stream(
+            "<root a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\" f=\"6\" g=\"7\" "
+            "h=\"8\" i=\"9\" j=\"10\" k=\"11\" a=\"dup\"/>", ev);
+        RTTI_CHECK(!r2.ok());
+        RTTI_CHECK(r2.err.code == rtti::error_code::duplicate_attribute);
+    }
+}
+
+// H3: read_name classifies name bytes through a static lookup table instead of
+// per-byte std::isalpha/std::isalnum. The table must behave identically:
+// letters/digits/'.'/'-'/'_'/':' are name characters (never as a leading
+// digit/'.'/'-'), high bytes are accepted, and any other ASCII byte terminates
+// the name (a stray byte then errors).
+RTTI_TEST_CASE(xml_name_table_classification) {
+    // Valid names spanning every allowed ASCII name character.
+    {
+        const auto r = rtti::xml::parse("<_a1.b-c:d z=\"1\" x__y=\"2\"/>");
+        RTTI_CHECK(r.ok());
+    }
+    // High-byte (UTF-8) element and attribute names are accepted.
+    {
+        const auto r = rtti::xml::parse("<na\xC3\xAFve c\xC3\xA9"
+                                        "f\xC3\xA9=\"v\"/>");
+        RTTI_CHECK(r.ok());
+    }
+    // A name may not START with a digit, '.', or '-'.
+    {
+        RTTI_CHECK(!rtti::xml::parse("<1abc/>").ok());
+        RTTI_CHECK(!rtti::xml::parse("<.abc/>").ok());
+        RTTI_CHECK(!rtti::xml::parse("<-abc/>").ok());
+    }
+    // Digit-looking attribute names are rejected at the name-start check.
+    {
+        RTTI_CHECK(!rtti::xml::parse("<a 1=\"v\"/>").ok());
+    }
+    // An ASCII byte outside the name set terminates the name; the leftover
+    // byte (here a space of all things) then fails the element grammar.
+    {
+        RTTI_CHECK(!rtti::xml::parse("<abc x/>").ok());
+    }
+}
+
 } // namespace rtti_test_lib

@@ -917,4 +917,68 @@ RTTI_TEST_CASE(toml_float_overflow_rejected) {
     RTTI_CHECK_EQ(r2.err.code, rtti::error_code::invalid_number);
 }
 
+// I5: nodes and strings live in the document arena. A large multi-table
+// document parses, moves out of the result (arena blocks stay valid across
+// the move), and still reads every key/value/array correctly.
+RTTI_TEST_CASE(toml_arena_large_document) {
+    std::string src;
+    for (int i = 0; i < 2000; ++i) {
+        src += "[table";
+        src += std::to_string(i);
+        src += "]\nkey = \"value string here\"\nnum = 12345\nflag = true\n";
+        src += "items = [1, 2, 3]\n";
+    }
+    auto r = rtti::toml::parse(rtti::string_view(src));
+    RTTI_CHECK(r.ok());
+    if (!r.ok()) {
+        return;
+    }
+    rtti::toml::document d = std::move(r.value);
+    RTTI_CHECK_EQ(d.size(), std::size_t(2000));
+    rtti::value_io* t = nullptr;
+    RTTI_CHECK(d.get_key("table1999", t));
+    if (t == nullptr) {
+        return;
+    }
+    RTTI_CHECK(t->type() == rtti::value_io::kind::object);
+    rtti::value_io* v = nullptr;
+    std::string s;
+    RTTI_CHECK(t->get_key("key", v));
+    if (v != nullptr) {
+        RTTI_CHECK(str_of(v, s));
+        RTTI_CHECK_EQ(s, std::string("value string here"));
+    }
+    std::int64_t x = 0;
+    RTTI_CHECK(t->get_key("num", v));
+    if (v != nullptr) {
+        RTTI_CHECK(int_of(v, x));
+        RTTI_CHECK_EQ(x, std::int64_t(12345));
+    }
+    RTTI_CHECK(t->get_key("items", v));
+    if (v != nullptr) {
+        RTTI_CHECK(v->type() == rtti::value_io::kind::array);
+        RTTI_CHECK_EQ(v->size(), std::size_t(3));
+    }
+    // Round-trip serialization keeps the wide content.
+    const std::string out = rtti::toml::serialize(d);
+    RTTI_CHECK(out.find("[table1999]") != std::string::npos);
+    RTTI_CHECK(out.find("key = \"value string here\"") != std::string::npos);
+    RTTI_CHECK(out.find("items = [1, 2, 3]") != std::string::npos);
+}
+
+// I5: a syntax error late in a large document still tears the arena tree down
+// cleanly (the parse error path frees every node) and reports the right code.
+RTTI_TEST_CASE(toml_arena_error_after_many_nodes) {
+    std::string src;
+    for (int i = 0; i < 1000; ++i) {
+        src += "[s";
+        src += std::to_string(i);
+        src += "]\nk = v\n";
+    }
+    src += "bad = ]\n";
+    auto r = rtti::toml::parse(rtti::string_view(src));
+    RTTI_CHECK(!r.ok());
+    RTTI_CHECK_EQ(r.err.code, rtti::error_code::unexpected_token);
+}
+
 } // namespace rtti_test_lib

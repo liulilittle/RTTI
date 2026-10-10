@@ -10,6 +10,9 @@
 
 #include <rtti/xml.hpp>
 
+#include <array>
+#include <unordered_set>
+
 namespace rtti {
 namespace xml {
 
@@ -722,25 +725,121 @@ namespace detail {
 
 // Attribute/entity scans fold into the minimal masks below; the masks are
 // only assembled when a span is long enough for scan.hpp's SIMD block, so
-// short runs never pay for them.
+// short runs never pay for them. The masks are built once (thread-safe magic
+// statics) instead of being reassembled for every long-span scan.
 
 // Mask over an attribute-value run: the active delimiter quote plus the two
-// markup bytes that also end or abort the value.
-rtti::detail::char_mask xml_attr_value_mask(char quote) noexcept {
-    rtti::detail::char_mask m;
-    m.set(quote);
-    m.set('<');
-    m.set('&');
-    return m;
+// markup bytes that also end or abort the value. Only '"' and '\'' are ever
+// possible delimiters (validated before the value scan starts), so the two
+// masks are cached for the parser's lifetime.
+const rtti::detail::char_mask& xml_attr_value_mask(char quote) noexcept {
+    static const rtti::detail::char_mask double_quote = [] {
+        rtti::detail::char_mask m;
+        m.set('"');
+        m.set('<');
+        m.set('&');
+        return m;
+    }();
+    static const rtti::detail::char_mask single_quote = [] {
+        rtti::detail::char_mask m;
+        m.set('\'');
+        m.set('<');
+        m.set('&');
+        return m;
+    }();
+    return quote == '"' ? double_quote : single_quote;
 }
 
 // Entities are bounded by ';' at the end and '<' (invalid, aborts) inside.
-rtti::detail::char_mask xml_entity_scan_mask() noexcept {
-    rtti::detail::char_mask m;
-    m.set(';');
-    m.set('<');
+const rtti::detail::char_mask& xml_entity_scan_mask() noexcept {
+    static const rtti::detail::char_mask m = [] {
+        rtti::detail::char_mask x;
+        x.set(';');
+        x.set('<');
+        return x;
+    }();
     return m;
 }
+
+// Duplicate-attribute guard for one element. Small elements (< 8 attributes)
+// keep the check on a stack array; wide elements promote to a hash set once
+// the stack overflows, so the per-element duplicate scan stays near-linear
+// instead of O(a^2). A duplicate is reported as soon as its name is read,
+// preserving the historical error position and code.
+class attr_dup_check {
+public:
+    // Returns true when `name` is new for this element; false when it was
+    // already seen (a duplicate attribute).
+    bool add(string_view name) {
+        if (set_ != nullptr) {
+            return set_->emplace(name).second;
+        }
+        for (std::size_t i = 0; i < n_; ++i) {
+            if (small_[i] == name) {
+                return false;
+            }
+        }
+        if (n_ < kStack) {
+            small_[n_++] = name;
+            return true;
+        }
+        // Stack overflow: promote every prior name into a hash set once.
+        std::unordered_set<string_view> promoted;
+        promoted.reserve(kStack + 1);
+        for (std::size_t i = 0; i < n_; ++i) {
+            promoted.emplace(small_[i]);
+        }
+        promoted.emplace(name);
+        set_ = std::make_unique<std::unordered_set<string_view>>(
+            std::move(promoted));
+        return true;
+    }
+
+private:
+    static constexpr std::size_t kStack = 8;
+    string_view small_[kStack];
+    std::size_t n_ = 0;
+    std::unique_ptr<std::unordered_set<string_view>> set_;
+};
+
+namespace {
+
+// Compile-time name-byte classification for read_name(). The ASCII behaviour
+// matches the std::isalpha/std::isalnum calls it replaces exactly: the "C"
+// locale never changes ASCII letter/digit classification, and the original
+// code only ever queried the CRT for bytes < 0x80. Bytes >= 0x80 stay
+// accepted to preserve the former high-byte fast path.
+constexpr bool ascii_alpha(unsigned char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+constexpr bool ascii_alnum(unsigned char c) {
+    return ascii_alpha(c) || (c >= '0' && c <= '9');
+}
+
+// First byte of a name: letter, '_', ':' or any high byte.
+constexpr std::array<bool, 256> make_name_start_chars() {
+    std::array<bool, 256> t{};
+    for (int i = 0; i < 256; ++i) {
+        const unsigned char c = static_cast<unsigned char>(i);
+        t[i] = c >= 0x80 || ascii_alpha(c) || c == '_' || c == ':';
+    }
+    return t;
+}
+
+// Continuation byte of a name: alphanumeric, '.', '-', '_', ':' or any high
+// byte.
+constexpr std::array<bool, 256> make_name_chars() {
+    std::array<bool, 256> t{};
+    for (int i = 0; i < 256; ++i) {
+        const unsigned char c = static_cast<unsigned char>(i);
+        t[i] = c >= 0x80 || ascii_alnum(c) || c == '.' || c == '-' ||
+               c == '_' || c == ':';
+    }
+    return t;
+}
+
+} // namespace
 
 // First byte in [begin, end) that ends an attribute-value run: the active
 // delimiter quote, '<' (aborts the value) or '&' (entity reference).
@@ -905,7 +1004,7 @@ private:
             el->parent = parent;
         }
 
-        std::vector<string_view> seen_attrs;  // streaming duplicate-attribute check
+        attr_dup_check seen_attrs;  // duplicate-attribute check
         bool self_closing = false;
         for (;;) {
             skip_ws();
@@ -925,18 +1024,8 @@ private:
             if (an.empty()) {
                 return error_code::unexpected_token;
             }
-            if (streaming_) {
-                for (const string_view& n : seen_attrs) {
-                    if (n == an) {
-                        return error_code::duplicate_attribute;
-                    }
-                }
-            } else {
-                for (const auto& a : el->attrs) {
-                    if (a.first == an) {
-                        return error_code::duplicate_attribute;
-                    }
-                }
+            if (!seen_attrs.add(an)) {
+                return error_code::duplicate_attribute;
             }
             skip_ws();
             if (p_ >= end_ || *p_ != '=') {
@@ -988,7 +1077,6 @@ private:
                 break;
             }
             if (streaming_) {
-                seen_attrs.push_back(an);
                 if (!fire_event(ev_->attribute, an,
                                 vdec ? string_view(vbuf)
                                      : string_view(vstart, p_ - 1 - vstart))) {
@@ -1583,21 +1671,22 @@ private:
 
     string_view read_name() {
         // Name characters (letters, digits, '.', '-', '_', ':', high bytes)
-        // have no single char-mask in scan.hpp, so the per-byte loop stays.
+        // are classified by compile-time lookup tables instead of per-byte
+        // std::isalpha/std::isalnum CRT calls.
+        static constexpr std::array<bool, 256> name_start =
+            make_name_start_chars();
+        static constexpr std::array<bool, 256> name_char = make_name_chars();
         if (p_ >= end_) {
             return string_view();
         }
         const unsigned char c0 = static_cast<unsigned char>(*p_);
-        if (!(std::isalpha(c0) || c0 == '_' || c0 == ':' || c0 >= 0x80)) {
+        if (!name_start[c0]) {
             return string_view();
         }
         const char* s = p_;
         ++p_;
         while (p_ < end_) {
-            const unsigned char c = static_cast<unsigned char>(*p_);
-            if (c >= 0x80) {
-                ++p_;
-            } else if (std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == ':') {
+            if (name_char[static_cast<unsigned char>(*p_)]) {
                 ++p_;
             } else {
                 break;
