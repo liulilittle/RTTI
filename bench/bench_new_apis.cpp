@@ -61,11 +61,19 @@ using namespace rtti_bench_detail;
 constexpr std::size_t kSamples = 7;      // timed samples per row; median used
 constexpr std::size_t kWarmupMult = 64;  // warm-up = iters / kWarmupMult
 
+// Scatter of the timed samples: fastest/min, median and slowest/max ns/op.
+struct scatter {
+    double min_ns;
+    double median_ns;
+    double max_ns;
+};
+
 // Returns the median ns/op over `samples` timed runs, each running `iters`
-// calls of `op`. The operation must return a data-dependent value (driven by
-// position) so the optimizer cannot hoist it out of the timed loop.
+// calls of `op`, plus the min/max of those runs so drift stays visible. The
+// operation must return a data-dependent value (driven by position) so the
+// optimizer cannot hoist it out of the timed loop.
 template <typename Op>
-double measure_ns_per_op(std::size_t iters, std::size_t samples, Op op) {
+scatter measure_ns_per_op(std::size_t iters, std::size_t samples, Op op) {
     // Warm-up pass: fault in code paths / static tables before timing.
     volatile long long warm = 0;
     const std::size_t warm_iters = iters / kWarmupMult == 0 ? 1 : iters / kWarmupMult;
@@ -86,15 +94,18 @@ double measure_ns_per_op(std::size_t iters, std::size_t samples, Op op) {
         samples_ns.push_back(tm.elapsed_ns());
     }
     std::sort(samples_ns.begin(), samples_ns.end());
+    const double min_ns = static_cast<double>(samples_ns.front());
     const double median_ns = static_cast<double>(samples_ns[samples / 2]);
-    return median_ns / static_cast<double>(iters);
+    const double max_ns = static_cast<double>(samples_ns.back());
+    const double per = static_cast<double>(iters);
+    return {min_ns / per, median_ns / per, max_ns / per};
 }
 
 template <typename Op>
 void report(const char* name, std::size_t iters, Op op) {
-    const double ns = measure_ns_per_op(iters, kSamples, op);
-    std::printf("%-34s %10.2f ns/op  (%zu iters, median of %zu)\n", name, ns,
-                iters, kSamples);
+    const scatter sc = measure_ns_per_op(iters, kSamples, op);
+    std::printf("%-34s median %10.2f ns/op  (min %9.2f, max %9.2f, %zu iters, median of %zu)\n",
+                name, sc.median_ns, sc.min_ns, sc.max_ns, iters, kSamples);
     std::fflush(stdout);
 }
 
@@ -200,8 +211,8 @@ int main(int argc, char** argv) {
     }
 
     rtti_bench::print_environment("rtti_bench_new", kSamples);
-    std::printf("timed iters: %zu per sample (warm-up %zu)\n\n",
-                iters, iters / kWarmupMult == 0 ? 1 : iters / kWarmupMult);
+    std::printf("timed iters: %zu per sample (warm-up %zu); min/max = fastest/slowest of %zu\n\n",
+                iters, iters / kWarmupMult == 0 ? 1 : iters / kWarmupMult, kSamples);
 
     std::printf("== enum traversal (count/name/value) ==\n");
     report("enum_count<Color>", iters, bench_enum_count);
