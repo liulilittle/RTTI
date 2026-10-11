@@ -2,6 +2,7 @@
 build/
 build-off/
 build-opt/
+build-strip/
 cmake-build-*/
 *.user
 *.suo
