@@ -14,11 +14,19 @@ with **no third-party runtime dependencies**. It provides:
   produces runtime metadata (`type_desc`) for a `struct`/`class`: fields, base
   classes, methods, template arguments, attributes, enum entries, ctors;
 - generic **format-agnostic conversion** (`to_value` / `from_value`) over a
-  small `value_io` interface;
+  small `value_io` interface, plus a value-semantics strong-cast bridge
+  (`rtti::convert::as` / `cast` / `to`) over the scalar lanes;
+- reflected field **member-access levels** (`member_access`: public_ /
+  protected_ / private_) with private/protected field reflection
+  (`RTTI_FRIEND_FIELDS` for non-intrusive registration);
 - **five serialization backends** — JSON, XML, INI, TOML, protobuf — and a
   FlatBuffers layout generator, all optional (compile-time strip gates);
 - convenience tooling: string building, base-N conversion, date-time,
-  basic IoC, ORM-style binding helpers.
+  basic IoC, ORM-style binding helpers;
+- broad C++17 portability, including **non-x86 / Android NDK** targets:
+  `<rtti/detail/from_chars_real.hpp>` compile-time probing falls back to a
+  `strtod`-based parser when the standard library lacks floating-point
+  `std::from_chars` (libc++ < 19, e.g. NDK r26 / LLVM 17).
 
 Non-goals: no RTTI-standard `typeid` dependency for the metadata path (the
 library builds its own tables); no exceptions in the hot conversion path
@@ -65,6 +73,18 @@ inside `T` — carrying a `count` and a static read-only array of
 and count; `type_of<T>()` materializes the `type_desc` for `T` (and, for
 templates, `template_info<T>` deriving static `template_arg_desc_of` rows).
 
+Each field's row in `fields_of<T>::desc` also carries a compile-time access
+level (`field_type_desc::access`, a `member_access` of public_/protected_/
+private_). Non-intrusive registration (`RTTI_DEFINE_TYPE(T, ...)` at namespace
+scope) resolves it through a per-type, namespace-scope probe holder
+(`detail::rtti_access_holder<T>`), so **private / protected fields are
+reflectable** once the class grants the field table access via
+`RTTI_FRIEND_FIELDS(T)` (`friend struct ::rtti::fields_of<T>;` inside the
+class body). The probes are not friends themselves, so the grant never leaks
+into the classification. Intrusive registration forms `&T::f` inside the class
+(no friend needed) but cannot classify access from inside the body, so every
+intrusive field conservatively reports `private_` (the documented boundary).
+
 Enums register through `RTTI_DEFINE_ENUM(E, ...)` → `enum_table<E>` with
 `count` and `enum_label<E>{name, value}[]`; the runtime `enum_desc` (reached via
 `type_desc`) now also publishes a parallel values array together with
@@ -89,6 +109,14 @@ static type's chain — legal upcasts to a stored static base never fail
 spuriously. Because the erased source is not a compile-time polymorphic class,
 `dynamic_cast` is inapplicable (C2681) on `instance`; unreachable conversions
 fail cleanly. Virtual-base upcasts use `base_adjuster`-derived offsets.
+
+In addition to the pointer casts, `namespace rtti::convert` (`convert.hpp`) is a
+**value-semantics strong-cast bridge** (`as<T>` → `optional<T>`, `cast<T>` /
+`to<T>` → `result<T>`) that converts native scalars, strings, `field_value` and
+`value_io` sources into the scalar family / registered enums / single-layer
+`std::vector<scalar>` targets. It deliberately lives in its own namespace and
+SFINAEs out non-`value_io` pointers so it never shadows the pointer overloads
+above.
 
 ### 3.3 Format layering & strip gates
 
@@ -150,6 +178,9 @@ rather than the whole shared stream (R1-8).
 | D10 | Version single-source: `project(RTTI VERSION 0.1.0)` → `configure_file` → `include/rtti/version.hpp` | One number to bump; CMake, headers and docs agree |
 | D11 | Fields-sorted naming policy (`key_case`/`rename_map`/`skip_empty`) lives in `detail::naming_policy`; adapters re-export `key_case` | One policy engine; natural per-format spelling (`rtti::json::key_case::snake`) |
 | D12 | Benchmarks emit an environment header and are median-of-N | Numbers are data points, not claims; reproducibility is part of the artifact |
+| D13 | Field access level resolved by namespace-scope probes (`rtti_access_holder`); non-intrusive registration can list private/protected fields after `RTTI_FRIEND_FIELDS` | Probes are never the friend, so the grant cannot leak into classification; classification stays a compile-time property even when the class grants access |
+| D14 | Intrusive registration cannot classify from inside the class; every intrusive field conservatively reports `private_` | Same header mechanism whether or not friendship is granted; the conservative boundary is documented, and `field_access_of<T>(i)` still reports it |
+| D15 | Floating-point parsing probes `std::from_chars` and falls back to a `strtod`-based parser when absent (`from_chars_real.hpp`) | Non-x86 / Android NDK (libc++ < 19) still get correct FP round-trips without a vendor workaround |
 
 ## 5. Extensibility & limitations
 

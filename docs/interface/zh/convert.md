@@ -2,7 +2,7 @@
 
 **模块:** RTTI 值转换核心(`rtti` 命名空间)
 
-**范围:** 本文覆盖 RTTI 库的格式无关转换面:`include/rtti/convert.hpp`(主文件,2,189 行)加四个支持头 `error.hpp`、`number_format.hpp`、`node_io.hpp`、`memory.hpp`。签名单字抄自头文件;行为说明严格取自头注释与共享错误契约。
+**范围:** 本文覆盖 RTTI 库的格式无关转换面:`include/rtti/convert.hpp`(主文件,2,820 行,含第 11 章的 `rtti::convert::as`/`cast`/`to` 值语义强转桥)加四个支持头 `error.hpp`、`number_format.hpp`、`node_io.hpp`、`memory.hpp`。签名单字抄自头文件;行为说明严格取自头注释与共享错误契约。
 
 **覆盖文件**
 
@@ -707,6 +707,58 @@ public:
 *覆盖:`memory.hpp` 第 1–85 行。*
 
 ---
+
+## 11. 值语义强转桥 — `rtti::convert::as` / `cast` / `to`(`convert.hpp` 第 2244–2818 行)
+
+`namespace rtti::convert` 暴露*值语义强转桥*——覆盖第 3–4 章标量道的数值/文本
+「值桥」。它转换**值**而非指针,因此绝不干扰 `reflection.md` §14 中 C# 风格的
+指针 `rtti::as<T>(U*)` / `rtti::cast<T>(U*)` 转换(该桥 SFINAE 掉非 `value_io`
+指针;无关指针源是硬编译错误,而非静默通道)。
+
+```cpp
+// 宽松转换:任何失败均返回 nullopt,绝不抛异常。
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+std::optional<T> as(Src&& src) noexcept;
+
+// 严格转换:result<T>,带回可区分的 error_code。
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+result<T> cast(Src&& src) noexcept;
+
+// 统一入口:与 cast 相同。
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+result<T> to(Src&& src) noexcept;
+```
+
+| 入口 | 返回 | 失败语义 |
+| --- | --- | --- |
+| `as<T>(src)` | `std::optional<T>` | 任何失败均返回 `nullopt`(宽松)。 |
+| `cast<T>(src)` | `result<T>` | `kind_mismatch`(道不兼容)、`overflow`(数值范围,向零截断,绝不回绕)、`invalid_number`(畸形数字 / 枚举标签文本)、`no_such_field`(null / null-kind 源)。 |
+| `to<T>(src)` | `result<T>` | `cast` 的别名(单一统一入口)。 |
+
+**源**(由 `detail::extract_lane` 决定):原生标量(`bool`、整型、浮点)、
+`string_view` / `std::string`、`field_value`,以及 `value_io` 派生指针(含
+`const`)。**目标**(`detail::bridge_ok` + `detail::is_scalar_target` /
+`detail::is_vector_of_scalar`):标量族(`bool`、整型、浮点、`std::string` /
+`string_view`、已注册枚举)与单层 `std::vector<scalar>`。
+
+**宽松 vs 严格** — 刻意分层:`rtti::from_string<T>`(to_string.hpp)是*严格解析器*
+(整个输入必须是良构字面量,故 `from_string<int>("3.9")` 报 `invalid_number`);
+该桥刻意*宽松*(它转换一个值,故 `as<int>("3.9")` 截断实数道返回 `3`)。两个入口
+对同一输入有意分歧(见 to_string.hpp 中镜像注释)。
+
+示例(来自 `tests/convert_cast_test.cpp`):
+
+```cpp
+auto a = rtti::convert::as<int>(" 42 ");   // std::optional<int>{42};文本已修剪
+auto b = rtti::convert::cast<int>(3.9);    // result<int>,b.value == 3(截断)
+auto c = rtti::convert::cast<std::int8_t>(std::int64_t(300)); // !c.ok():overflow
+auto d = rtti::convert::cast<int>(nullptr); // !d.ok():no_such_field
+auto e = rtti::convert::to<int>("42");      // cast 的别名
+rtti::convert::as<std::vector<int>>(value_io_array_node); // 单层 vector
+```
 
 ## 交叉引用
 

@@ -328,7 +328,7 @@ The reflected type registry. A type participates in reflection **iff** this temp
 - `using members_type = std::tuple<...>` — the typed member-pointer types of the type's OWN fields.
 - `static inline const members_type members` — the member pointers of the type's own fields (declaration order).
 - `static inline const field_access_base* const array[N]` — runtime-iterable array of field accessors (only the first `count` entries are valid).
-- `static inline const field_type_desc desc[N]` — compiler-time field descriptors (name + on-demand type resolver).
+- `static inline const field_type_desc desc[N]` — compiler-time field descriptors (name + on-demand type resolver + `member_access` access level).
 
 The macro-generated specialization bodies are shown in §20. Manual specializations are supported with the same members.
 
@@ -687,7 +687,42 @@ struct has_default<T, std::void_t<typename T::rtti_has_default>>
 
 True when the type registered with a `_WITH_DEFAULT` macro (i.e. the macro set `rtti_has_default`), meaning missing keys keep the member's existing value during format fills.
 
+### 5.6 Member access level — `member_access`, `field_access_of<T>(index)`
+
+Each reflected field exposes its compile-time access level:
+
+```cpp
+enum class member_access : uint8_t { public_ = 1, protected_ = 2, private_ = 3 };
+
+template <typename T>
+constexpr member_access field_access_of(std::size_t index) noexcept {
+    return fields_of<T>::desc[index].access;
+}
+```
+
+- `member_access` (reflection.hpp:1399) is the access level of a reflected
+  field; the trailing underscore names dodge the `public`/`protected`/`private`
+  keywords, and the 1/2/3 values are ABI-stable.
+- `field_access_of<T>(i)` (reflection.hpp:3697) returns the `i`-th field's
+  access level — `constexpr`, and identical to `fields_of<T>::desc[i].access`.
+- For a **non-intrusive** registration (`RTTI_DEFINE_TYPE` /
+  `RTTI_DEFINE_TYPE_DERIVED`), the access level is resolved at namespace scope
+  by a per-field probe pair (`detail::rtti_access_holder<T>`); the class may
+  list private/protected fields when it grants `RTTI_FRIEND_FIELDS(T)`
+  (`friend struct ::rtti::fields_of<T>;`) inside its body (§20, §19.4).
+- For an **intrusive** registration (`RTTI_DEFINE_TYPE_INTRUSIVE`), private /
+  protected fields are reflectable, but the access level cannot be classified
+  from inside the class body and every field conservatively reports
+  `private_` (the documented boundary).
+
+Reflected private/protected fields are read and written through the same
+accessors as public ones (`field_access_base::get/set`, `get_field` /
+`set_field`, `from_value` / `to_value`); only the classification is fixed by the
+registration mode.
+
 > APIs in this chapter are extracted from `reflection.hpp:814-857`.
+> `field_access_of` extracted from `reflection.hpp:3697`; `member_access` from
+> `reflection.hpp:1399`.
 
 ---
 
@@ -1004,10 +1039,16 @@ struct enum_desc;
 
 using type_resolver = const type_desc* (*)();
 
-// One field of a reflected struct: name plus an on-demand type resolver.
+// Compile-time access level of a reflected field. The trailing underscore names
+// dodge the public/protected/private keywords. Values 1/2/3 are ABI-stable.
+enum class member_access : uint8_t { public_ = 1, protected_ = 2, private_ = 3 };
+
+// One field of a reflected struct: name plus an on-demand type resolver, plus
+// the compile-time member-access level (public_ / protected_ / private_).
 struct field_type_desc {
     const char* name;
     type_resolver resolve;
+    member_access access = member_access::private_;
 
     // Resolves (and caches via the target's static) the field's type_desc.
     const type_desc* type() const noexcept { return resolve(); }
@@ -1043,6 +1084,13 @@ struct enum_desc {
     std::size_t value_size = 0;     // sizeof(E)
 };
 ```
+
+Each `field_type_desc` row carries a compile-time `member_access` (
+`public_` = 1 / `protected_` = 2 / `private_` = 3, `reflection.hpp:1399`).
+The access level is also reachable through the public query
+`rtti::field_access_of<T>(index)` (`reflection.hpp:3697`), and it is
+evaluated at namespace scope through a per-field probe pair, never from a
+friend context — see §20.
 
 ### 8.3 `type_desc`
 
@@ -1927,7 +1975,10 @@ Counts arguments 0..16. The single-level form (`RTTI_NARG` → `RTTI_NARG_I`, no
 
 - `RTTI_FIELD_DECL` declares one static accessor (`typed_field_access<T, decltype(T::f)>`) per field.
 - `RTTI_FIELD_REF` contributes its address to the `array` table.
-- `RTTI_FIELD_TYPE_DESC` contributes a `{name, resolver}` entry to the `desc` table.
+- `RTTI_FIELD_TYPE_DESC` contributes a `{name, resolver}` entry to the `desc`
+  table. The non-intrusive registration macros substitute a
+  member-access-resolving variant (`RTTI_FIELD_ACCESS_VALUE`, see §19.4) so the
+  `desc` rows carry `member_access` (public_/protected_/private_, §5.6). (Intrusive variants use `RTTI_FIELD_ACCESS_INTRUSIVE` → `{name, resolver, private_}`; see §20.4.)
 
 ### 19.2 `RTTI_MEMBER_TYPES_*` / `RTTI_MEMBER_TYPES_OPT`
 
@@ -1965,6 +2016,38 @@ The same pattern producing the member-pointer value list (`&T::a1, &T::a2, ...`)
 
 These emit the `members` tuple of a type's OWN fields (spec 19), which the derived-merge machinery converts to a derived type to build offset-correct base accessors.
 
+### 19.4 `RTTI_FRIEND_FIELDS(T)` and the member-access probes
+
+```cpp
+// Grants the non-intrusive field-table (fields_of<T>) friend access to T, so
+// `&T::f` may be taken for private/protected fields. Place INSIDE the class
+// body; pairs with a namespace-scope RTTI_DEFINE_TYPE(T, ...).
+#define RTTI_FRIEND_FIELDS(T) friend struct ::rtti::fields_of<T>;
+```
+
+Non-intrusive registration emits, at namespace scope, a per-type
+`rtti::detail::rtti_access_holder<T>` whose per-field probe pair
+(`rtti_access_ext_<f>` / `rtti_access_der_<f>`, reflection.hpp:3673-3686)
+checks, via SFINAE on `decltype(&U::f)`, whether the field is accessible from
+outside (`ext`, → `public_`) or from a derived context (`der`, → `protected_`),
+or neither (→ `private_`). The holder is **not** a member of `fields_of` and is
+**not** a friend of `T`, so a `RTTI_FRIEND_FIELDS` grant used to form `&T::f`
+never leaks into the probe results.
+
+Access decisions:
+
+| Combination | `member_access` |
+| --- | --- |
+| `ext` true | `public_` |
+| `ext` false, `der` true | `protected_` |
+| both false | `private_` |
+
+Intrusive registration (`RTTI_DEFINE_TYPE_INTRUSIVE`) forms `&T::f` inside the
+class body and needs no friend, but cannot run a namespace-scope probe from
+inside `T`; every intrusive field therefore reports `private_` — the
+conservative documented boundary (matching `field_type_desc::access`'s
+default).
+
 > APIs in this chapter are extracted from `reflection.hpp:3520-3630`.
 
 ---
@@ -2001,6 +2084,12 @@ Non-intrusive registration at namespace scope (public members). The specializati
 **Parameters**: `T` — the reflected type; `...` — the public member names, in declaration order (up to 16; an empty list is legal and yields `count == 0`).
 
 **Effect**: specializes `rtti::fields_of<T>` with `count`, `members_type`, `members`, the `array` of accessors, and the `desc` table. After use, `is_reflected<T>`, `field_count<T>`, `fields<T>`, `for_each_field`, `type_of<T>()` etc. all work.
+
+**Private / protected fields**: `...` may name private / protected members when
+the class grants `RTTI_FRIEND_FIELDS(T)` (see §19.4) inside its body. The macro
+additionally emits, at namespace scope, a `detail::rtti_access_holder<T>`
+probe pair per field so each `field_type_desc` row's `access` member is
+resolved exactly (`member_access::public_` / `protected_` / `private_`).
 
 Example:
 
@@ -2093,7 +2182,7 @@ Intrusive registration placed **inside** the class body. The macro defines a nes
     };
 ```
 
-Used inside a class body; the `rtti_registration` nested struct is picked up by `fields_of<T>` via inheritance (see §2.2). Private fields are supported.
+Used inside a class body; the `rtti_registration` nested struct is picked up by `fields_of<T>` via inheritance (see §2.2). Private fields are supported — the member-pointer accessors are formed inside the class, so no friend declaration is needed. Member-access classification, however, is not possible from inside the class body (any in-class probe is a member of `T` and sees every access level alike), so every intrusive field conservatively reports `private_` via `RTTI_FIELD_ACCESS_INTRUSIVE` — the documented boundary (`unknown == private_`, matching `field_type_desc::access`'s default). See §19.4.
 
 ### 20.5 `RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(T, ...)`
 

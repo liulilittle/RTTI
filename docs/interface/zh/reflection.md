@@ -607,6 +607,35 @@ struct has_default<T, std::void_t<typename T::rtti_has_default>>
 
 当类型以 `_WITH_DEFAULT` 宏注册时为真,表示缺键保留成员现值(格式填充器使用)。
 
+### 5.6 成员访问级别 — `member_access`、`field_access_of<T>(index)`
+
+每个反射字段暴露其编译期访问级别:
+
+```cpp
+enum class member_access : uint8_t { public_ = 1, protected_ = 2, private_ = 3 };
+
+template <typename T>
+constexpr member_access field_access_of(std::size_t index) noexcept {
+    return fields_of<T>::desc[index].access;
+}
+```
+
+- `member_access`(`reflection.hpp:1399`)是反射字段的访问级别;尾下划线命名避开
+  `public`/`protected`/`private` 关键字,1/2/3 取值 ABI 稳定。
+- `field_access_of<T>(i)`(`reflection.hpp:3697`)返回第 `i` 个字段的访问级别——
+  `constexpr`,且恒等于 `fields_of<T>::desc[i].access`。
+- **非侵入式**注册(`RTTI_DEFINE_TYPE` / `RTTI_DEFINE_TYPE_DERIVED`)在命名空间
+  作用域按每字段探针对(`detail::rtti_access_holder<T>`)解析访问级别;类在体内
+  授予 `RTTI_FRIEND_FIELDS(T)`(`friend struct ::rtti::fields_of<T>;`)后可列出
+  private/protected 字段(§20、§19.4)。
+- **侵入式**注册(`RTTI_DEFINE_TYPE_INTRUSIVE`)可反射 private/protected 字段,
+  但类体内无法分类访问级别,每个字段一律保守报 `private_`(文档化边界)。
+- 反射出的 private/protected 字段与公开字段一样经访问器读写
+  (`field_access_base::get/set`、`get_field` / `set_field`、`from_value` /
+  `to_value`);只有级别分类由注册方式决定。
+
+> 本章 API 提取自 `reflection.hpp:814-857`;`field_access_of` 于 `reflection.hpp:3697`;`member_access` 于 `reflection.hpp:1399`。
+
 ---
 
 ## 6. 属性 / 注解系统
@@ -718,10 +747,16 @@ struct enum_desc;
 
 using type_resolver = const type_desc* (*)();
 
-// 反射结构体的一个字段:name + 按需类型解析器。
+// 反射字段的编译期访问级别。尾下划线命名避开 public/protected/private
+// 关键字;取值 1/2/3,ABI 稳定。
+enum class member_access : uint8_t { public_ = 1, protected_ = 2, private_ = 3 };
+
+// 反射结构体的一个字段:name + 按需类型解析器 + 编译期访问级别
+// (public_ / protected_ / private_)。
 struct field_type_desc {
     const char* name;
     type_resolver resolve;
+    member_access access = member_access::private_;
     const type_desc* type() const noexcept { return resolve(); }
 };
 
@@ -753,6 +788,13 @@ struct enum_desc {
     std::size_t value_size = 0;     // sizeof(E)
 };
 ```
+
+**成员访问级别。** 每个 `field_type_desc` 都在 `access` 中携带字段的编译期访问
+级别(`member_access::public_` / `protected_` / `private_`,取值 1/2/3)。非侵入式
+注册(`RTTI_DEFINE_TYPE` / `RTTI_DEFINE_TYPE_DERIVED`)经命名空间作用域的逐字段
+探针对解析(见 §19.4),因此 public/protected/private 字段被精确分类;侵入式注册
+(`RTTI_DEFINE_TYPE_INTRUSIVE`)无法在类体内分类,每个字段保守报 `private_`。经
+`rtti::field_access_of<T>(index)` 或裸 `desc[i].access` 查询。
 
 ### 8.3 `type_desc`
 
@@ -1563,7 +1605,36 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 
 - `RTTI_FIELD_DECL` 每字段声明一个静态访问器(`typed_field_access<T, decltype(T::f)>`)。
 - `RTTI_FIELD_REF` 把其地址贡献给 `array` 表。
-- `RTTI_FIELD_TYPE_DESC` 给 `desc` 表贡献一个 `{name, resolver}` 条目。
+- `RTTI_FIELD_TYPE_DESC` 给 `desc` 表贡献一个 `{name, resolver}` 条目。非侵入
+  式注册宏会换成解析访问级别的变体(`RTTI_FIELD_ACCESS_VALUE`,见 §19.4),使
+  `desc` 行携带 `member_access`(public_/protected_/private_,§5.6)。
+
+### 19.4 `RTTI_FRIEND_FIELDS(T)` 与成员访问探针
+
+```cpp
+// 授予非侵入式字段表(fields_of<T>)对 T 的友元访问,以便取 private/protected
+// 字段的 `&T::f`。放在类体内;与命名空间作用域的 RTTI_DEFINE_TYPE(T, ...) 搭配。
+#define RTTI_FRIEND_FIELDS(T) friend struct ::rtti::fields_of<T>;
+```
+
+非侵入式注册在命名空间作用域发出按类型的 `rtti::detail::rtti_access_holder<T>`,
+其逐字段探针对(`rtti_access_ext_<f>` / `rtti_access_der_<f>`,reflection.hpp:3673-3686)
+经 `decltype(&U::f)` 的 SFINAE 判断字段是否可以外部访问(`ext`,→ `public_`)、仅
+派生上下文可访问(`der`,→ `protected_`)、或均不可访问(→ `private_`)。该 holder
+**不是** `fields_of` 的成员、也**不是** `T` 的友元,因此用于形成 `&T::f` 的
+`RTTI_FRIEND_FIELDS` 授予绝不会泄漏进探针结果。
+
+访问判定:
+
+| 组合 | `member_access` |
+| --- | --- |
+| `ext` 为真 | `public_` |
+| `ext` 假、`der` 真 | `protected_` |
+| 二者皆假 | `private_` |
+
+侵入式注册(`RTTI_DEFINE_TYPE_INTRUSIVE`)在类体内形成 `&T::f`,无需友元,但无法
+从 `T` 内部运行命名空间作用域探针;因此每个侵入式字段都报 `private_` —— 保守的
+文档化边界(与 `field_type_desc::access` 的默认值一致)。
 
 ### 19.2 `RTTI_MEMBER_TYPES_*` / `RTTI_MEMBER_TYPES_OPT`
 
@@ -1635,6 +1706,16 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 **参数**:`T` — 反射类型;`...` — 公共成员名,声明序(至多 16;空列表合法,得 `count == 0`)。
 
 **效果**:以 `count`、`members_type`、`members`、访问器 `array` 与 `desc` 表特化 `rtti::fields_of<T>`。此后 `is_reflected<T>`、`field_count<T>`、`fields<T>`、`for_each_field`、`type_of<T>()` 等都可用。
+
+**私有 / 受保护字段**:`...` 可列出 private/protected 成员,前提是类在体内授予
+`RTTI_FRIEND_FIELDS(T)`(见 §19.4)。该宏还会在命名空间作用域发出逐字段的
+`detail::rtti_access_holder<T>` 探针对,使每个 `field_type_desc` 行的 `access`
+成员被精确解析(`member_access::public_` / `protected_` / `private_`)。
+
+**private/protected 字段**:`...` 可列出 private/protected 成员——在类体内授予
+`RTTI_FRIEND_FIELDS(T)`(见 §19.4)即可。该宏还会在命名空间作用域发出逐字段
+`detail::rtti_access_holder<T>` 探针对,使每个 `field_type_desc` 行的 `access`
+成员被精确解析(`member_access::public_` / `protected_` / `private_`)。
 
 示例:
 

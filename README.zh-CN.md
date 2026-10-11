@@ -289,6 +289,29 @@ main 运行之后可靠,静态初始化期内不可靠。
 编译期多态类类型,`instance` 路径无法使用 `dynamic_cast`;此类不可达转换干净
 失败,绝不返回错误指针。
 
+### 值语义强转(`rtti::convert::as` / `cast` / `to`)
+
+与上面的指针转换不同,`namespace rtti::convert` 提供覆盖标量转换道的**值语义
+强转桥**(`<rtti/convert.hpp>`):
+
+- `as<T>(src)` 返回 `std::optional<T>` — 任何失败均返回 `nullopt`;
+- `cast<T>(src)` 与其别名 `to<T>(src)` 返回 `result<T>`,带可区分的
+  `error_code`:`kind_mismatch`(道不兼容)、`overflow`(数值范围违例,向零截断、
+  绝不静默回绕)、`invalid_number`(畸形数字 / 枚举标签文本)、`no_such_field`
+  (null / null-kind 源)。
+
+该桥刻意保持**宽松**——它转换值而非解析字面量,故
+`rtti::convert::as<int>("3.9")` 沿实数道截断返回 `3`,而严格的
+`rtti::from_string<int>("3.9")` 报 `invalid_number`(两者故意分歧:`from_string`
+*解析*,桥接*转换*;见 `to_string.hpp` 的镜像注释)。
+
+源覆盖原生标量(`bool`、整型、浮点)、字符串(`string_view` / `std::string`)、
+`field_value` 与 `value_io` 派生指针(含 `const`);目标覆盖全部标量族、已注册
+枚举(经标签或整数值)与单层 `std::vector<scalar>`。桥接位于独立命名空间且
+入口 SFINAE 排除非 `value_io` 指针,故上文指针 `rtti::as<T>(U*)` /
+`rtti::cast<T>(U*)` 重载永不冲突——无关指针源为硬编译错误。完整契约见
+[`docs/interface/zh/convert.md`](docs/interface/zh/convert.md)。
+
 ## 反射遍历
 
 反射核心的注册表可直接遍历。三种访问器均位于 `<rtti/reflection.hpp>`,
@@ -341,6 +364,41 @@ rtti::for_each_field(p, [&](const char*, rtti::type_id, const rtti::field_value&
 
 与 `fields<T>()` / `field_count<T>()` 一样,未注册类型是编译期错误,绝不是静默的
 空遍历。
+
+### 私有 / 受保护字段反射
+
+`RTTI_DEFINE_TYPE` 宏族现在记录每个反射字段的编译期访问级别,并能反射
+**私有(protected)/私有(private)** 成员:
+
+- `rtti::member_access`(`public_` / `protected_` / `private_`,取值 1/2/3)
+  存放在 `field_type_desc::access` 上,可通过 `field_access_of<T>(index)`
+  编译期查询(也即 `fields_of<T>::desc[i].access`)。
+- **非侵入式**注册(`RTTI_DEFINE_TYPE` / `RTTI_DEFINE_TYPE_DERIVED`)可列出
+  私有 / 受保护字段:在类体内声明 `RTTI_FRIEND_FIELDS(T)`(展开为
+  `friend struct ::rtti::fields_of<T>;`),使字段表可以形成 `&T::f`。访问级别
+  探针在命名空间作用域(而非友元上下文)求值,故友元授权不会泄漏进探针结果。
+- **侵入式**注册(`RTTI_DEFINE_TYPE_INTRUSIVE`)无需额外声明即可反射
+  私有 / 受保护字段(宏在类内形成 `&T::f`);但类体内无法做访问级别分类,故每个
+  侵入式字段都保守地报 `private_` —— 文档化的边界,与
+  `field_type_desc::access` 的默认值一致。
+
+反射出的私有 / 受保护字段经普通访问器(`get_field` / `set_field`、
+`field_access_base::get/set`、`for_each_field`)读写,包括通过派生类型的合并表。
+
+```cpp
+struct Secret {
+    int open = 1;
+private:
+    int hidden = 42;
+    RTTI_FRIEND_FIELDS(Secret)                       // 类体内
+};
+RTTI_DEFINE_TYPE(Secret, open, hidden)               // 命名空间作用域
+
+Secret s;
+rtti::field_value v;
+rtti::get_field(s, "hidden", v);                     // v.as_integer() == 42
+static_assert(rtti::field_access_of<Secret>(1) == rtti::member_access::private_);
+```
 
 ### 模板实参遍历 — `<rtti/reflection.hpp>`
 
@@ -582,6 +640,11 @@ PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被
   `/Zc:preprocessor`)——最短往返浮点文本所用的 `std::to_chars` /
   `std::from_chars` 需要 libstdc++ 11 与 libc++ 14,更早的 GCC/Clang 缺失
   该实现。
+- **ARM / 非 x86(Android NDK)**:`<rtti/detail/from_chars_real.hpp>` 在编译期
+  探测当前标准库是否提供浮点 `std::from_chars` 重载,若未提供(libc++ <
+  LLVM 19,如 NDK r26 运行时)则回退到基于 `strtod` 的解析器——从而
+  ARM/ARM64 NDK 目标(`arm64-v8a` / `armeabi-v7a`)能正确编译浮点文本→实数
+  解析管线,而直接的 `from_chars` 调用会编译失败。
 - 无 `__declspec`、无 GNU 扩展、无编译器私有内置函数。
 - 计时用 `std::chrono::steady_clock`,RAII 机制,仅用标准容器。
 - 库为头文件驱动设计,并配套单一 `src/` 静态库构建:反射核心在六个格式门
@@ -626,9 +689,10 @@ PROTO / FLAT 门开启时各增 `160` / `408` 条断言;二者也在扫描中被
 
 - [性能报告(EN)](./docs/benchmarks/en/performance-report.md) ·
   [中文](./docs/benchmarks/zh/performance-report.md)—— 方法学、环境、逐字
-  数字(Debug/Release × 新旧基准)、复现步骤(`scripts/run_bench.ps1`)。
-- 原始输出:`docs/benchmarks/2026-10-09-*.txt`;简明双语记录:
-  `docs/benchmarks/2026-10-09-msvc.md`。
+  数字(Debug/Release/LTCG,2026-10-11 刷新,7 采样中位数)、复现步骤
+  (`scripts/run_bench.ps1`)。
+- 原始输出:`docs/benchmarks/2026-10-11-*.txt`(最新);历史 `2026-10-09-*.txt`、
+  `2026-10-10-*.txt` 保留,简明双语记录见 `docs/benchmarks/2026-10-09-msvc.md`。
 
 两个版本章节结构一一对应,并互相链接;上述每个章节在另一版本中都有
 匹配章节。

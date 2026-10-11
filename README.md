@@ -6,9 +6,12 @@
 
 A dependency-free, standard portable C++17 runtime-reflection library that
 compensates for C++'s lack of first-class reflection: register your structs
-with a single macro, then introspect fields, read and write them by name,
-recursively convert to/from a value tree, and serialize through a
-format-agnostic `value_io` abstraction.
+with a single macro, then introspect fields (public, protected or private),
+read and write them by name, recursively convert to/from a value tree, and
+serialize through a format-agnostic `value_io` abstraction. Format adapters
+(JSON / XML / INI / TOML / protobuf / FlatBuffers) mount on the same
+conversion core as optional gates, and the library builds on MSVC / GCC /
+Clang — including Android NDK arm64-v8a / armeabi-v7a targets.
 
 ## Documentation
 
@@ -31,8 +34,9 @@ Full documentation lives under `docs/` (bilingual, mutually linked):
 - **Design & architecture** — `docs/design/en|zh/architecture.md`: layers,
   core mechanisms, key decisions & rationale.
 - **Performance & benchmarks** — `docs/benchmarks/en|zh/performance-report.md`:
-  methodology, environment, verbatim numbers, reproduction
-  (`scripts/run_bench.ps1`); raw outputs under `docs/benchmarks/`.
+  methodology, environment, verbatim numbers (Debug / Release / LTCG, median
+  of 7 samples), reproduction (`scripts/run_bench.ps1`); latest capture
+  **2026-10-11**, raw outputs under `docs/benchmarks/2026-10-11-*.txt`.
 
 ## Layout
 
@@ -85,6 +89,27 @@ exact type. Because the erased source type is not a compile-time polymorphic
 class type, `dynamic_cast` cannot be used on the `instance` path; such
 unreachable conversions fail cleanly and never return a wrong pointer.
 
+### Value-semantics strong cast (`rtti::convert::as` / `cast` / `to`)
+
+Distinct from the pointer casts above, `rtti::convert::as<T>(src)` /
+`cast<T>(src)` / `to<T>(src)` are a numeric strong-cast bridge over the scalar
+conversion lanes (<rtti/convert.hpp>, `namespace rtti::convert`):
+
+- `as<T>(src)` returns `std::optional<T>` — `nullopt` on any failure;
+- `cast<T>(src)` / `to<T>(src)` return `result<T>` with distinguishable
+  `error_code`s (`kind_mismatch` for incompatible lanes, `overflow` for a
+  numeric range violation, `invalid_number` for malformed numeric/label text,
+  `no_such_field` for a null / null-kind source).
+
+Sources cover native scalars (`bool` / integers / floating point), strings
+(`string_view` / `std::string`), `field_value`, and `value_io`-derived
+pointers (including `const`). Targets cover the full scalar family, registered
+enums (via their labels / integer values) and single-layer
+`std::vector<scalar>`. The bridge is deliberately **loose**: it converts values
+rather than parsing literals, so `as<int>("3.9")` truncates the real lane to
+`3` (contrast `from_string<int>("3.9")`, which reports `invalid_number`). See
+`docs/interface/{en,zh}/convert.md`.
+
 ## Reflection traversal
 
 The registration tables are directly iterable, with header-only,
@@ -102,6 +127,30 @@ allocation-free visitors in `<rtti/reflection.hpp>`:
 - Template-argument traversal — `for_each_template_arg<T>(fn)` visits each
   `RTTI_TEMPLATE_INFO`-registered argument in declaration order; unregistered
   templates and non-template types iterate zero times (no hard error).
+
+### Private / protected field reflection
+
+The `RTTI_DEFINE_TYPE` macro family now captures each field's compile-time
+access level (`rtti::member_access`: `public_` / `protected_` / `private_`,
+stored on `field_type_desc::access` and queried via
+`field_access_of<T>(index)`), and private / protected members are reflectable:
+
+- **Non-intrusive** registration (`RTTI_DEFINE_TYPE` /
+  `RTTI_DEFINE_TYPE_DERIVED`) may list private / protected fields — declare
+  `RTTI_FRIEND_FIELDS(T)` (expanding to
+  `friend struct ::rtti::fields_of<T>;`) inside the class body to grant the
+  field table access. The access probe pair is evaluated at namespace scope
+  (not from a friend), so a friend grant never leaks into the probe results.
+- **Intrusive** registration (`RTTI_DEFINE_TYPE_INTRUSIVE`) reflects
+  private / protected fields with no extra declaration; access level
+  classification is impossible inside the class body, so every intrusive field
+  conservatively reports `private_` (matching `field_type_desc::access`'s
+  default).
+
+Reflected private / protected fields read and write through the same APIs as
+public ones (`get_field` / `set_field` / `fields<T>` accessors /
+`for_each_field`), including through the merged derived table. See
+`docs/interface/{en,zh}/reflection.md`.
 
 ```cpp
 enum class Priority { low = 1, normal = 2, high = 3 };

@@ -17,8 +17,8 @@ documents are bilingual (English + 简体中文) and mutually linked.
 
 Also:
 
-- Concise bilingual benchmark record: [`benchmarks/2026-10-09-msvc.md`](benchmarks/2026-10-09-msvc.md)
-- Raw benchmark outputs: `docs/benchmarks/2026-10-09-*.txt`
+- Concise bilingual benchmark record: [`benchmarks/2026-10-09-msvc.md`](benchmarks/2026-10-09-msvc.md) (historical; the current report is [`benchmarks/en/performance-report.md`](benchmarks/en/performance-report.md), refreshed 2026-10-11)
+- Raw benchmark outputs: `docs/benchmarks/2026-10-11-*.txt` (latest), historical `2026-10-09-*` and `2026-10-10-*` kept under `docs/benchmarks/`
 - Reproduction script: [`scripts/run_bench.ps1`](../scripts/run_bench.ps1)
 
 Top-level README editions: [README](../README.md) · [README.en](../README.en.md) ·

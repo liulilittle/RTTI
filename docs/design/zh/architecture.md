@@ -8,9 +8,11 @@
 RTTI 是一个 **C++17、头文件+静态库**的反射与(反)序列化框架,**零第三方运行时依赖**。它提供:
 
 - 编译期**类型注册**系统(`RTTI_DEFINE_TYPE*` 宏)为 `struct`/`class` 生成运行时元数据(`type_desc`):字段、基类、方法、模板实参、属性、枚举项、构造器;
-- 基于小型 `value_io` 接口的**格式无关转换**(`to_value` / `from_value`);
+- 基于小型 `value_io` 接口的**格式无关转换**(`to_value` / `from_value`),外加覆盖标量道的**值语义强转桥**(`rtti::convert::as` / `cast` / `to`);
+- 反射字段的**成员访问级别**(`member_access`:public_ / protected_ / private_),并支持 **private/protected 字段反射**(非侵入式注册搭配 `RTTI_FRIEND_FIELDS`);
 - **五个序列化后端** — JSON、XML、INI、TOML、protobuf,以及 FlatBuffers 布局生成器;全部可选(编译期剥离门控);
-- 便捷工具:字符串构建、N 进制转换、日期时间、基础 IoC、ORM 风格绑定辅助。
+- 便捷工具:字符串构建、N 进制转换、日期时间、基础 IoC、ORM 风格绑定辅助;
+- 广泛 C++17 可移植性,含 **非 x86 / Android NDK** 目标:`<rtti/detail/from_chars_real.hpp>` 的编译期探测在标准库未提供浮点 `std::from_chars` 时(libc++ < 19,如 NDK r26 / LLVM 17)回退到基于 `strtod` 的解析器。
 
 非目标:元数据路径不依赖标准 `typeid`(库自建表);热转换路径不用异常(以
 `error_code` 传递错误);不内置第三方解析器。
@@ -58,7 +60,18 @@ RTTI 是一个 **C++17、头文件+静态库**的反射与(反)序列化框架,*
 
 跨 TU/ODR:表以 `static`/`inline` 成员写在头内,使共享该头的每个 TU 看到同一集合;
 注册按类型进行,id 在二进制内确定分配。`fields_of` 主模板刻意无定义——未注册类型是
-**编译期错误**(fail-fast),与未注册枚举的 `enum_table<E>` 是同一约定。
+**编译期错误**(fail-fast),与未注册枚举的 `enum_table<E>` 是同一约定。每个反射字段
+还携带编译期 `member_access`(public_ / protected_ / private_),由命名空间作用域的
+探针对(`detail::rtti_access_holder<T>`)解析;非侵入式注册在类授予
+`RTTI_FRIEND_FIELDS` 时可列出 private/protected 字段,侵入式字段则保守地一律报
+`private_`。
+
+非侵入式注册额外在命名空间作用域发出逐字段的 `detail::rtti_access_holder<T>`
+探针对;每个反射字段的 `field_type_desc::access` 行在命名空间作用域(而非友元
+上下文)解析为 `member_access::public_` / `protected_` / `private_`,类在体内授予
+`RTTI_FRIEND_FIELDS(T)` 后即可列出 **private / protected** 字段。侵入式注册同样
+反射 private/protected 字段,但类体内无法分级——每个侵入式字段保守报
+`private_`(文档化边界)。
 
 ### 3.2 类型擦除与 `instance`/`as`/`cast`
 
@@ -70,6 +83,12 @@ RTTI 是一个 **C++17、头文件+静态库**的反射与(反)序列化框架,*
 基类的合法上转永远不会假失败。因为擦除源不是编译期多态类,`dynamic_cast` 在
 `instance` 上不适用(C2681);不可达转换干净失败。虚基上转使用 `base_adjuster`
 导出的偏移。
+
+除指针强转外,`namespace rtti::convert`(`convert.hpp`)还是**值语义强转桥**
+(`as<T>` → `optional<T>`,`cast<T>` / `to<T>` → `result<T>`):把原生标量、字符串、
+`field_value` 与 `value_io` 源转换为标量族 / 已注册枚举 / 单层 `std::vector<scalar>`
+目标。它刻意生活在独立命名空间,并用 SFINAE 排除非 `value_io` 指针,因此绝不会遮蔽
+上面的指针重载。
 
 ### 3.3 格式分层与剥离门控
 
@@ -123,6 +142,9 @@ convert.hpp):`std::to_chars` 最短往返文本;token 无 `.`/`e`/`E` 时补 `.0
 | D10 | 版本单一来源:`project(RTTI VERSION 0.1.0)` → `configure_file` → `include/rtti/version.hpp` | 只 bump 一个数字;CMake、头与文档一致 |
 | D11 | 命名策略(`key_case`/`rename_map`/`skip_empty`)位于 `detail::naming_policy`;适配器再导出 `key_case` | 一个策略引擎;各格式自然拼写(`rtti::json::key_case::snake`) |
 | D12 | 基准输出环境头且取多轮中位数 | 数字是数据点而非结论;可复现性是产出一部分 |
+| D13 | 字段访问级别经命名空间作用域探针(`rtti_access_holder`)解析;非侵入式注册在授予 `RTTI_FRIEND_FIELDS` 后可列出 private/protected 字段 | 探针永远不是友元,授权无法泄漏进分级;即便类授予访问,分级仍是编译期属性 |
+| D14 | 侵入式注册无法从类内分级;每个侵入式字段保守报 `private_` | 授予与否都走同一头机制;保守边界已文档化,`field_access_of<T>(i)` 依然会报告它 |
+| D15 | 浮点解析探测 `std::from_chars`,缺席时回退到基于 `strtod` 的解析器(`from_chars_real.hpp`) | 非 x86 / Android NDK(libc++ < 19)仍可获得正确的 FP 往返,无需厂商变通 |
 
 ## 5. 可扩展性与局限
 

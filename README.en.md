@@ -322,6 +322,36 @@ exact type. Because the erased source type is not a compile-time polymorphic
 class type, `dynamic_cast` cannot be used on the `instance` path; such
 unreachable conversions fail cleanly and never return a wrong pointer.
 
+### Value-semantics strong cast (`rtti::convert::as` / `cast` / `to`)
+
+Distinct from the pointer casts above, `namespace rtti::convert` provides a
+**value-semantics strong-cast bridge** over the scalar conversion lanes
+(`<rtti/convert.hpp>`):
+
+- `as<T>(src)` returns `std::optional<T>` — `nullopt` on any failure;
+- `cast<T>(src)` and its alias `to<T>(src)` return `result<T>` with
+  distinguishable `error_code`s: `kind_mismatch` for incompatible lanes,
+  `overflow` for a numeric range violation (truncation toward zero, never a
+  silent wrap), `invalid_number` for malformed numeric / enum-label text, and
+  `no_such_field` for a null / null-kind source.
+
+The bridge is deliberately **loose** — it converts values rather than parsing
+literals, so `rtti::convert::as<int>("3.9")` truncates the real lane and
+returns `3`, whereas the strict `rtti::from_string<int>("3.9")` reports
+`invalid_number`. (The two entries intentionally disagree: `from_string`
+*parses*, the bridge *casts*; see the mirrored note in `to_string.hpp`.)
+
+Sources cover native scalars (`bool`, integers, floating point), strings
+(`string_view` / `std::string`), `field_value`, and `value_io`-derived
+pointers (including `const`). Targets cover the full scalar family, registered
+enums (via their labels or integer values) and single-layer
+`std::vector<scalar>`. Because the bridge lives in its own namespace and its
+entry-point SFINAE excludes non-`value_io` pointers, the pointer
+`rtti::as<T>(U*)` / `rtti::cast<T>(U*)` overloads above are never shadowed —
+an unrelated pointer source is a hard compile error. See
+[`docs/interface/en/convert.md`](docs/interface/en/convert.md) for the full
+contract.
+
 ## Reflection traversal
 
 The reflection core's registration tables are directly iterable. All three
@@ -379,6 +409,44 @@ rtti::for_each_field(p, [&](const char*, rtti::type_id, const rtti::field_value&
 
 As with `fields<T>()` / `field_count<T>()`, an unregistered type is a
 compile-time error, never a silent empty walk.
+
+### Private / protected field reflection
+
+The `RTTI_DEFINE_TYPE` macro family now records each reflected field's
+compile-time access level and can reflect **private / protected** members:
+
+- `rtti::member_access` (`public_` / `protected_` / `private_`, values 1/2/3)
+  is stored on `field_type_desc::access` and queryable at compile time via
+  `field_access_of<T>(index)` (also `fields_of<T>::desc[i].access`).
+- **Non-intrusive** registration (`RTTI_DEFINE_TYPE` / `RTTI_DEFINE_TYPE_DERIVED`)
+  may list private / protected fields: declare `RTTI_FRIEND_FIELDS(T)` — the
+  `friend struct ::rtti::fields_of<T>;` grant — inside the class body so the
+  table can form `&T::f`. The access probes run at namespace scope and are
+  deliberately **not** friends, so the grant never leaks into the probe results.
+- **Intrusive** registration (`RTTI_DEFINE_TYPE_INTRUSIVE`) reflects private /
+  protected fields with no extra declaration; classification is impossible from
+  inside the class body, so every intrusive field conservatively reports
+  `private_` (the documented boundary, matching `field_type_desc::access`'s
+  default).
+
+Reflected private / protected fields are read and written through the ordinary
+accessors (`get_field` / `set_field`, `field_access_base::get/set`,
+`for_each_field`), including through the merged table of a derived type.
+
+```cpp
+struct Secret {
+    int open = 1;
+private:
+    int hidden = 42;
+    RTTI_FRIEND_FIELDS(Secret)                       // inside the class body
+};
+RTTI_DEFINE_TYPE(Secret, open, hidden)               // namespace scope
+
+Secret s;
+rtti::field_value v;
+rtti::get_field(s, "hidden", v);                     // v.as_integer() == 42
+static_assert(rtti::field_access_of<Secret>(1) == rtti::member_access::private_);
+```
 
 ### Template-argument traversal — `<rtti/reflection.hpp>`
 
@@ -648,6 +716,12 @@ they are built and run inside the sweep as well.)
   Clang/LLVM 14+ — the floating-point `std::to_chars` / `std::from_chars`
   used for shortest round-trip float text require libstdc++ 11 and
   libc++ 14; earlier GCC/Clang lack them.
+- **ARM / non-x86 (Android NDK)**: `<rtti/detail/from_chars_real.hpp>`
+  probes at compile time whether the standard library ships the
+  floating-point `std::from_chars` overload and, on libc++ < 19 (the NDK r26
+  runtime, LLVM 17), falls back to a `strtod`-based parser — so ARM/ARM64 NDK
+  targets (`armeabi-v7a` / `arm64-v8a`) compile the floating-point text→real
+  pipeline correctly where a direct `from_chars` call would fail to compile.
 - No `__declspec`, no GNU extensions, no compiler-private builtins.
 - `std::chrono::steady_clock` timers, RAII mechanics, standard containers only.
 - The library is a header-driven design with a single `src/` static-library
@@ -696,10 +770,11 @@ they are built and run inside the sweep as well.)
 
 - [Performance report (EN)](./docs/benchmarks/en/performance-report.md) ·
   [中文](./docs/benchmarks/zh/performance-report.md) — methodology,
-  environment, verbatim numbers (Debug/Release × new/legacy benches),
-  reproduction steps (`scripts/run_bench.ps1`).
-- Raw outputs: `docs/benchmarks/2026-10-09-*.txt`; concise bilingual record:
-  `docs/benchmarks/2026-10-09-msvc.md`.
+  environment, verbatim numbers (Debug/Release/LTCG, refreshed **2026-10-11**,
+  median of 7 samples), reproduction steps (`scripts/run_bench.ps1`).
+- Raw outputs: `docs/benchmarks/2026-10-11-*.txt` (latest); historical
+  `2026-10-09-*.txt` and `2026-10-10-*.txt` are kept, with a concise bilingual
+  record at `docs/benchmarks/2026-10-09-msvc.md`.
 
 Cross-referenced between editions; every section above has a matching section
 in the Chinese edition.

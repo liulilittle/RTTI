@@ -2,7 +2,7 @@
 
 **Module:** RTTI value conversion core (`rtti` namespace)
 
-**Scope:** this document covers the format-agnostic conversion surface of the RTTI library: `include/rtti/convert.hpp` (the primary file, 2,189 lines) plus the four supporting headers `error.hpp`, `number_format.hpp`, `node_io.hpp` and `memory.hpp`. Signatures are transcribed verbatim from the headers; behaviour notes are quoted or inferred strictly from header comments and the shared error contract.
+**Scope:** this document covers the format-agnostic conversion surface of the RTTI library: `include/rtti/convert.hpp` (the primary file, 2,820 lines, including the `rtti::convert::as`/`cast`/`to` value-semantics bridge of chapter 11) plus the four supporting headers `error.hpp`, `number_format.hpp`, `node_io.hpp` and `memory.hpp`. Signatures are transcribed verbatim from the headers; behaviour notes are quoted or inferred strictly from header comments and the shared error contract.
 
 **Files covered**
 
@@ -707,6 +707,63 @@ Semantics:
 *Coverage: `memory.hpp` lines 1–85.*
 
 ---
+
+## 11. Value-semantics strong-cast bridge — `rtti::convert::as` / `cast` / `to` (`convert.hpp` lines 2244–2818)
+
+`namespace rtti::convert` exposes the *value-semantics strong-cast bridge* — a
+numeric / text "value bridge" over the scalar lanes of chapters 3–4. It
+converts **values**, not pointers, so it never interferes with the C#-style
+pointer `rtti::as<T>(U*)` / `rtti::cast<T>(U*)` conversions in
+`reflection.md` §14 (the bridge SFINAEs out non-`value_io` pointers; an
+unrelated pointer source is a hard compile error, not a silent lane).
+
+```cpp
+// Loose conversion: nullopt on any failure, never throws.
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+std::optional<T> as(Src&& src) noexcept;
+
+// Strict conversion: result<T> with a distinguishable error_code.
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+result<T> cast(Src&& src) noexcept;
+
+// Unified entry: identical to cast.
+template <typename T, typename Src,
+          std::enable_if_t<detail::bridge_ok<T, Src>::value, int> = 0>
+result<T> to(Src&& src) noexcept;
+```
+
+| Entry | Return | Failure semantics |
+| --- | --- | --- |
+| `as<T>(src)` | `std::optional<T>` | `nullopt` on any failure (loose). |
+| `cast<T>(src)` | `result<T>` | `kind_mismatch` (incompatible lanes), `overflow` (numeric range, truncation toward zero, never wrap), `invalid_number` (malformed numeric / enum-label text), `no_such_field` (null / null-kind source). |
+| `to<T>(src)` | `result<T>` | alias of `cast` (single unified entry). |
+
+**Sources** (decided by `detail::extract_lane`): native scalars (`bool`,
+integers, floating point), `string_view` / `std::string`, `field_value`, and
+`value_io`-derived pointers (including `const`). **Targets** (`detail::bridge_ok` +
+`detail::is_scalar_target` / `detail::is_vector_of_scalar`): the scalar family
+(`bool`, integral, floating-point, `std::string` / `string_view`, registered
+enums) and single-layer `std::vector<scalar>`.
+
+**Loose vs strict** — deliberate layering: `rtti::from_string<T>` (to_string.hpp)
+is a *strict parser* (the whole input must be a well-formed literal, so
+`from_string<int>("3.9")` reports `invalid_number`); the bridge is deliberately
+*loose* (it converts a value, so `as<int>("3.9")` truncates the real lane and
+returns `3`). The two entry points intentionally disagree on the same input
+(see the mirrored note in to_string.hpp).
+
+Examples (from `tests/convert_cast_test.cpp`):
+
+```cpp
+auto a = rtti::convert::as<int>(" 42 ");   // std::optional<int>{42}; text trimmed
+auto b = rtti::convert::cast<int>(3.9);    // result<int>, b.value == 3 (truncate)
+auto c = rtti::convert::cast<std::int8_t>(std::int64_t(300)); // !c.ok(): overflow
+auto d = rtti::convert::cast<int>(nullptr); // !d.ok(): no_such_field
+auto e = rtti::convert::to<int>("42");      // alias of cast
+rtti::convert::as<std::vector<int>>(value_io_array_node); // single-layer vector
+```
 
 ## Cross-reference
 
