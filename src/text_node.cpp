@@ -511,7 +511,7 @@ std::unique_ptr<text_node> text_parser::parse_number() {
         // int64 overflow: demote to a real node (json.hpp behavior).
     }
     double dv = 0.0;
-    const auto rd = std::from_chars(begin, begin + len, dv);
+    const auto rd = detail::from_chars_real(begin, begin + len, dv);
     if (rd.ec != std::errc()) {
         err = fail(error_code::invalid_number, start);
         return nullptr;

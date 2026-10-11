@@ -74,6 +74,8 @@
 
 #include <rtti/convert.hpp>
 
+#include <rtti/detail/from_chars_real.hpp>
+
 namespace rtti {
 
 namespace detail {
@@ -227,7 +229,7 @@ inline error_code parse_real(string_view s, T& out) {
         out = std::numeric_limits<T>::quiet_NaN();
         return error_code::ok;
     }
-    const auto res = std::from_chars(s.data(), s.data() + s.size(), out);
+    const auto res = detail::from_chars_real(s.data(), s.data() + s.size(), out);
     if (res.ec == std::errc::result_out_of_range) {
         return error_code::overflow;
     }

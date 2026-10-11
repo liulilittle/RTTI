@@ -36,6 +36,8 @@
 #include <rtti/naming.hpp>
 #include <rtti/reflection.hpp>
 
+#include <rtti/detail/from_chars_real.hpp>
+
 namespace rtti {
 
 // value_io (the abstract source/sink tree interface) is defined in
@@ -182,7 +184,7 @@ inline error_code scalar_text_to_integral(string_view s, T& out) {
         return scalar_int64_to_integral<T>(iv, out);
     }
     double dv = 0.0;
-    const auto rres = std::from_chars(s.data(), s.data() + s.size(), dv);
+    const auto rres = detail::from_chars_real(s.data(), s.data() + s.size(), dv);
     if (rres.ec == std::errc::result_out_of_range) {
         return error_code::overflow;
     }
@@ -209,7 +211,7 @@ inline error_code scalar_text_to_real(string_view s, T& out) {
         out = std::numeric_limits<T>::quiet_NaN();
         return error_code::ok;
     }
-    const auto res = std::from_chars(s.data(), s.data() + s.size(), out);
+    const auto res = detail::from_chars_real(s.data(), s.data() + s.size(), out);
     if (res.ec == std::errc::result_out_of_range) {
         return error_code::overflow;
     }

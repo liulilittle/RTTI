@@ -774,7 +774,7 @@ const std::size_t start = pos;
             // int64 overflow: demote to a real event.
         }
         double dv = 0.0;
-        const auto rd = std::from_chars(begin, begin + n, dv);
+        const auto rd = rtti::detail::from_chars_real(begin, begin + n, dv);
         if (rd.ec != std::errc()) {
             err = fail(error_code::invalid_number, start);
             return nullptr;
@@ -800,7 +800,7 @@ const std::size_t start = pos;
         // int64 overflow: demote to a real node.
     }
     double dv = 0.0;
-    const auto rd = std::from_chars(begin, begin + n, dv);
+    const auto rd = rtti::detail::from_chars_real(begin, begin + n, dv);
     if (rd.ec != std::errc()) {
         err = fail(error_code::invalid_number, start);
         return nullptr;
