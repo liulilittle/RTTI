@@ -161,12 +161,12 @@ long long bench_for_each_field_names(std::size_t i) {
     return acc;
 }
 
-long long bench_for_each_field_values(std::size_t i) {
-    BenchDerived obj;
+// Traverses the value lane of a caller-supplied object. The object is passed by
+// reference so construction and its std::string allocation are NOT part of the
+// timed measurement: it is built once in main(), outside every timed loop.
+long long bench_for_each_field_values(BenchDerived& obj, std::size_t i) {
     obj.id = static_cast<int>(i);
     obj.score = static_cast<double>(i);
-    obj.name = "bench";
-    obj.active = true;
     long long acc = 0;
     rtti::for_each_field(obj, [&](const char* name, rtti::type_id,
                                   const rtti::field_value& v) {
@@ -226,7 +226,14 @@ int main(int argc, char** argv) {
 
     std::printf("\n== for_each_field (base+derived, 4 merged fields) ==\n");
     report("for_each_field<Derived> names", iters, bench_for_each_field_names);
-    report("for_each_field(obj, values)", iters, bench_for_each_field_values);
+    // The value-lane object is constructed ONCE here, outside the timed loop,
+    // so the measurement reflects traversal only (its std::string allocation is
+    // not part of the ns/op number).
+    BenchDerived value_obj;
+    value_obj.name = "bench";
+    value_obj.active = true;
+    report("for_each_field(obj, values)", iters,
+           [&](std::size_t i) { return bench_for_each_field_values(value_obj, i); });
 
     std::printf("\n== for_each_template_arg ==\n");
     report("template_arg_count<pair<int,string>>", iters, bench_template_arg_count);

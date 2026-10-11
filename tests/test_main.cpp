@@ -1,12 +1,10 @@
 // Single translation unit that provides main() for the test executable.
-// Every RTTI_TEST_CASE registers a static instance that runs during static
-// initialization; main() only prints the summary and sets the exit code.
+// Every RTTI_TEST_CASE registers its name and function pointer during static
+// initialization; main() parses an optional --filter substring and runs the
+// matching cases in registration order, then prints the summary.
 
 #include "test_harness.hpp"
-#include <cstdio>
 
-int main() {
-    // Unbuffered stdout so a crash mid-test still shows the last [TEST] line.
-    std::setvbuf(stdout, nullptr, _IONBF, 0);
-    return rtti_test::summary();
+int main(int argc, char** argv) {
+    return rtti_test::run_all(argc, argv);
 }

@@ -529,6 +529,11 @@ FlatBuffers 线格式适配器(spec §14),以官方 `flatc` fixture 对拍验证
 `RTTI_IS_EMPTY` 空参检测与有界的 `RTTI_NARG` 计数采用两级间接粘合,在 MSVC
 标准预处理器(`/Zc:preprocessor`)下依然正确。
 
+**线程与 ABI**:两个全局注册表(反射描述符、proto 扩展)内部自带同步;文档、
+arena、格式树与 IoC 容器**非线程安全**——每线程一对象,或由调用方外部同步。
+纯头文件:不承诺跨版本、跨编译器的二进制 ABI——请整体重编全部翻译单元。
+完整声明见[设计与架构 §3.7](docs/design/zh/architecture.md#37-线程安全与-abi)。
+
 ## 支持的容器
 
 | 家族 | 识别依据 | 备注 |

@@ -13,6 +13,7 @@
 // stay unique across TUs.
 
 #include "test_harness.hpp"
+#include "leak_counter.hpp"
 #include <rtti/date_time.hpp>
 #include <rtti/to_string.hpp>
 
@@ -42,19 +43,6 @@
 // tight loop over a deterministic failing conversion must return the live
 // allocation balance to its snapshot.
 // ---------------------------------------------------------------------------
-
-namespace rtti_test_lib {
-
-inline long long& g_rttileak_allocs() {
-    static long long n = 0;
-    return n;
-}
-inline long long& g_rttileak_live() {
-    static long long n = 0;
-    return n;
-}
-
-} // namespace rtti_test_lib
 
 void* operator new(std::size_t sz) {
     ++rtti_test_lib::g_rttileak_allocs();

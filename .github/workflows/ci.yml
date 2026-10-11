@@ -63,3 +63,33 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # Cross-compiler link check: build the rtti static library with GCC, build
+  # everything with Clang, then swap the GCC-built archive in and force a
+  # relink of the test executables. An ODR-fragile inline (an out-of-line
+  # static member or a typeinfo emitted into exactly one TU) breaks exactly
+  # here, so this job is the ABI sanity net for mixed-toolchain consumers.
+  # LTO stays off: GCC LTO objects cannot be linked by the Clang driver.
+  linux-cross-link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build static library (GCC, no LTO)
+        run: |
+          cmake -S . -B build-gcc -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_BUILD_TYPE=Release -DRTTI_ENABLE_LTO=OFF
+          cmake --build build-gcc --target rtti -j
+      - name: Build tests (Clang, -Werror)
+        run: |
+          cmake -S . -B build-xlink -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+          cmake --build build-xlink -j
+      - name: Relink tests against the GCC-built library and run
+        run: |
+          cp build-gcc/librtti.a build-xlink/librtti.a
+          rm -f build-xlink/rtti_tests \
+                build-xlink/rtti_proto_extension_tests \
+                build-xlink/rtti_flat_schema_tests
+          cmake --build build-xlink -j
+          ctest --test-dir build-xlink --output-on-failure

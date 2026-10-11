@@ -41,17 +41,75 @@ inline int summary() noexcept {
     return failures() == 0 ? 0 : 1;
 }
 
+// Registry of test cases built at static initialization. Each RTTI_TEST_CASE
+// appends one entry (name + function pointer); execution happens in run_all
+// inside main, so a --filter substring can select a subset. The intrusive
+// linked list avoids heap allocation in the registration path - the global
+// operator new override in string_convert_test.cpp counts every allocation
+// and tests must observe a clean baseline.
+struct test_case {
+    const char* name;
+    void (*fn)();
+    test_case* next;
+};
+
+inline test_case*& test_cases_head() {
+    static test_case* head = nullptr;
+    return head;
+}
+
+// Points at the link the next registration fills (the head's own slot while
+// the list is empty, then the last entry's next).
+inline test_case**& test_cases_tail() {
+    static test_case** tail = &test_cases_head();
+    return tail;
+}
+
+// Runs registered test cases in registration order. --filter=SUB or
+// --filter SUB keeps only cases whose name contains SUB (case-sensitive
+// substring). Returns the process exit code via summary().
+inline int run_all(int argc, char** argv) {
+    const char* filter = nullptr;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strncmp(argv[i], "--filter=", 9) == 0) {
+            filter = argv[i] + 9;
+        } else if (std::strcmp(argv[i], "--filter") == 0 && i + 1 < argc) {
+            filter = argv[++i];
+        }
+    }
+    // Unbuffered stdout so a crash mid-test still shows the last [TEST] line.
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    int run = 0;
+    int skipped = 0;
+    for (const test_case* c = test_cases_head(); c != nullptr; c = c->next) {
+        if (filter != nullptr && std::strstr(c->name, filter) == nullptr) {
+            ++skipped;
+            continue;
+        }
+        std::fprintf(stderr, "[TEST] %s\n", c->name);
+        std::fflush(stderr);
+        c->fn();
+        ++run;
+    }
+    if (filter != nullptr) {
+        std::fprintf(stderr, "[FILTER] '%s': %d run, %d skipped\n",
+                     filter, run, skipped);
+    }
+    return summary();
+}
+
 } // namespace rtti_test
 
-#define RTTI_TEST_CASE(name)                                   \
-    static void name();                                        \
-    struct name##_register {                                   \
-        name##_register() {                                    \
-            std::fprintf(stderr, "[TEST] %s\n", #name);        \
-            name();                                            \
-        }                                                      \
-    };                                                         \
-    static name##_register name##_instance;                    \
+#define RTTI_TEST_CASE(name)                                            \
+    static void name();                                                 \
+    struct name##_register {                                            \
+        name##_register() {                                             \
+            static rtti_test::test_case entry{#name, &name, nullptr};   \
+            *rtti_test::test_cases_tail() = &entry;                     \
+            rtti_test::test_cases_tail() = &entry.next;                 \
+        }                                                               \
+    };                                                                  \
+    static name##_register name##_instance;                             \
     static void name()
 
 #define RTTI_CHECK(expr)                                                     \
@@ -90,4 +148,4 @@ inline int summary() noexcept {
         }                                                                    \
     } while (0)
 
-#define RTTI_TEST_MAIN() int main() { return rtti_test::summary(); }
+#define RTTI_TEST_MAIN() int main(int argc, char** argv) { return rtti_test::run_all(argc, argv); }

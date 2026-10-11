@@ -89,6 +89,7 @@ long long bench_xml_parse(const std::string& src) {
 } // namespace
 
 int main() {
+    rtti_bench::print_environment("rtti_bench_parse", 0);
     const std::size_t target = 1024 * 1024; // ~1 MB
     const std::string json_src = make_json_doc(target);
     const std::string xml_src = make_xml_doc(target);

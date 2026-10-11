@@ -2,12 +2,25 @@
 // Portable RAII steady_clock timer for microbenchmarks.
 // No third-party dependencies; C++17.
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
 #include <thread>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 
 #if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
@@ -143,6 +156,125 @@ inline unsigned logical_processors() noexcept {
     return n == 0 ? 1 : n;
 }
 
+// Current wall-clock CPU core frequency in GHz, or 0 when unavailable.
+// Windows: best-effort via QueryPerformanceCounter sampling; Linux: reported
+// frequency from /proc/cpuinfo. Thermal state is not directly queryable here,
+// so cross-date comparisons should treat this as an approximate ceiling, not a
+// live measurement.
+inline double cpu_frequency_ghz() {
+#if defined(_WIN32) && defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+    LARGE_INTEGER freq;
+    LARGE_INTEGER t0;
+    LARGE_INTEGER t1;
+    if (!::QueryPerformanceFrequency(&freq) || freq.QuadPart == 0) {
+        return 0.0;
+    }
+    ::QueryPerformanceCounter(&t0);
+    std::chrono::steady_clock::time_point s = std::chrono::steady_clock::now();
+    // Busy-wait roughly 10 ms to amortize the counter read overhead.
+    long long ticks = 0;
+    const long long target = static_cast<long long>(freq.QuadPart) / 100;
+    while (ticks < target) {
+        ::QueryPerformanceCounter(&t1);
+        ticks = t1.QuadPart - t0.QuadPart;
+    }
+    std::chrono::steady_clock::time_point e = std::chrono::steady_clock::now();
+    const double wall_s =
+        std::chrono::duration<double>(e - s).count();
+    if (wall_s <= 0.0) {
+        return 0.0;
+    }
+    const double cycles = static_cast<double>(ticks);
+    return cycles / wall_s / 1e9;
+#elif defined(__linux__)
+    // /proc/cpuinfo "cpu MHz" reflects the current per-core frequency on most
+    // x86 kernels; read the first occurrence as an approximate sample.
+    std::FILE* fp = std::fopen("/proc/cpuinfo", "r");
+    if (fp != nullptr) {
+        char line[256];
+        while (std::fgets(line, sizeof(line), fp) != nullptr) {
+            std::string s(line);
+            if (s.compare(0, 7, "cpu MHz") == 0) {
+                std::size_t pos = s.find(':');
+                if (pos != std::string::npos) {
+                    std::string v = s.substr(pos + 1);
+                    while (!v.empty() && (v.back() == '\n' || v.back() == '\r')) {
+                        v.pop_back();
+                    }
+                    const double mhz = std::atof(v.c_str());
+                    std::fclose(fp);
+                    return mhz > 0.0 ? mhz / 1000.0 : 0.0;
+                }
+                break;
+            }
+        }
+        std::fclose(fp);
+    }
+    return 0.0;
+#else
+    return 0.0;
+#endif
+}
+
+// Approximate system CPU utilisation (0..1) at call time, or -1 when the
+// platform has no cheap way to sample it. Windows uses GetSystemTimes kernel +
+// idle deltas over a short busy/sleep window; Linux uses the 1-minute load
+// average renormalized by the core count (a coarse but portable proxy).
+inline double system_load() {
+#if defined(_WIN32)
+    FILETIME idle0, kern0, user0;
+    if (!::GetSystemTimes(&idle0, &kern0, &user0)) {
+        return -1.0;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    FILETIME idle1, kern1, user1;
+    if (!::GetSystemTimes(&idle1, &kern1, &user1)) {
+        return -1.0;
+    }
+    auto to_u64 = [](const FILETIME& ft) {
+        ULARGE_INTEGER v;
+        v.LowPart = ft.dwLowDateTime;
+        v.HighPart = ft.dwHighDateTime;
+        return v.QuadPart;
+    };
+    const unsigned long long busyt0 = to_u64(kern0) + to_u64(user0) - to_u64(idle0);
+    const unsigned long long busyt1 = to_u64(kern1) + to_u64(user1) - to_u64(idle1);
+    const unsigned long long tott0 = to_u64(kern0) + to_u64(user0);
+    const unsigned long long tott1 = to_u64(kern1) + to_u64(user1);
+    const unsigned long long db = busyt1 > busyt0 ? busyt1 - busyt0 : 0;
+    const unsigned long long dt = tott1 > tott0 ? tott1 - tott0 : 0;
+    if (dt == 0) {
+        return -1.0;
+    }
+    double load = static_cast<double>(db) / static_cast<double>(dt);
+    if (load < 0.0) {
+        load = 0.0;
+    }
+    if (load > 1.0) {
+        load = 1.0;
+    }
+    return load;
+#elif defined(__linux__)
+    std::FILE* fp = std::fopen("/proc/loadavg", "r");
+    if (fp != nullptr) {
+        double one_min = 0.0;
+        if (std::fscanf(fp, "%lf", &one_min) == 1) {
+            std::fclose(fp);
+            if (one_min < 0.0) {
+                one_min = 0.0;
+            }
+            const unsigned n = logical_processors();
+            const double load = one_min / static_cast<double>(n == 0 ? 1 : n);
+            return load > 1.0 ? 1.0 : load;
+        }
+        std::fclose(fp);
+    }
+    return -1.0;
+#else
+    return -1.0;
+#endif
+}
+
 // Prints the environment header for one benchmark run.
 inline void print_environment(const char* benchmark, int samples) {
     std::printf("benchmark   : %s\n", benchmark);
@@ -150,6 +282,18 @@ inline void print_environment(const char* benchmark, int samples) {
     std::printf("config      : %s\n", build_config());
     std::printf("cpu         : %s\n", cpu_model().c_str());
     std::printf("logical cpus: %u\n", logical_processors());
+    const double ghz = cpu_frequency_ghz();
+    if (ghz > 0.0) {
+        std::printf("cpu freq    : %.3f GHz (sampled wall-clock; ~ceiling, not live)\n", ghz);
+    } else {
+        std::printf("cpu freq    : n/a\n");
+    }
+    const double load = system_load();
+    if (load >= 0.0) {
+        std::printf("sys load    : %.2f (of 1.0 busy; sampled)\n", load);
+    } else {
+        std::printf("sys load    : n/a\n");
+    }
     std::printf("method      : steady_clock wall time; %d timed samples, median ns/op\n", samples);
 }
 

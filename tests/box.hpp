@@ -130,6 +130,14 @@ struct box : rtti::value_io {
         return this;
     }
     void set_key(rtti::string_view k, rtti::value_io* v) override {
+        // Replaces the previous value for an existing key. The value_io make_*
+        // reset contract (see clear_owned) extends to key overwrite: the old
+        // child is owned by this node, so it must be released, never silently
+        // dropped and leaked.
+        auto it = obj.find(std::string(k));
+        if (it != obj.end() && it->second != static_cast<box*>(v)) {
+            delete it->second;
+        }
         obj[std::string(k)] = static_cast<box*>(v);
     }
     rtti::value_io* make_scalar(rtti::field_value v) override {

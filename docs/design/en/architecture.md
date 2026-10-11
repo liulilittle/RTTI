@@ -162,6 +162,27 @@ deterministic tokens for non-finite values. Float rendering is unified across
 JSON/XML/INI/TOML (audit C2), and `.0` is decided from the written segment
 rather than the whole shared stream (R1-8).
 
+### 3.7 Thread safety & ABI
+
+**Thread safety.** Two global registries are internally synchronized: the
+reflection descriptor registry serializes registration and lookup through
+`desc_registry_mutex()` (a `lock_guard` guards both entry points), and the
+proto registry serializes all descriptor writes with its own `std::mutex`
+(reads of stable-node data are lock-free). `derived_pool<D>` builds its merged
+tables behind magic statics, which are thread-safe for initialization. Nothing
+else is thread-safe: documents, `memory_arena`, format trees, `ioc` containers
+and all conversion entry points assume a single thread per object (or external
+synchronization). Sharing one container across threads is a caller contract:
+the container (and, for `ioc`, its services) must outlive every use and the
+caller must serialize access.
+
+**ABI.** The library is header-only; no binary compatibility is promised
+across versions, compilers, or standard-library versions. Types documented as
+"ABI-stable" (e.g. `field_access` enumerator values 1/2/3) are stable in
+semantics only. Mixing translation units built with different compilers or
+`_GLIBCXX_USE_CXX11_ABI`/`_ITERATOR_DEBUG_LEVEL` settings is unsupported;
+rebuild everything from source together.
+
 ## 4. Key design decisions & rationale
 
 | # | Decision | Rationale / trade-off |

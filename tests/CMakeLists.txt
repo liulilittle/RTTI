@@ -64,6 +64,10 @@ if(RTTI_ENABLE_JSON AND RTTI_ENABLE_XML AND RTTI_ENABLE_INI AND RTTI_ENABLE_TOML
   list(APPEND RTTI_TEST_SOURCES node_locate_test.cpp)
 endif()
 if(RTTI_ENABLE_PROTO)
+  # concurrency_test covers the desc registry materialization race and the
+  # proto extension registry write race; the latter needs <rtti/proto.hpp>,
+  # which hard-errors when the proto gate is off.
+  list(APPEND RTTI_TEST_SOURCES concurrency_test.cpp)
   list(APPEND RTTI_TEST_SOURCES proto_test.cpp)
   list(APPEND RTTI_TEST_SOURCES proto_schema_test.cpp)
   # proto_extension_test provides its own main (RTTI_TEST_MAIN, see the test

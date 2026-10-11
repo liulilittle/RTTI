@@ -596,6 +596,12 @@ The `RTTI_IS_EMPTY` empty-argument detection and bounded `RTTI_NARG` counting
 use a two-level indirect paste that stays correct under MSVC's conformant
 preprocessor (`/Zc:preprocessor`).
 
+**Threading & ABI**: the type-descriptor and proto registries are internally
+mutex-protected; everything else (documents, arenas, format trees, `ioc`
+containers) is single-thread-per-object unless the caller synchronizes. No
+binary ABI is promised — rebuild all translation units from source together.
+Details: [design §3.7](docs/design/en/architecture.md).
+
 ## Supported Containers
 
 | Family | Recognized by | Notes |
