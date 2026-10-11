@@ -49,6 +49,12 @@
 // outside the target range. to_string returns an empty string when the
 // conversion itself fails (e.g. an enum whose value has no label).
 //
+// Strictness contrast: from_string is a STRICT literal parser, while the
+// rtti::convert::as / cast value bridge (convert.hpp) is a LOOSE conversion:
+// from_string<int>("3.9") reports invalid_number, but convert::as<int>("3.9")
+// truncates the real lane and returns 3. The split is intentional (parse vs
+// cast); see convert.hpp for the forward-referencing note.
+//
 // Zero format dependency: this header includes only the reflect core
 // (<rtti/convert.hpp> pulls in base_convert, date_time, error, naming and
 // reflection). English comments only; C++17; no third-party dependencies.

@@ -16,6 +16,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <new>
 #include <optional>
 #include <queue>
 #include <set>
@@ -2261,6 +2262,15 @@ struct is_vector_of_scalar<std::vector<U, A>,
                            std::enable_if_t<is_scalar_target<U>::value>>
     : std::true_type {};
 
+// --- Strict parse vs loose cast: intentional layering ----------------------
+// The library's rtti::from_string<T> (to_string.hpp) is a STRICT parser:
+// the whole input must be a well-formed literal of the target type, so
+// from_string<int>("3.9") reports invalid_number ("3.9" is not an integer
+// literal). This bridge is deliberately LOOSE: rtti::convert::as / cast
+// convert the value, so as<int>("3.9") truncates the real lane and returns 3.
+// The two entry points intentionally disagree on the same input: from_string
+// parses, the bridge casts (see to_string.hpp for the mirrored note).
+
 // Entry gate: the target is not a pointer and the source is either a
 // non-pointer value, a character pointer (string literal / C string text), or
 // a value_io-derived pointer. This keeps the bridge out of the existing
@@ -2571,7 +2581,12 @@ inline result<bool> lane_to_bool(const src_lane& l) noexcept {
 
 // String target: text copies directly; integer/real lanes format through the
 // existing numeric text lanes. The noexcept contract is kept by turning an
-// allocation failure into a clean error instead of a thrown exception.
+// allocation failure into a clean error instead of a thrown exception. There
+// is no dedicated out-of-memory code in error.hpp; overflow is the closest
+// general resource-limit code for allocation exhaustion (see json.cpp arena
+// exhaustion -> overflow, C-4). Malformed text is never reported here: the
+// text lanes return invalid_number at parse time, so a thrown exception on
+// these paths is an allocation failure, not a format error.
 inline result<std::string> lane_to_string(const src_lane& l) noexcept {
     switch (l.kind) {
         case lane_kind::boolean:
@@ -2579,22 +2594,30 @@ inline result<std::string> lane_to_string(const src_lane& l) noexcept {
         case lane_kind::integer:
             try {
                 return make_ok<std::string>(std::to_string(l.i));
-            } catch (...) {
-                return make_error<std::string>(error_code::invalid_number);
+            } catch (const std::bad_alloc&) {
+                return make_error<std::string>(error_code::overflow);
             }
         case lane_kind::uinteger:
             try {
                 return make_ok<std::string>(std::to_string(l.u));
-            } catch (...) {
-                return make_error<std::string>(error_code::invalid_number);
+            } catch (const std::bad_alloc&) {
+                return make_error<std::string>(error_code::overflow);
             }
         case lane_kind::real: {
             std::string s;
-            rtti::detail::scalar_format_real(l.d, s);
-            return make_ok<std::string>(std::move(s));
+            try {
+                rtti::detail::scalar_format_real(l.d, s);
+                return make_ok<std::string>(std::move(s));
+            } catch (const std::bad_alloc&) {
+                return make_error<std::string>(error_code::overflow);
+            }
         }
         case lane_kind::text:
-            return make_ok<std::string>(std::string(l.s.data(), l.s.size()));
+            try {
+                return make_ok<std::string>(std::string(l.s.data(), l.s.size()));
+            } catch (const std::bad_alloc&) {
+                return make_error<std::string>(error_code::overflow);
+            }
         default:
             return make_error<std::string>(error_code::kind_mismatch);
     }
@@ -2631,9 +2654,11 @@ inline result<T> lane_to_enum(const src_lane& l) noexcept {
         case lane_kind::integer: {
             const std::int64_t iv = l.i;
             if constexpr (rtti::detail::is_plain_char<UT>::value) {
-                // Plain char keeps its own signed-byte gate: the scalar lane
-                // treats char as an ASCII byte (0..255), which is not the enum
-                // underlying-type range, so reuse would change behavior here.
+                // Plain char keeps its own representable-range gate: the
+                // scalar lane treats char as an ASCII byte (0..255), which is
+                // not the enum's underlying-type range; the gate uses
+                // numeric_limits<UT> so an implementation where plain char is
+                // unsigned still allows the full 0..255 underlying range.
                 if (iv < static_cast<std::int64_t>(
                              (std::numeric_limits<UT>::min)()) ||
                     iv > static_cast<std::int64_t>(
@@ -2694,42 +2719,49 @@ inline result<T> lane_to(const src_lane& l) noexcept {
 
 // std::vector<scalar> target: an array source converts element by element
 // (propagating the first element failure), any non-array scalar source wraps
-// into a single-element vector.
+// into a single-element vector. The noexcept contract is kept by turning a
+// vector allocation failure (reserve / push_back growth) into a clean error
+// instead of a thrown exception; overflow is the resource-limit code for
+// allocation exhaustion (see json.cpp arena exhaustion -> overflow, C-4).
 template <typename T>
 inline result<T> lane_to_vector(const src_lane& l) noexcept {
     using U = typename T::value_type;
     T out;
-    if (l.kind == lane_kind::array) {
-        const value_io* node = l.node;
-        const std::size_t n = node->size();
-        out.reserve(n);
-        for (std::size_t i = 0; i < n; ++i) {
-            value_io* child = node->at(i);
-            if (child == nullptr) {
-                return make_error<T>(error_code::kind_mismatch);
+    try {
+        if (l.kind == lane_kind::array) {
+            const value_io* node = l.node;
+            const std::size_t n = node->size();
+            out.reserve(n);
+            for (std::size_t i = 0; i < n; ++i) {
+                value_io* child = node->at(i);
+                if (child == nullptr) {
+                    return make_error<T>(error_code::kind_mismatch);
+                }
+                error_code e = error_code::ok;
+                const src_lane cl = extract_lane(child, e);
+                if (e != error_code::ok) {
+                    return make_error<T>(e);
+                }
+                const result<U> r = lane_to<U>(cl);
+                if (!r.ok()) {
+                    return make_error<T>(r.err.code);
+                }
+                out.push_back(std::move(r.value));
             }
-            error_code e = error_code::ok;
-            const src_lane cl = extract_lane(child, e);
-            if (e != error_code::ok) {
-                return make_error<T>(e);
-            }
-            const result<U> r = lane_to<U>(cl);
-            if (!r.ok()) {
-                return make_error<T>(r.err.code);
-            }
-            out.push_back(std::move(r.value));
+            return make_ok<T>(std::move(out));
         }
+        if (l.kind == lane_kind::none) {
+            return make_error<T>(error_code::kind_mismatch);
+        }
+        const result<U> r = lane_to<U>(l);
+        if (!r.ok()) {
+            return make_error<T>(r.err.code);
+        }
+        out.push_back(std::move(r.value));
         return make_ok<T>(std::move(out));
+    } catch (const std::bad_alloc&) {
+        return make_error<T>(error_code::overflow);
     }
-    if (l.kind == lane_kind::none) {
-        return make_error<T>(error_code::kind_mismatch);
-    }
-    const result<U> r = lane_to<U>(l);
-    if (!r.ok()) {
-        return make_error<T>(r.err.code);
-    }
-    out.push_back(std::move(r.value));
-    return make_ok<T>(std::move(out));
 }
 
 // Shared strict-conversion body used by cast/to (and, through them, as).
