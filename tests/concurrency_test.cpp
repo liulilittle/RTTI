@@ -10,12 +10,18 @@
 //      re-registration is idempotent (ok), conflicting number/name reuse is
 //      rejected (proto_bad_field); after join every registered entry must be
 //      visible and consistently queryable.
+// Case 1 exercises only the desc registry and therefore compiles in every
+// build (including stripped PROTO=OFF). Cases 2 and 3 additionally exercise
+// the proto extension registry; they need <rtti/proto.hpp>, which hard-errors
+// when the proto gate is off, so they are compiled only under RTTI_ENABLE_PROTO.
 // Standard library only: <thread>/<atomic>/<vector>. English comments only.
 
 #include "test_harness.hpp"
 #include <rtti/reflect.hpp>
-#include <rtti/proto.hpp>
 #include <rtti/error.hpp>
+#if RTTI_ENABLE_PROTO
+#include <rtti/proto.hpp>
+#endif
 
 #include <atomic>
 #include <cstdint>
@@ -212,6 +218,8 @@ RTTI_TEST_CASE(ConcurDescRegistryConcurrentMaterialization) {
     RTTI_CHECK(rtti::detail::find_desc(typeid(ConcurRecE)) == expected[4]);
     RTTI_CHECK(rtti::detail::find_desc(typeid(ConcurRecF)) == expected[5]);
 }
+
+#if RTTI_ENABLE_PROTO
 
 // Case 2: concurrent writes into the proto extension registry. Storm layout:
 //   * phase A -- all threads add the same 5 descriptors (numbers 5001..5005):
@@ -521,3 +529,5 @@ RTTI_TEST_CASE(ConcurProtoRegistryMixedReadersWriters) {
     extension_registry::global().clear();
     RTTI_CHECK_EQ(extension_registry::global().size(), std::size_t(0));
 }
+
+#endif  // RTTI_ENABLE_PROTO
