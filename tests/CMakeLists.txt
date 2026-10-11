@@ -1,5 +1,6 @@
 set(RTTI_TEST_SOURCES
     test_main.cpp
+    private_field_test.cpp
     reflection_smoke.cpp
     error_test.cpp
     memory_test.cpp

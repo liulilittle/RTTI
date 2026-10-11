@@ -1393,6 +1393,11 @@ void for_each_enum(Fn&& fn) {
 
 enum class type_kind { boolean, integer, real, string, container, reflected, enum_type };
 
+// Compile-time access level of a reflected field (member_access). The trailing
+// underscore names dodge the public/protected/private keywords. Values are the
+// conventional 1/2/3 so they are stable across the ABI and easy to compare.
+enum class member_access : uint8_t { public_ = 1, protected_ = 2, private_ = 3 };
+
 enum class container_family {
     vector, list, map, unordered_map, set, unordered_set,
     queue, stack, priority_queue
@@ -1405,10 +1410,12 @@ struct enum_desc;
 
 using type_resolver = const type_desc* (*)();
 
-// One field of a reflected struct: name plus an on-demand type resolver.
+// One field of a reflected struct: name plus an on-demand type resolver, plus
+// the compile-time member-access level (public_ / protected_ / private_).
 struct field_type_desc {
     const char* name;
     type_resolver resolve;
+    member_access access = member_access::private_;
 
     // Resolves (and caches via the target's static) the field's type_desc.
     const type_desc* type() const noexcept { return resolve(); }
@@ -3620,13 +3627,101 @@ inline const method_info* methods() noexcept {
 
 } // namespace rtti
 
+// ---------------------------------------------------------------------------
+// Member-access-level probes (spec: private/protected field reflection).
+//
+// The probes below classify a registered field's access level (public /
+// protected / private) at compile time through two SFINAE contexts:
+//
+//   rtti_access_ext_<field><U>  -- namespace-scope (non-friend) context:
+//                                  `&U::f` forms iff the member is public.
+//   rtti_access_der_<field><U>  -- a class DERIVED from U (non-friend): its
+//                                  body context sees public + protected.
+//
+// Combined: public  -> ext true,
+//           protected -> ext false, derived true,
+//           private  -> both false (friend/class-only).
+//
+// The probe pair is emitted as nested templates of a per-type namespace-scope
+// specialization `rtti_access_holder<T>` (declared once below, specialized by
+// the registration macros). The holder is NOT a member of fields_of<T> and is
+// NOT a friend of T: the SFINAE access checks are evaluated at namespace-scope
+// points of instantiation, so a `friend struct ::rtti::fields_of<T>;` grant
+// (RTTI_FRIEND_FIELDS) used to form `&T::f` does not leak into the probes.
+namespace rtti {
+namespace detail {
+
+// Per-type holder of the per-field access probes. The registration macros emit
+// a specialization (namespace scope) that declares `rtti_access_ext_<f>` and
+// `rtti_access_der_<f>` nested templates for every field.
+template <typename T>
+struct rtti_access_holder;
+
+// Maps a field's (ext, derived) probe results to a member_access value.
+template <typename T, typename ExtProbe, typename DerProbe>
+struct rtti_access_of {
+    static constexpr member_access value =
+        ExtProbe::value ? member_access::public_
+                        : (DerProbe::value ? member_access::protected_
+                                           : member_access::private_);
+};
+
+// Declares the ext + derived probe pair for one field inside a holder.
+// `decltype(&U::f)` (pointer formation) is access-checked at namespace-scope
+// POI on MSVC even from a friend-reference context, unlike a plain `U::f`
+// member-type access, so pointer formation is the correct probe expression.
+#define RTTI_FIELD_ACCESS_PROBE(T, f)                                          \
+    template <typename U, typename = void>                                     \
+    struct rtti_access_ext_##f : std::false_type {};                          \
+    template <typename U>                                                      \
+    struct rtti_access_ext_##f<U, std::void_t<decltype(&U::f)>> :              \
+        std::true_type {};                                                     \
+    template <typename U>                                                      \
+    struct rtti_access_der_##f : U {                                           \
+        template <typename S, typename = void>                                 \
+        struct inner : std::false_type {};                                     \
+        template <typename S>                                                  \
+        struct inner<S, std::void_t<decltype(&S::f)>> : std::true_type {};     \
+        static constexpr bool value = inner<rtti_access_der_##f<U>>::value;    \
+    };
+
+} // namespace detail
+} // namespace rtti
+
+// Access-level of the I-th reflected field of T. Also reachable as the
+// `access` member of the field's field_type_desc entry (fields_of<T>::desc[i]).
+// Lives in the rtti namespace (public API).
+namespace rtti {
+
+template <typename T>
+constexpr member_access field_access_of(std::size_t index) noexcept {
+    return fields_of<T>::desc[index].access;
+}
+
+} // namespace rtti
+
 #define RTTI_FIELD_DECL(T, f)                                                 \
     static inline const ::rtti::typed_field_access<T, decltype(T::f)> rtti_acc_##f{ \
         #f, &T::f, &typeid(decltype(T::f))};
 
 #define RTTI_FIELD_REF(T, f) &rtti_acc_##f,
 
-#define RTTI_FIELD_TYPE_DESC(T, f) { #f, &::rtti::type_of<decltype(T::f)> },
+// Compile-time member_access of field f of T, via the per-type probe pair
+// declared in `rtti_access_holder<T>` (namespace-scope, non-friend).
+#define RTTI_FIELD_ACCESS_VALUE(T, f)                                         \
+    ::rtti::detail::rtti_access_of<T,                                         \
+        ::rtti::detail::rtti_access_holder<T>::rtti_access_ext_##f<T>,        \
+        ::rtti::detail::rtti_access_holder<T>::rtti_access_der_##f<T>>::value
+
+#define RTTI_FIELD_TYPE_DESC(T, f)                                             \
+    { #f, &::rtti::type_of<decltype(T::f)>, RTTI_FIELD_ACCESS_VALUE(T, f) },
+
+// Grants the non-intrusive field-table (fields_of<T>) friend access to T, so
+// `&T::f` may take the address of private/protected fields for reflection.
+// Place INSIDE the class body, pairing with RTTI_DEFINE_TYPE(T, ...) at
+// namespace scope. Intrusive registration (RTTI_DEFINE_TYPE_INTRUSIVE) forms
+// `&T::f` inside the class itself and needs no friend.
+#define RTTI_FRIEND_FIELDS(T) friend struct ::rtti::fields_of<T>;
 
 // Typed member-pointer table of a type's OWN fields (spec 19). Declared by the
 // registration macros next to the accessor tables; the derived-merge machinery
@@ -3732,11 +3827,19 @@ inline const method_info* methods() noexcept {
 #define RTTI_MEMBER_VALUES_OPT(T, ...) \
     RTTI_CAT2(RTTI_MEMBER_VALUES_OPT_SEL_, RTTI_IS_EMPTY(__VA_ARGS__))(T, __VA_ARGS__)
 
-// Non-intrusive registration at namespace scope (public members).
-// The specialization is wrapped in an rtti namespace block so MSVC accepts
-// explicit-specialization-while-inside-another-namespace.
+// Non-intrusive registration at namespace scope. The type is wrapped in an
+// rtti namespace block so MSVC accepts explicit-specialization-while-inside-
+// another-namespace. A per-field access-probe holder specialization is emitted
+// first (namespace scope, NOT a member of fields_of) so the desc table can
+// resolve each field's member_access through it.
 #define RTTI_DEFINE_TYPE(T, ...)                                              \
     namespace rtti {                                                          \
+    namespace detail {                                                        \
+    template <>                                                               \
+    struct rtti_access_holder<T> {                                            \
+        RTTI_APPLY_OPT(RTTI_FIELD_ACCESS_PROBE, T, __VA_ARGS__)               \
+    };                                                                        \
+    }                                                                         \
     template <>                                                               \
     struct fields_of<T> {                                                     \
         static constexpr std::size_t count =                                   \
@@ -3759,7 +3862,8 @@ inline const method_info* methods() noexcept {
 // Non-intrusive registration of a derived type (spec 19). `Base`'s reflected
 // fields merge into T's field table, base-first, through offset-correct
 // D-anchored accessors (virtual/non-virtual inheritance both work), and
-// Base's type_id is recorded in T's runtime base chain.
+// Base's type_id is recorded in T's runtime base chain. Like RTTI_DEFINE_TYPE,
+// the per-field access-probe holder is specialized at namespace scope first.
 #define RTTI_DEFINE_TYPE_DERIVED(T, Base, ...)                                \
     namespace rtti {                                                          \
     template <>                                                               \
@@ -3768,6 +3872,12 @@ inline const method_info* methods() noexcept {
     };                                                                         \
     }                                                                          \
     namespace rtti {                                                          \
+    namespace detail {                                                        \
+    template <>                                                               \
+    struct rtti_access_holder<T> {                                            \
+        RTTI_APPLY_OPT(RTTI_FIELD_ACCESS_PROBE, T, __VA_ARGS__)               \
+    };                                                                        \
+    }                                                                         \
     template <>                                                               \
     struct fields_of<T> {                                                     \
         static constexpr std::size_t base_count =                             \
@@ -3808,6 +3918,20 @@ inline const method_info* methods() noexcept {
 // class scope); fields_of inherits it. The friend declaration is not needed
 // for the member-pointer accessors (access is checked at &T::f, which is
 // inside the class), but documents intent and guards future reach-in.
+// Member access CANNOT be classified for intrusive types: any access probe
+// declared inside the class body is itself a member of T (via the nested
+// rtti_registration), so it sees private/protected members and public ones
+// alike. A separate namespace-scope probe is impossible while T is still
+// incomplete inside its own body, so intrusive fields all report private_ --
+// the conservative documented boundary (unknown == private_, matching
+// field_type_desc::access's default).
+#define RTTI_FIELD_ACCESS_INTRUSIVE(T, f)                                     \
+    static constexpr ::rtti::member_access rtti_access_##f =                  \
+        ::rtti::member_access::private_;
+
+#define RTTI_FIELD_TYPE_DESC_INTRUSIVE(T, f)                                 \
+    { #f, &::rtti::type_of<decltype(T::f)>, rtti_access_##f },
+
 #define RTTI_DEFINE_TYPE_INTRUSIVE(T, ...)                                    \
     struct rtti_registration {                                                \
         static constexpr std::size_t count =                                   \
@@ -3817,13 +3941,14 @@ inline const method_info* methods() noexcept {
         static inline const members_type members =                            \
             members_type{ RTTI_MEMBER_VALUES_OPT(T, __VA_ARGS__) };           \
         RTTI_APPLY_OPT(RTTI_FIELD_DECL, T, __VA_ARGS__)                       \
+        RTTI_APPLY_OPT(RTTI_FIELD_ACCESS_INTRUSIVE, T, __VA_ARGS__)           \
         static inline const ::rtti::field_access_base* const array[            \
             (count > 0 ? count : 1)] = {                                      \
             RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
         };                                                                     \
         static inline const ::rtti::field_type_desc desc[                      \
             (count > 0 ? count : 1)] = {                                      \
-            RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC, T, __VA_ARGS__)              \
+            RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC_INTRUSIVE, T, __VA_ARGS__)     \
         };                                                                     \
     };
 
