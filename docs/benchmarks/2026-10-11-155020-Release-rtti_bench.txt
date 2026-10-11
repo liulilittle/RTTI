@@ -1,0 +1,12 @@
+﻿benchmark   : rtti_bench
+compiler    : MSVC 19.44.35229
+config      : Release (NDEBUG defined)
+cpu         : AMD Ryzen 9 7945HX with Radeon Graphics
+logical cpus: 32
+method      : steady_clock wall time; 7 timed samples, median ns/op
+timed iters per sample: field_walk 100000000, get_set_by_name 10000000, reflect_roundtrip 1000000 (warm-up run first)
+min/max = fastest/slowest of 7 samples, median = middle
+
+field_walk                   median   780919329 ops/s  (min   775553920, max   800901495)  0.125-0.129 s, 7 samples, total 39400000000
+get_set_by_name              median   115854047 ops/s  (min   113948037, max   116830346)  0.086-0.088 s, 7 samples, total 9999999
+reflect_roundtrip            median      878643 ops/s  (min      828760, max     1263947)  0.791-1.207 s, 7 samples, total 500001500000

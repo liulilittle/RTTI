@@ -1,0 +1,21 @@
+﻿sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 63.0 MB/s       63.0 it/s  (0.476 s, 30 iters, checksum 341910)
+xml parse                  46.9 MB/s       46.9 it/s  (0.640 s, 30 iters, checksum 314550)
+sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 65.2 MB/s       65.2 it/s  (0.460 s, 30 iters, checksum 341910)
+xml parse                  45.5 MB/s       45.5 it/s  (0.659 s, 30 iters, checksum 314550)
+sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 62.2 MB/s       62.2 it/s  (0.482 s, 30 iters, checksum 341910)
+xml parse                  45.0 MB/s       45.0 it/s  (0.666 s, 30 iters, checksum 314550)
+sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 64.3 MB/s       64.3 it/s  (0.466 s, 30 iters, checksum 341910)
+xml parse                  41.9 MB/s       41.9 it/s  (0.717 s, 30 iters, checksum 314550)
+sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 68.2 MB/s       68.2 it/s  (0.440 s, 30 iters, checksum 341910)
+xml parse                  45.7 MB/s       45.7 it/s  (0.656 s, 30 iters, checksum 314550)
+sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 64.1 MB/s       64.1 it/s  (0.468 s, 30 iters, checksum 341910)
+xml parse                  44.0 MB/s       44.0 it/s  (0.682 s, 30 iters, checksum 314550)
+sources: json=1048525 bytes, xml=1048513 bytes
+json parse                 64.4 MB/s       64.4 it/s  (0.466 s, 30 iters, checksum 341910)
+xml parse                  45.2 MB/s       45.2 it/s  (0.664 s, 30 iters, checksum 314550)

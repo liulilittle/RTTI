@@ -1,0 +1,26 @@
+﻿benchmark   : rtti_bench_new
+compiler    : MSVC 19.44.35229
+config      : Release (NDEBUG defined)
+cpu         : AMD Ryzen 9 7945HX with Radeon Graphics
+logical cpus: 32
+method      : steady_clock wall time; 7 timed samples, median ns/op
+timed iters: 20000000 per sample (warm-up 312500); min/max = fastest/slowest of 7
+
+== enum traversal (count/name/value) ==
+enum_count<Color>                  median       1.02 ns/op  (min      1.02, max      1.05, 20000000 iters, median of 7)
+enum_name_at<Color>                median       1.63 ns/op  (min      1.62, max      1.64, 20000000 iters, median of 7)
+enum_value_at<Color>               median       1.63 ns/op  (min      1.62, max      1.64, 20000000 iters, median of 7)
+for_each_enum<Color>               median       1.30 ns/op  (min      1.29, max      1.85, 20000000 iters, median of 7)
+
+== empty enums (count 0) ==
+enum_count<Empty>                  median       1.63 ns/op  (min      1.62, max      1.63, 20000000 iters, median of 7)
+for_each_enum<Empty>               median       1.60 ns/op  (min      1.59, max      1.63, 20000000 iters, median of 7)
+
+== for_each_field (base+derived, 4 merged fields) ==
+for_each_field<Derived> names      median       1.83 ns/op  (min      1.83, max      1.84, 20000000 iters, median of 7)
+for_each_field(obj, values)        median      11.40 ns/op  (min     11.35, max     14.68, 20000000 iters, median of 7)
+
+== for_each_template_arg ==
+template_arg_count<pair<int,string>> median       1.21 ns/op  (min      1.18, max      1.25, 20000000 iters, median of 7)
+for_each_template_arg<pair<int,string>> median       5.10 ns/op  (min      5.00, max      5.23, 20000000 iters, median of 7)
+template_arg_count<int> (unreg.)   median       1.94 ns/op  (min      1.15, max      1.96, 20000000 iters, median of 7)
