@@ -25,7 +25,7 @@ struct PrivBase {
 protected:
     int bprot = 2;
 private:
-    int bpriv = 3;
+    [[maybe_unused]] int bpriv = 3;
     RTTI_FRIEND_FIELDS(PrivBase)
 };
 
@@ -166,5 +166,3 @@ RTTI_TEST_CASE(intrusive_access_level_boundary) {
     RTTI_CHECK_EQ(d[1].access, member_access::private_);
     RTTI_CHECK_EQ(d[2].access, member_access::private_);
 }
-
-RTTI_TEST_MAIN()

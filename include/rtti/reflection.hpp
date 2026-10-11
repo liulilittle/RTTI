@@ -3853,7 +3853,7 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
             (count > 0 ? count : 1)] = {                                      \
             RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
         };                                                                     \
-        static inline const field_type_desc desc[(count > 0 ? count : 1)] = { \
+        static constexpr field_type_desc desc[(count > 0 ? count : 1)] = {    \
             RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC, T, __VA_ARGS__)              \
         };                                                                     \
     };                                                                          \
@@ -3894,7 +3894,7 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
             (own_count > 0 ? own_count : 1)] = {                              \
             RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
         };                                                                    \
-        static inline const field_type_desc own_desc[                        \
+        static constexpr field_type_desc own_desc[                        \
             (own_count > 0 ? own_count : 1)] = {                              \
             RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC, T, __VA_ARGS__)              \
         };                                                                    \
@@ -3946,7 +3946,7 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
             (count > 0 ? count : 1)] = {                                      \
             RTTI_APPLY_OPT(RTTI_FIELD_REF, T, __VA_ARGS__)                    \
         };                                                                     \
-        static inline const ::rtti::field_type_desc desc[                      \
+        static constexpr ::rtti::field_type_desc desc[                      \
             (count > 0 ? count : 1)] = {                                      \
             RTTI_APPLY_OPT(RTTI_FIELD_TYPE_DESC_INTRUSIVE, T, __VA_ARGS__)     \
         };                                                                     \
