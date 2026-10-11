@@ -5,19 +5,23 @@
 // one-definition rule. Anything that only READS the counters can live here:
 // a snapshot object turns "this section must not leak" into an assertion the
 // same way the original string_convert test did, but from any test TU.
-// English comments only.
+// The counters are relaxed atomics: the concurrency cases allocate from
+// worker threads while readers may sample the balance, and the assertions
+// only need atomicity, not ordering. English comments only.
 
 #pragma once
 
+#include <atomic>
+
 namespace rtti_test_lib {
 
-inline long long& g_rttileak_allocs() {
-    static long long n = 0;
+inline std::atomic<long long>& g_rttileak_allocs() {
+    static std::atomic<long long> n{0};
     return n;
 }
 
-inline long long& g_rttileak_live() {
-    static long long n = 0;
+inline std::atomic<long long>& g_rttileak_live() {
+    static std::atomic<long long> n{0};
     return n;
 }
 
@@ -26,9 +30,16 @@ inline long long& g_rttileak_live() {
 // captured here). Reusable by any test that includes this header.
 class leak_snapshot {
 public:
-    leak_snapshot() noexcept : base_(g_rttileak_live()) {}
-    long long live() const noexcept { return g_rttileak_live() - base_; }
-    long long allocated() const noexcept { return g_rttileak_allocs(); }
+    leak_snapshot() noexcept : base_(g_rttileak_live().load(std::memory_order_relaxed)) {}
+    long long live() const noexcept {
+        return g_rttileak_live().load(std::memory_order_relaxed) - base_;
+    }
+    long long allocated() const noexcept {
+        // Absolute cumulative allocation count since program start (not a
+        // delta against this snapshot); for leak checks compare live()
+        // against the snapshot instead.
+        return g_rttileak_allocs().load(std::memory_order_relaxed);
+    }
 
 private:
     long long base_;

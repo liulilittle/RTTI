@@ -94,6 +94,12 @@ inline int run_all(int argc, char** argv) {
     if (filter != nullptr) {
         std::fprintf(stderr, "[FILTER] '%s': %d run, %d skipped\n",
                      filter, run, skipped);
+        // A zero-match filter is worth a loud warning (a typo in --filter
+        // must not pass silently), but the exit code stays unchanged so
+        // local probe-style invocations keep working.
+        if (run == 0) {
+            std::fprintf(stderr, "[FILTER] no test matched '%s'\n", filter);
+        }
     }
     return summary();
 }

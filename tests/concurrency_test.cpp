@@ -396,10 +396,12 @@ RTTI_TEST_CASE(ConcurProtoRegistryConcurrentWrites) {
 }
 
 // Case 3: mixed readers + writers on the extension registry. Writers keep
-// registering (bounded workload) while readers hammer find/find_by_name/size
+// registering (bounded workload) while readers hammer find/find_by_name
 // concurrently; readers must only ever observe consistent entries (number
-// and name always pair up, pointers stay stable). Readers self-terminate
-// once every writer finished, so the join cannot deadlock.
+// and name always pair up, pointers stay stable). Each writer flips a done
+// flag when its loop ends (success or not) and readers stop once all writers
+// are done, so an unexpected add rejection fails the joined assertions
+// instead of deadlocking the reader spin.
 RTTI_TEST_CASE(ConcurProtoRegistryMixedReadersWriters) {
     using rtti::error_code;
     using rtti::proto::extension_desc;
@@ -410,6 +412,7 @@ RTTI_TEST_CASE(ConcurProtoRegistryMixedReadersWriters) {
     RTTI_CHECK_EQ(extension_registry::global().size(), std::size_t(0));
 
     std::atomic<bool> go{false};
+    std::atomic<bool> done{false};
     std::atomic<int> registered_ok{0};
     std::atomic<int> writer_rejects{0};
     std::atomic<int> reader_violations{0};
@@ -434,15 +437,20 @@ RTTI_TEST_CASE(ConcurProtoRegistryMixedReadersWriters) {
                 writer_rejects.fetch_add(1, std::memory_order_relaxed);
             }
         }
+        // Unconditionally release the readers whether the workload completed
+        // or adds were rejected; the joined assertions judge the outcome.
+        done.store(true, std::memory_order_release);
     };
 
     auto reader = [&]() {
         while (!go.load(std::memory_order_acquire)) {
         }
-        // Stop once every writer finished (registered_ok reaches the total);
-        // until then every scanned number must pair with its name and every
-        // find() result must be stable under find_by_name().
-        while (registered_ok.load(std::memory_order_acquire) < total_expected) {
+        // Stop once every writer finished (all done flags set, or the
+        // expected total was reached); until then every scanned number must
+        // pair with its name and every find() result must be stable under
+        // find_by_name().
+        while (!done.load(std::memory_order_acquire) &&
+               registered_ok.load(std::memory_order_acquire) < total_expected) {
             for (std::uint32_t wid = 0;
                  wid < static_cast<std::uint32_t>(writers); ++wid) {
                 for (std::uint32_t k = 0; k < 50; ++k) {

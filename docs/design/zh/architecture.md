@@ -130,14 +130,16 @@ convert.hpp):`std::to_chars` 最短往返文本;token 无 `.`/`e`/`E` 时补 `.0
 
 **线程安全。** 两个全局注册表内部自带同步:反射描述符注册表的注册与查询经
 `desc_registry_mutex()` 串行化(`lock_guard` 保护两个入口);proto 注册表以自身
-`std::mutex` 串行化全部描述符写入(稳定节点数据的读取无锁)。`derived_pool<D>`
+`std::mutex` 串行化全部描述符写入。注册表层操作(`find`、`find_by_name`、
+`size`)均持锁,仅持有返回指针后的稳定节点数据读无锁。`derived_pool<D>`
 的合并表经 magic static 构建,初始化线程安全。其余皆非线程安全:文档、
 `memory_arena`、格式树、`ioc` 容器及全部转换入口均假定每对象单线程(或由调用方
 外部同步)。跨线程共享同一容器是调用方契约:容器(对 `ioc` 还包括其服务)必须
 存活到每次使用之后,且访问的串行化由调用方负责。
 
-**ABI。** 本库为 header-only,不承诺跨版本、跨编译器或跨标准库版本的二进制兼容。
-文档标注"ABI 稳定"的类型(如 `field_access` 枚举取值 1/2/3)仅在语义上稳定。
+**ABI。** 模板核心为 header-only;非模板体编译进静态库(`src/*.cpp` →
+`librtti.a`)。不承诺跨版本、跨编译器或跨标准库版本的二进制兼容。
+文档标注"ABI 稳定"的类型(如 `member_access` 枚举取值 1/2/3)仅在语义上稳定。
 不同编译器或不同 `_GLIBCXX_USE_CXX11_ABI`/`_ITERATOR_DEBUG_LEVEL` 设置编译的
 翻译单元混用不受支持;请统一从源码整体重编。
 

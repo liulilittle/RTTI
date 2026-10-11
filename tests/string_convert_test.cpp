@@ -45,8 +45,8 @@
 // ---------------------------------------------------------------------------
 
 void* operator new(std::size_t sz) {
-    ++rtti_test_lib::g_rttileak_allocs();
-    ++rtti_test_lib::g_rttileak_live();
+    rtti_test_lib::g_rttileak_allocs().fetch_add(1, std::memory_order_relaxed);
+    rtti_test_lib::g_rttileak_live().fetch_add(1, std::memory_order_relaxed);
     void* p = std::malloc(sz == 0 ? 1 : sz);
     if (p == nullptr) {
         throw std::bad_alloc();
@@ -54,8 +54,8 @@ void* operator new(std::size_t sz) {
     return p;
 }
 void* operator new[](std::size_t sz) {
-    ++rtti_test_lib::g_rttileak_allocs();
-    ++rtti_test_lib::g_rttileak_live();
+    rtti_test_lib::g_rttileak_allocs().fetch_add(1, std::memory_order_relaxed);
+    rtti_test_lib::g_rttileak_live().fetch_add(1, std::memory_order_relaxed);
     void* p = std::malloc(sz == 0 ? 1 : sz);
     if (p == nullptr) {
         throw std::bad_alloc();
@@ -91,13 +91,13 @@ void operator delete[](void* p, const std::nothrow_t&) noexcept {
 }
 void operator delete(void* p) noexcept {
     if (p != nullptr) {
-        --rtti_test_lib::g_rttileak_live();
+        rtti_test_lib::g_rttileak_live().fetch_sub(1, std::memory_order_relaxed);
         std::free(p);
     }
 }
 void operator delete[](void* p) noexcept {
     if (p != nullptr) {
-        --rtti_test_lib::g_rttileak_live();
+        rtti_test_lib::g_rttileak_live().fetch_sub(1, std::memory_order_relaxed);
         std::free(p);
     }
 }
@@ -860,13 +860,15 @@ RTTI_TEST_CASE(StringConvNoLeakOnFailedSerialize) {
         RTTI_CHECK_EQ(rtti::to_string(h), std::string());
     }
 
-    const long long snap = rtti_test_lib::g_rttileak_live();
+    const long long snap =
+        rtti_test_lib::g_rttileak_live().load(std::memory_order_relaxed);
     constexpr int kIters = 2000;
     for (int i = 0; i < kIters; ++i) {
         RTTI_CHECK_EQ(rtti::to_string(h), std::string());
     }
     // A leak leaves kIters live text_node allocations behind.
-    RTTI_CHECK_EQ(rtti_test_lib::g_rttileak_live(), snap);
+    RTTI_CHECK_EQ(rtti_test_lib::g_rttileak_live().load(std::memory_order_relaxed),
+                  snap);
 }
 
 } // namespace rtti_test_lib

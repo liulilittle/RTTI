@@ -88,8 +88,9 @@ jobs:
       - name: Relink tests against the GCC-built library and run
         run: |
           cp build-gcc/librtti.a build-xlink/librtti.a
-          rm -f build-xlink/rtti_tests \
-                build-xlink/rtti_proto_extension_tests \
-                build-xlink/rtti_flat_schema_tests
+          rm -f build-xlink/tests/rtti_tests \
+                build-xlink/tests/rtti_proto_extension_tests \
+                build-xlink/tests/rtti_flat_schema_tests
           cmake --build build-xlink -j
           ctest --test-dir build-xlink --output-on-failure
+

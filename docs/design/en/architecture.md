@@ -168,7 +168,9 @@ rather than the whole shared stream (R1-8).
 reflection descriptor registry serializes registration and lookup through
 `desc_registry_mutex()` (a `lock_guard` guards both entry points), and the
 proto registry serializes all descriptor writes with its own `std::mutex`
-(reads of stable-node data are lock-free). `derived_pool<D>` builds its merged
+(registry-level `find`/`find_by_name`/`size` calls take the mutex; only reads
+of the stable node data behind a returned pointer are lock-free).
+`derived_pool<D>` builds its merged
 tables behind magic statics, which are thread-safe for initialization. Nothing
 else is thread-safe: documents, `memory_arena`, format trees, `ioc` containers
 and all conversion entry points assume a single thread per object (or external
@@ -176,12 +178,13 @@ synchronization). Sharing one container across threads is a caller contract:
 the container (and, for `ioc`, its services) must outlive every use and the
 caller must serialize access.
 
-**ABI.** The library is header-only; no binary compatibility is promised
-across versions, compilers, or standard-library versions. Types documented as
-"ABI-stable" (e.g. `field_access` enumerator values 1/2/3) are stable in
-semantics only. Mixing translation units built with different compilers or
-`_GLIBCXX_USE_CXX11_ABI`/`_ITERATOR_DEBUG_LEVEL` settings is unsupported;
-rebuild everything from source together.
+**ABI.** The template core is header-only; the non-template bodies compile
+into a static library (`src/*.cpp` → `librtti.a`). No binary compatibility is
+promised across versions, compilers, or standard-library versions. Types
+documented as "ABI-stable" (e.g. `member_access` enumerator values 1/2/3) are
+stable in semantics only. Mixing translation units built with different
+compilers or `_GLIBCXX_USE_CXX11_ABI`/`_ITERATOR_DEBUG_LEVEL` settings is
+unsupported; rebuild everything from source together.
 
 ## 4. Key design decisions & rationale
 

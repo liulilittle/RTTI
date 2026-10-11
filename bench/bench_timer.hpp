@@ -2,7 +2,6 @@
 // Portable RAII steady_clock timer for microbenchmarks.
 // No third-party dependencies; C++17.
 
-#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +13,9 @@
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
 #include <windows.h>
 #endif
@@ -156,35 +158,40 @@ inline unsigned logical_processors() noexcept {
     return n == 0 ? 1 : n;
 }
 
-// Current wall-clock CPU core frequency in GHz, or 0 when unavailable.
-// Windows: best-effort via QueryPerformanceCounter sampling; Linux: reported
-// frequency from /proc/cpuinfo. Thermal state is not directly queryable here,
-// so cross-date comparisons should treat this as an approximate ceiling, not a
-// live measurement.
+// Current CPU core frequency in GHz, or 0 when unavailable. Windows: the
+// TSC is calibrated over a QPC-paced busy window (rdtsc delta divided by
+// elapsed wall seconds), so the QPC counter only paces the window and never
+// feeds the result; Linux: reported frequency from /proc/cpuinfo. Thermal
+// state is not directly queryable here, so cross-date comparisons should
+// treat this as an approximate ceiling, not a live measurement.
 inline double cpu_frequency_ghz() {
 #if defined(_WIN32) && defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
     LARGE_INTEGER freq;
-    LARGE_INTEGER t0;
-    LARGE_INTEGER t1;
+    LARGE_INTEGER qpc0;
+    LARGE_INTEGER qpc1;
     if (!::QueryPerformanceFrequency(&freq) || freq.QuadPart == 0) {
         return 0.0;
     }
-    ::QueryPerformanceCounter(&t0);
+    ::QueryPerformanceCounter(&qpc0);
     std::chrono::steady_clock::time_point s = std::chrono::steady_clock::now();
-    // Busy-wait roughly 10 ms to amortize the counter read overhead.
+    // Busy-wait roughly 10 ms to amortize the counter read overhead; the TSC
+    // is sampled immediately before and after this window so the cycle count
+    // covers exactly the wall time measured below.
     long long ticks = 0;
     const long long target = static_cast<long long>(freq.QuadPart) / 100;
+    const unsigned long long rdtsc0 = __rdtsc();
     while (ticks < target) {
-        ::QueryPerformanceCounter(&t1);
-        ticks = t1.QuadPart - t0.QuadPart;
+        ::QueryPerformanceCounter(&qpc1);
+        ticks = qpc1.QuadPart - qpc0.QuadPart;
     }
+    const unsigned long long rdtsc1 = __rdtsc();
     std::chrono::steady_clock::time_point e = std::chrono::steady_clock::now();
     const double wall_s =
         std::chrono::duration<double>(e - s).count();
     if (wall_s <= 0.0) {
         return 0.0;
     }
-    const double cycles = static_cast<double>(ticks);
+    const double cycles = static_cast<double>(rdtsc1 - rdtsc0);
     return cycles / wall_s / 1e9;
 #elif defined(__linux__)
     // /proc/cpuinfo "cpu MHz" reflects the current per-core frequency on most
@@ -284,7 +291,7 @@ inline void print_environment(const char* benchmark, int samples) {
     std::printf("logical cpus: %u\n", logical_processors());
     const double ghz = cpu_frequency_ghz();
     if (ghz > 0.0) {
-        std::printf("cpu freq    : %.3f GHz (sampled wall-clock; ~ceiling, not live)\n", ghz);
+        std::printf("cpu freq    : %.3f GHz (rdtsc calibrated; ~ceiling, not live)\n", ghz);
     } else {
         std::printf("cpu freq    : n/a\n");
     }
@@ -294,7 +301,12 @@ inline void print_environment(const char* benchmark, int samples) {
     } else {
         std::printf("sys load    : n/a\n");
     }
-    std::printf("method      : steady_clock wall time; %d timed samples, median ns/op\n", samples);
+    // Omit the method line when the caller has no timed samples to report
+    // (e.g. a parse benchmark that reports iters, not samples).
+    if (samples > 0) {
+        std::printf("method      : steady_clock wall time; %d timed samples, median ns/op\n",
+                    samples);
+    }
 }
 
 } // namespace rtti_bench
