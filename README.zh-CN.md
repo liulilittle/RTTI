@@ -619,8 +619,9 @@ wire codec 恒编入 `rtti` 静态库,`<rtti/flat.hpp>` 仍可 include——头�
 通过完整测试**(各自使用独立 scratch 目录,configure 后立即读回
 `CMakeCache.txt` 核验 `RTTI_ENABLE_*` 实际值)。断言数随门开单调递增——
 2026-10-08 完整 64 组合扫描(全部组合 `0 failures`,零警告)从全关 `32790`
-到全开 `55696`;当前代码树(含 cast/as 变体转换测试与反射遍历 API)实测全关
-`32872`、全开 `55847`。扫描脚本(`.opencode/batch_strip.ps1` +
+到全开 `55696`;当前代码树(2026-10-12,含 cast/as 变体转换测试、反射遍历
+API 与门控无关的 desc_registry 并发用例)实测全关
+`33487`、全开 `57081`。扫描脚本(`.opencode/batch_strip.ps1` +
 `.opencode/strip_matrix.ps1`)按开启门数分组如下:
 
 | 开启门数 | 运行组合数 | rtti_tests 断言数范围 |

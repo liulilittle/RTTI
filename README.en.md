@@ -693,8 +693,9 @@ independently** (each in its own scratch directory, with the `CMakeCache.txt`
 `RTTI_ENABLE_*` values verified right after configure). Assertions grow
 monotonically as gates are added. The 2026-10-08 full 64-combo sweep (all
 combinations `0 failures`, zero warnings) ran from `32790` all-off to `55696`
-all-on; the current tree (with the cast/as variance tests and the reflection
-traversal APIs) measures `32872` all-off and `55847` all-on. The sweep
+all-on; the current tree (2026-10-12, with the cast/as variance tests, the
+reflection traversal APIs, and the gate-independent desc-registry concurrency
+case) measures `33487` all-off and `57081` all-on. The sweep
 (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
 grouped by gate count:
 
