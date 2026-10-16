@@ -1513,7 +1513,7 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 
 ## 18. 宏设施
 
-有界实参计数 + 平展迭代。迭代预展开且非递归;每个 `RTTI_APPLY_N` 每实参展开一次 `M`。上限(16)仅为保持宏有界;字段计数上限不是反射类型的设计限制。
+有界实参计数 + 平展迭代。迭代预展开且非递归;每个 `RTTI_APPLY_N` 每实参展开一次 `M`。上限(64)仅为保持宏有界;字段计数上限不是反射类型的设计限制。
 
 ### 18.1 基本助手
 
@@ -1559,22 +1559,23 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 ### 18.3 实参计数
 
 ```cpp
-#define RTTI_NARG_I(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, \
-                    _14, _15, _16, N, ...)                                   \
+// The real definitions enumerate all 64 counting slots (_1 .. _64) and the
+// full 64..0 default-count tail; abbreviated here for readability.
+#define RTTI_NARG_I(_1, _2, _3, ..., _63, _64, N, ...) \
     N
-#define RTTI_NARG(...)                                                        \
-    RTTI_NARG_I(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define RTTI_NARG(...) \
+    RTTI_NARG_I(__VA_ARGS__, 64, 63, ..., 1, 0)
 ```
 
-计数实参 0..16。单级形式(`RTTI_NARG` → `RTTI_NARG_I`,无中间 variadic 宏)是 MSVC 合规预处理器所需。注意:**空列表目前得 1**;空 `RTTI_DEFINE_TYPE`(零字段)情形经 `RTTI_IS_EMPTY` 另行处理。
+计数实参 0..64。单级形式(`RTTI_NARG` → `RTTI_NARG_I`,无中间 variadic 宏)是 MSVC 合规预处理器所需。注意:**空列表目前得 1**;空 `RTTI_DEFINE_TYPE`(零字段)情形经 `RTTI_IS_EMPTY` 另行处理。超过 64 个实参为硬编译错：第 65 个 token 被当作计数，按计数的展开宏（`RTTI_APPLY_f65`、`RTTI_MEMBER_TYPES_f65` 等）未定义（C2061/C3861 类诊断）。
 
-### 18.4 平展迭代:`RTTI_APPLY_0` .. `RTTI_APPLY_16`、`RTTI_APPLY`、`RTTI_APPLY_OPT`
+### 18.4 平展迭代:`RTTI_APPLY_0` .. `RTTI_APPLY_64`、`RTTI_APPLY`、`RTTI_APPLY_OPT`
 
 ```cpp
 #define RTTI_APPLY_0(M, T)
 #define RTTI_APPLY_1(M, T, a1) M(T, a1)
 #define RTTI_APPLY_2(M, T, a1, a2) M(T, a1) M(T, a2)
-// ... 直到 RTTI_APPLY_16(M, T, a1, ..., a16)
+// ... 直到 RTTI_APPLY_64(M, T, a1, ..., a64)
 
 #define RTTI_APPLY(M, T, ...) \
     RTTI_EXPAND(RTTI_CAT(RTTI_APPLY_, RTTI_NARG(__VA_ARGS__))(M, T, __VA_ARGS__))
@@ -1638,13 +1639,13 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 
 ### 19.2 `RTTI_MEMBER_TYPES_*` / `RTTI_MEMBER_TYPES_OPT`
 
-按计数逗号连接的宏,产出 `decltype(&T::aN)` 成员指针类型表(无尾逗号;MSVC 拒绝模板实参表尾逗号)。整套覆盖计数 0..16:
+按计数逗号连接的宏,产出 `decltype(&T::aN)` 成员指针类型表(无尾逗号;MSVC 拒绝模板实参表尾逗号)。整套覆盖计数 0..64:
 
 ```cpp
 #define RTTI_MEMBER_TYPES_0(T)
 #define RTTI_MEMBER_TYPES_1(T, a1) decltype(&T::a1)
 #define RTTI_MEMBER_TYPES_2(T, a1, a2) decltype(&T::a1), decltype(&T::a2)
-// ... 直到 RTTI_MEMBER_TYPES_16(T, a1, ..., a16)
+// ... 直到 RTTI_MEMBER_TYPES_64(T, a1, ..., a64)
 
 #define RTTI_MEMBER_TYPES_OPT_SEL_1(T, ...)
 #define RTTI_MEMBER_TYPES_OPT_SEL_0(T, ...) \
@@ -1661,7 +1662,7 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 #define RTTI_MEMBER_VALUES_0(T)
 #define RTTI_MEMBER_VALUES_1(T, a1) &T::a1
 #define RTTI_MEMBER_VALUES_2(T, a1, a2) &T::a1, &T::a2
-// ... 直到 RTTI_MEMBER_VALUES_16(T, a1, ..., a16)
+// ... 直到 RTTI_MEMBER_VALUES_64(T, a1, ..., a64)
 
 #define RTTI_MEMBER_VALUES_OPT_SEL_1(T, ...)
 #define RTTI_MEMBER_VALUES_OPT_SEL_0(T, ...) \
@@ -1703,7 +1704,7 @@ assert(r2.ok() && r2.value.as_integer() == 12);
     }
 ```
 
-**参数**:`T` — 反射类型;`...` — 公共成员名,声明序(至多 16;空列表合法,得 `count == 0`)。
+**参数**:`T` — 反射类型;`...` — 公共成员名,声明序(至多 64;空列表合法,得 `count == 0`)。
 
 **效果**:以 `count`、`members_type`、`members`、访问器 `array` 与 `desc` 表特化 `rtti::fields_of<T>`。此后 `is_reflected<T>`、`field_count<T>`、`fields<T>`、`for_each_field`、`type_of<T>()` 等都可用。
 
@@ -1854,13 +1855,13 @@ assert(rtti::field_count<Point>() == 2);
 
 ## 22. 模板信息注册宏
 
-### 22.1 实参表助手 `RTTI_TEMPLATE_ARGS_1` .. `RTTI_TEMPLATE_ARGS_16`
+### 22.1 实参表助手 `RTTI_TEMPLATE_ARGS_1` .. `RTTI_TEMPLATE_ARGS_64`
 
 按计数逗号连接的宏,展开模板实参表而无尾逗号(MSVC 拒绝模板实参表尾逗号)。
 
 ### 22.2 空感知选择器与括号包裹实参
 
-含逗号的类型-id(如 `std::pair<int,int>`)作为单实参以额外括号包裹传入:`RTTI_TEMPLATE_INFO(FnPair, (std::pair<int,int>))`。`RTTI_IS_EMPTY` 无法区分 `(...)` 与 `()`,故选择器**先**查是否以括号开头;每个元素经条件单层括号剥除器(`RTTI_TAO_UNPAREN`、`RTTI_TAO_ELEM`、按计数的 `RTTI_TAO_STRIP_1`..`RTTI_TAO_STRIP_16`、`RTTI_TAO_STRIP`)。于是 `RTTI_TEMPLATE_INFO(Fn, int, (std::pair<int,int>))` 产出 `Fn<int, std::pair<int,int>>`。
+含逗号的类型-id(如 `std::pair<int,int>`)作为单实参以额外括号包裹传入:`RTTI_TEMPLATE_INFO(FnPair, (std::pair<int,int>))`。`RTTI_IS_EMPTY` 无法区分 `(...)` 与 `()`,故选择器**先**查是否以括号开头;每个元素经条件单层括号剥除器(`RTTI_TAO_UNPAREN`、`RTTI_TAO_ELEM`、按计数的 `RTTI_TAO_STRIP_1`..`RTTI_TAO_STRIP_64`、`RTTI_TAO_STRIP`)。于是 `RTTI_TEMPLATE_INFO(Fn, int, (std::pair<int,int>))` 产出 `Fn<int, std::pair<int,int>>`。
 
 ### 22.3 `RTTI_TEMPLATE_INFO(T, ...)`
 
@@ -1880,7 +1881,7 @@ assert(rtti::field_count<Point>() == 2);
     }
 ```
 
-**参数**:`T` — 类模板;`...` — 其类型实参(至多 16;空列表允许——全默认参数的模板注册为 `T<>`,count 0 空 tuple)。含逗号实参须额外括号包裹。
+**参数**:`T` — 类模板;`...` — 其类型实参(至多 64;空列表允许——全默认参数的模板注册为 `T<>`,count 0 空 tuple)。含逗号实参须额外括号包裹。
 
 **效果**:特化 `template_info<Inst>` 的 `count`、`args`(`std::tuple`)与 `registered`。此后 `is_template_instance`、`template_arg_count`、`template_args`、`template_arg_at`、`template_args_of`、`template_arg_desc_of`、`for_each_template_arg` 都可用。未注册模板实例(或非模板类型)报安全空表。
 
@@ -1992,7 +1993,7 @@ assert(rtti::field_has_attr<Point>("x", "unit"));
 #define RTTI_CTOR_TYPES_0(T)
 #define RTTI_CTOR_TYPES_1(T, a1) RTTI_CTOR_TYPE(a1)
 #define RTTI_CTOR_TYPES_2(T, a1, a2) RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2)
-// ... 直到 RTTI_CTOR_TYPES_16(T, a1, ..., a16)
+// ... 直到 RTTI_CTOR_TYPES_64(T, a1, ..., a64)
 ```
 
 逗号连接的参数类型表(无尾逗号;MSVC 拒绝模板实参表内尾逗号)。
@@ -2143,24 +2144,24 @@ assert(rtti::method_count<Calc>() == 2);
 | 266-805 | `type_id`、`field_value`、`field_value_to`、`value_io`、`field_access_base`、`typed_field_access` |
 | 807-857 | 侵入式 `fields_of` 拾取、`field_count`、`fields`、`for_each_field`、`has_default` |
 | 859-1163 | 属性系统(`attr_arg`、`attr`、表、`make_attr`、查询) |
-| 1165-1266 | 宏设施(`RTTI_NARG`、`RTTI_APPLY`、`RTTI_IS_EMPTY`,…) |
-| 1268-1323 | 枚举反射(`enum_label`、`enum_table`、枚举查询) |
-| 1325-1420 | 类型描述系统(`type_kind`、`type_desc` 族) |
-| 1422-1507 | 编译期判定、家族判别、枚举助手 |
-| 1509-1704 | `type_of` 与 `detail::type_of_impl` |
-| 1706-1804 | 模板实参反射 |
-| 1806-2010 | 派生类型合并机制 |
-| 2012-2397 | 反射构造(`ctor_arg`、`ctor_param`、`ctor_registry`) |
-| 2399-2455 | `as` / `cast` 引用转换 |
-| 2457-2717 | `object_ref<T>` |
-| 2719-2980 | `instance` 类型擦除句柄 |
-| 2982-3075 | 转换助手(`same_type_id`、`derived_from_desc`、`adjust_to`、`scalar_convertible`) |
-| 3077-3517 | 方法反射 |
-| 3520-3630 | 字段注册辅助宏 |
-| 3632-3746 | 类型/枚举注册宏 |
-| 3748-3901 | 模板信息注册宏 |
-| 3903-4056 | 属性/构造器注册宏 |
-| 4058-4145 | 方法注册宏、尾部 include |
+| 1225-1825 | 宏基础（`RTTI_NARG`、`RTTI_APPLY`、`RTTI_IS_EMPTY`，…） |
+| 1826-1890 | 枚举反射（`enum_label`、`enum_table`、枚举查询） |
+| 1891-1975 | 类型描述系统（`type_kind`、`type_desc` 族） |
+| 1976-2072 | 编译期判断、家族判别、枚举助手 |
+| 2073-2279 | `type_of` 与 `detail::type_of_impl` |
+| 2280-2379 | 模板实参反射 |
+| 2380-2629 | 派生类型合并机制 |
+| 2630-3006 | 反射构造（`ctor_arg`、`ctor_param`、`ctor_registry`） |
+| 3008-3064 | `as` / `cast` 引用转换 |
+| 3066-3326 | `object_ref<T>` |
+| 3328-3589 | `instance` 类型擦除句柄 |
+| 3591-3685 | 转换助手（`same_type_id`、`derived_from_desc`、`adjust_to`、`scalar_convertible`） |
+| 3686-4126 | 方法反射 |
+| 4127-5436 | 字段注册助手宏 |
+| 5437-5585 | 类型/枚举注册宏 |
+| 5586-6745 | 模板信息注册宏 |
+| 6747-7605 | 属性/构造器注册宏 |
+| 7606-7676 | 方法注册宏、尾部 include |
 
 ## 27. 其它语言
 

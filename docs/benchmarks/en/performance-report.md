@@ -177,12 +177,12 @@ document produces the same node pool. Source:
 The benchmark numbers above come from the `bench/` microbenchmarks. The
 industrial build matrix is cross-checked by the test suites; every binary below
 exits `0` with zero failures. `rtti_tests` totals were re-verified on
-2026-10-12 (D7 moved the desc-registry concurrency case out of the proto gate,
-raising the gates-off total by its assertions):
+2026-10-16 (the 64-field ladder widening added the `field64_test.cpp` cases;
+the full 64-combo re-sweep is recorded in `strip_matrix_64.txt`):
 
 | Suite | Debug `build/` | Release `build/` | LTCG `build-opt/` | Gates-off `build-off/` |
 | --- | ---: | ---: | ---: | ---: |
-| `rtti_tests` | 57081 | 57081 | 57081 | 33487 |
+| `rtti_tests` | 57653 | 57653 | 57653 | 33794 |
 | `rtti_proto_extension_tests` | 160 | 160 | 160 | — |
 | `rtti_flat_schema_tests` | 408 | 408 | 408 | — |
 

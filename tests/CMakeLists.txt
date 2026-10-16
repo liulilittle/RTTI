@@ -30,6 +30,7 @@ set(RTTI_TEST_SOURCES
     type_judge_test.cpp
     enum_reflect_test.cpp
     field_iteration_test.cpp
+    field64_test.cpp
     template_reflect_test.cpp
     method_reflect_test.cpp
     ioc_test.cpp

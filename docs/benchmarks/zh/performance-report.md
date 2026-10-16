@@ -151,11 +151,11 @@ reflect_roundtrip            median      823474 ops/s  (min      741937, max    
 
 ## 5. 各构建方式的断言基线(测试套件交叉核对)
 
-以上数字来自 `bench/` 微基准。工业化构建矩阵由测试套件交叉核对;下列每个二进制均以退出码 `0`、零失败结束(`rtti_tests` 总数于 2026-10-12 复核——D7 将 desc_registry 并发用例移出 proto 门控,全关构建总数随之增加对应断言数):
+以上数字来自 `bench/` 微基准。工业化构建矩阵由测试套件交叉核对;下列每个二进制均以退出码 `0`、零失败结束(`rtti_tests` 总数于 2026-10-16 复核——64 字段梯子扩容新增 `field64_test.cpp` 用例;全矩阵 64 组合重扫见仓根 `strip_matrix_64.txt`):
 
 | 套件 | Debug `build/` | Release `build/` | LTCG `build-opt/` | 全关 `build-off/` |
 | --- | ---: | ---: | ---: | ---: |
-| `rtti_tests` | 57081 | 57081 | 57081 | 33487 |
+| `rtti_tests` | 57653 | 57653 | 57653 | 33794 |
 | `rtti_proto_extension_tests` | 160 | 160 | 160 | — |
 | `rtti_flat_schema_tests` | 408 | 408 | 408 | — |
 

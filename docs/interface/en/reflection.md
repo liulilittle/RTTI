@@ -1881,7 +1881,7 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 
 ## 18. Macro infrastructure
 
-Bounded argument counting + flat iteration. Iteration is pre-expanded and non-recursive; each `RTTI_APPLY_N` expands `M` once per argument. The ceiling (`16`) exists only to keep macros finite; the field-count cap is not a design limit for reflected types.
+Bounded argument counting + flat iteration. Iteration is pre-expanded and non-recursive; each `RTTI_APPLY_N` expands `M` once per argument. The ceiling (`64`) exists only to keep macros finite; the field-count cap is not a design limit for reflected types.
 
 ### 18.1 Basic helpers
 
@@ -1927,22 +1927,23 @@ Bounded argument counting + flat iteration. Iteration is pre-expanded and non-re
 ### 18.3 Argument counting
 
 ```cpp
-#define RTTI_NARG_I(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, \
-                    _14, _15, _16, N, ...)                                   \
+// The real definitions enumerate all 64 counting slots (_1 .. _64) and the
+// full 64..0 default-count tail; abbreviated here for readability.
+#define RTTI_NARG_I(_1, _2, _3, ..., _63, _64, N, ...) \
     N
-#define RTTI_NARG(...)                                                        \
-    RTTI_NARG_I(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define RTTI_NARG(...) \
+    RTTI_NARG_I(__VA_ARGS__, 64, 63, ..., 1, 0)
 ```
 
-Counts arguments 0..16. The single-level form (`RTTI_NARG` → `RTTI_NARG_I`, no intermediate variadic macro) is required for MSVC's conformant preprocessor. Note: **empty lists currently yield 1**; the empty `RTTI_DEFINE_TYPE` case (zero fields) is handled separately via `RTTI_IS_EMPTY`.
+Counts arguments 0..64. The single-level form (`RTTI_NARG` → `RTTI_NARG_I`, no intermediate variadic macro) is required for MSVC's conformant preprocessor. Note: **empty lists currently yield 1**; the empty `RTTI_DEFINE_TYPE` case (zero fields) is handled separately via `RTTI_IS_EMPTY`. More than 64 arguments is a hard compile error: the 65th token is taken as the count, so the per-count expansion macro (`RTTI_APPLY_f65`, `RTTI_MEMBER_TYPES_f65`, ...) is undefined (C2061/C3861-style diagnostics).
 
-### 18.4 Flat iteration: `RTTI_APPLY_0` .. `RTTI_APPLY_16`, `RTTI_APPLY`, `RTTI_APPLY_OPT`
+### 18.4 Flat iteration: `RTTI_APPLY_0` .. `RTTI_APPLY_64`, `RTTI_APPLY`, `RTTI_APPLY_OPT`
 
 ```cpp
 #define RTTI_APPLY_0(M, T)
 #define RTTI_APPLY_1(M, T, a1) M(T, a1)
 #define RTTI_APPLY_2(M, T, a1, a2) M(T, a1) M(T, a2)
-// ... up to RTTI_APPLY_16(M, T, a1, ..., a16)
+// ... up to RTTI_APPLY_64(M, T, a1, ..., a64)
 
 #define RTTI_APPLY(M, T, ...) \
     RTTI_EXPAND(RTTI_CAT(RTTI_APPLY_, RTTI_NARG(__VA_ARGS__))(M, T, __VA_ARGS__))
@@ -1982,13 +1983,13 @@ Counts arguments 0..16. The single-level form (`RTTI_NARG` → `RTTI_NARG_I`, no
 
 ### 19.2 `RTTI_MEMBER_TYPES_*` / `RTTI_MEMBER_TYPES_OPT`
 
-Per-count comma-joining macros producing the `decltype(&T::aN)` member-pointer-type list (no trailing comma; MSVC rejects trailing commas in template-argument lists). The full set covers counts 0..16:
+Per-count comma-joining macros producing the `decltype(&T::aN)` member-pointer-type list (no trailing comma; MSVC rejects trailing commas in template-argument lists). The full set covers counts 0..64:
 
 ```cpp
 #define RTTI_MEMBER_TYPES_0(T)
 #define RTTI_MEMBER_TYPES_1(T, a1) decltype(&T::a1)
 #define RTTI_MEMBER_TYPES_2(T, a1, a2) decltype(&T::a1), decltype(&T::a2)
-// ... up to RTTI_MEMBER_TYPES_16(T, a1, ..., a16)
+// ... up to RTTI_MEMBER_TYPES_64(T, a1, ..., a64)
 
 #define RTTI_MEMBER_TYPES_OPT_SEL_1(T, ...)
 #define RTTI_MEMBER_TYPES_OPT_SEL_0(T, ...) \
@@ -2005,7 +2006,7 @@ The same pattern producing the member-pointer value list (`&T::a1, &T::a2, ...`)
 #define RTTI_MEMBER_VALUES_0(T)
 #define RTTI_MEMBER_VALUES_1(T, a1) &T::a1
 #define RTTI_MEMBER_VALUES_2(T, a1, a2) &T::a1, &T::a2
-// ... up to RTTI_MEMBER_VALUES_16(T, a1, ..., a16)
+// ... up to RTTI_MEMBER_VALUES_64(T, a1, ..., a64)
 
 #define RTTI_MEMBER_VALUES_OPT_SEL_1(T, ...)
 #define RTTI_MEMBER_VALUES_OPT_SEL_0(T, ...) \
@@ -2081,7 +2082,7 @@ Non-intrusive registration at namespace scope (public members). The specializati
     }
 ```
 
-**Parameters**: `T` — the reflected type; `...` — the public member names, in declaration order (up to 16; an empty list is legal and yields `count == 0`).
+**Parameters**: `T` — the reflected type; `...` — the public member names, in declaration order (up to 64; an empty list is legal and yields `count == 0`).
 
 **Effect**: specializes `rtti::fields_of<T>` with `count`, `members_type`, `members`, the `array` of accessors, and the `desc` table. After use, `is_reflected<T>`, `field_count<T>`, `fields<T>`, `for_each_field`, `type_of<T>()` etc. all work.
 
@@ -2244,14 +2245,14 @@ RTTI_DEFINE_ENUM(Color, Red, Green, Blue)   // namespace scope
 
 ## 22. Template-info registration macros
 
-### 22.1 Argument-list helpers `RTTI_TEMPLATE_ARGS_1` .. `RTTI_TEMPLATE_ARGS_16`
+### 22.1 Argument-list helpers `RTTI_TEMPLATE_ARGS_1` .. `RTTI_TEMPLATE_ARGS_64`
 
 Per-count comma-joining macros expanding the template argument list without a trailing comma (MSVC rejects trailing commas in template-argument lists):
 
 ```cpp
 #define RTTI_TEMPLATE_ARGS_1(a1) a1
 #define RTTI_TEMPLATE_ARGS_2(a1, a2) a1, a2
-// ... up to RTTI_TEMPLATE_ARGS_16(a1, ..., a16)
+// ... up to RTTI_TEMPLATE_ARGS_64(a1, ..., a64)
 ```
 
 ### 22.2 Empty-aware selector and paren-wrapped arguments
@@ -2261,7 +2262,7 @@ Per-count comma-joining macros expanding the template argument list without a tr
 #define RTTI_TEMPLATE_ARGS_OPT_SEL_0(T, ...) RTTI_TAO_STRIP(__VA_ARGS__)
 ```
 
-A type-id that itself contains commas (e.g. `std::pair<int,int>`) is passed as a single argument wrapped in an extra pair of parentheses: `RTTI_TEMPLATE_INFO(FnPair, (std::pair<int,int>))`. `RTTI_IS_EMPTY` cannot tell `(...)` from `()`, so the selectors check begin-with-parenthesis **first**; every element is pushed through a conditional one-level parenthesis stripper (`RTTI_TAO_UNPAREN`, `RTTI_TAO_ELEM`, per-count `RTTI_TAO_STRIP_1`..`RTTI_TAO_STRIP_16`, `RTTI_TAO_STRIP`). Then:
+A type-id that itself contains commas (e.g. `std::pair<int,int>`) is passed as a single argument wrapped in an extra pair of parentheses: `RTTI_TEMPLATE_INFO(FnPair, (std::pair<int,int>))`. `RTTI_IS_EMPTY` cannot tell `(...)` from `()`, so the selectors check begin-with-parenthesis **first**; every element is pushed through a conditional one-level parenthesis stripper (`RTTI_TAO_UNPAREN`, `RTTI_TAO_ELEM`, per-count `RTTI_TAO_STRIP_1`..`RTTI_TAO_STRIP_64`, `RTTI_TAO_STRIP`). Then:
 
 ```cpp
 #define RTTI_TAO_OPT_SEL_0(T, ...) \
@@ -2300,7 +2301,7 @@ Non-intrusive registration of a template instance's argument list at namespace s
     }
 ```
 
-**Parameters**: `T` — the class template; `...` — its type arguments (up to 16; an empty list is allowed for a template with all-defaulted parameters, registering as `T<>` and yielding count 0 with an empty tuple). Arguments containing commas must be wrapped in extra parentheses.
+**Parameters**: `T` — the class template; `...` — its type arguments (up to 64; an empty list is allowed for a template with all-defaulted parameters, registering as `T<>` and yielding count 0 with an empty tuple). Arguments containing commas must be wrapped in extra parentheses.
 
 **Effect**: specializes `template_info<Inst>` with `count`, `args` (a `std::tuple`), and `registered`. After use, `is_template_instance`, `template_arg_count`, `template_args`, `template_arg_at`, `template_args_of`, `template_arg_desc_of`, `for_each_template_arg` all work. An unregistered template instance (or non-template type) reports a safe empty table.
 
@@ -2417,7 +2418,7 @@ One parenthesized `(name, type, optional)` triple per constructor parameter. The
 #define RTTI_CTOR_TYPES_0(T)
 #define RTTI_CTOR_TYPES_1(T, a1) RTTI_CTOR_TYPE(a1)
 #define RTTI_CTOR_TYPES_2(T, a1, a2) RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2)
-// ... up to RTTI_CTOR_TYPES_16(T, a1, ..., a16)
+// ... up to RTTI_CTOR_TYPES_64(T, a1, ..., a64)
 ```
 
 Comma-joined parameter type lists (no trailing comma; MSVC rejects a trailing comma inside a template-argument-list).
@@ -2572,24 +2573,24 @@ Physical layout of the header (all line numbers refer to the current file):
 | 266-805 | `type_id`, `field_value`, `field_value_to`, `value_io`, `field_access_base`, `typed_field_access` |
 | 807-857 | Intrusive `fields_of` pickup, `field_count`, `fields`, `for_each_field`, `has_default` |
 | 859-1163 | Attribute system (`attr_arg`, `attr`, tables, `make_attr`, queries) |
-| 1165-1266 | Macro infrastructure (`RTTI_NARG`, `RTTI_APPLY`, `RTTI_IS_EMPTY`, …) |
-| 1268-1323 | Enum reflection (`enum_label`, `enum_table`, enum queries) |
-| 1325-1420 | Type-description system (`type_kind`, `type_desc` family) |
-| 1422-1507 | Compile-time judgments, family discrimination, enum helpers |
-| 1509-1704 | `type_of` and `detail::type_of_impl` |
-| 1706-1804 | Template-argument reflection |
-| 1806-2010 | Derived-type merge machinery |
-| 2012-2397 | Reflective construction (`ctor_arg`, `ctor_param`, `ctor_registry`) |
-| 2399-2455 | `as` / `cast` reference conversions |
-| 2457-2717 | `object_ref<T>` |
-| 2719-2980 | `instance` type-erased handle |
-| 2982-3075 | Conversion helpers (`same_type_id`, `derived_from_desc`, `adjust_to`, `scalar_convertible`) |
-| 3077-3517 | Method reflection |
-| 3520-3630 | Field-registration helper macros |
-| 3632-3746 | Type / enum registration macros |
-| 3748-3901 | Template-info registration macros |
-| 3903-4056 | Attribute / constructor registration macros |
-| 4058-4145 | Method registration macros, tail include |
+| 1225-1825 | Macro infrastructure (`RTTI_NARG`, `RTTI_APPLY`, `RTTI_IS_EMPTY`, …) |
+| 1826-1890 | Enum reflection (`enum_label`, `enum_table`, enum queries) |
+| 1891-1975 | Type-description system (`type_kind`, `type_desc` family) |
+| 1976-2072 | Compile-time judgments, family discrimination, enum helpers |
+| 2073-2279 | `type_of` and `detail::type_of_impl` |
+| 2280-2379 | Template-argument reflection |
+| 2380-2629 | Derived-type merge machinery |
+| 2630-3006 | Reflective construction (`ctor_arg`, `ctor_param`, `ctor_registry`) |
+| 3008-3064 | `as` / `cast` reference conversions |
+| 3066-3326 | `object_ref<T>` |
+| 3328-3589 | `instance` type-erased handle |
+| 3591-3685 | Conversion helpers (`same_type_id`, `derived_from_desc`, `adjust_to`, `scalar_convertible`) |
+| 3686-4126 | Method reflection |
+| 4127-5436 | Field-registration helper macros |
+| 5437-5585 | Type / enum registration macros |
+| 5586-6745 | Template-info registration macros |
+| 6747-7605 | Attribute / constructor registration macros |
+| 7606-7676 | Method registration macros, tail include |
 
 ---
 

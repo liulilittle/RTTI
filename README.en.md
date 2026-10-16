@@ -691,26 +691,24 @@ The six gates form a 2^6 = 64-combination strip matrix; **every combination
 is explicitly configured, built and run against the full test suite
 independently** (each in its own scratch directory, with the `CMakeCache.txt`
 `RTTI_ENABLE_*` values verified right after configure). Assertions grow
-monotonically as gates are added. The 2026-10-08 full 64-combo sweep (all
-combinations `0 failures`, zero warnings) ran from `32790` all-off to `55696`
-all-on; the current tree (2026-10-12, with the cast/as variance tests, the
-reflection traversal APIs, and the gate-independent desc-registry concurrency
-case) measures `33487` all-off and `57081` all-on. The sweep
+monotonically as gates are added. The 2026-10-16 full 64-combo re-sweep
+(after the 64-field ladder widening; all combinations `0 failures`, zero
+warnings) ran from `33794` all-off to `57653` all-on. The sweep
 (`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
 grouped by gate count:
 
 | Gates on | Combinations run | rtti_tests assertions span |
 | --- | --- | --- |
-| 0 | 1 | 32790 |
-| 1 | 6 | 32949 – 38062 |
-| 2 | 15 | 34192 – 43324 |
-| 3 | 20 | 39392 – 48584 |
-| 4 | 15 | 44631 – 54153 |
-| 5 | 6 | 49903 – 55537 |
-| 6 | 1 | 55696 |
+| 0 | 1 | 33794 |
+| 1 | 6 | 33964 – 39220 |
+| 2 | 15 | 35755 – 44565 |
+| 3 | 20 | 41043 – 49946 |
+| 4 | 15 | 46351 – 55551 |
+| 5 | 6 | 51696 – 57483 |
+| 6 | 1 | 57653 |
 
-(Intermediate spans are the 2026-10-08 sweep snapshot; only the all-off and
-all-on endpoints have been re-measured since the variance-cast work.)
+(The per-combination matrix is recorded in `strip_matrix_64.txt` at the
+repository root.)
 
 (In addition, the standalone `rtti_proto_extension_tests` / `rtti_flat_schema_tests`
 executables add `160` / `408` assertions whenever the PROTO / FLAT gate is on;

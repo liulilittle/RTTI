@@ -1263,15 +1263,26 @@ bool field_has_attr(std::size_t field_index, string_view name) noexcept {
 #define RTTI_IS_EMPTY(...)                                                      \
     RTTI_CAT2(RTTI_IS_EMPTY_APPLY_, RTTI_IS_BEGIN_PARENS(__VA_ARGS__ ()))
 
-// Argument count (0..16). The single-level form (RTTI_NARG -> RTTI_NARG_I,
+// Argument count (0..64). The single-level form (RTTI_NARG -> RTTI_NARG_I,
 // no intermediate variadic macro) is required for MSVC's conformant
 // preprocessor (/Zc:preprocessor). Empty lists currently yield 1; the empty
 // RTTI_DEFINE_TYPE case (zero fields) is handled in Task 9 separately.
-#define RTTI_NARG_I(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, \
-                    _14, _15, _16, N, ...)                                   \
+// More than 64 arguments is a hard compile error: the 65th token is taken
+// as the count, so the per-count expansion macro (for example
+// RTTI_APPLY_f65 / RTTI_MEMBER_TYPES_f65) is undefined and the compiler
+// reports C2061/C3861-style diagnostics.
+#define RTTI_NARG_I(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, \
+                    _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, \
+                    _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, \
+                    _42, _43, _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, \
+                    _55, _56, _57, _58, _59, _60, _61, _62, _63, _64, N, ...) \
     N
-#define RTTI_NARG(...)                                                        \
-    RTTI_NARG_I(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+#define RTTI_NARG(...) \
+    RTTI_NARG_I(__VA_ARGS__, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, \
+                  50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, \
+                  33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, \
+                  16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
 #define RTTI_APPLY_0(M, T)
 #define RTTI_APPLY_1(M, T, a1) M(T, a1)
@@ -1315,6 +1326,492 @@ bool field_has_attr(std::size_t field_index, string_view name) noexcept {
     M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8)  \
         M(T, a9) M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) \
         M(T, a16)
+
+#define RTTI_APPLY_17(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17)
+
+#define RTTI_APPLY_18(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18)
+
+#define RTTI_APPLY_19(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19)
+
+#define RTTI_APPLY_20(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20)
+
+#define RTTI_APPLY_21(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21)
+
+#define RTTI_APPLY_22(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22)
+
+#define RTTI_APPLY_23(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23)
+
+#define RTTI_APPLY_24(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24)
+
+#define RTTI_APPLY_25(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25)
+
+#define RTTI_APPLY_26(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26)
+
+#define RTTI_APPLY_27(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27)
+
+#define RTTI_APPLY_28(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28)
+
+#define RTTI_APPLY_29(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29)
+
+#define RTTI_APPLY_30(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30)
+
+#define RTTI_APPLY_31(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31)
+
+#define RTTI_APPLY_32(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32)
+
+#define RTTI_APPLY_33(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33)
+
+#define RTTI_APPLY_34(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34)
+
+#define RTTI_APPLY_35(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35)
+
+#define RTTI_APPLY_36(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36)
+
+#define RTTI_APPLY_37(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37)
+
+#define RTTI_APPLY_38(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38)
+
+#define RTTI_APPLY_39(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39)
+
+#define RTTI_APPLY_40(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40)
+
+#define RTTI_APPLY_41(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41)
+
+#define RTTI_APPLY_42(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42)
+
+#define RTTI_APPLY_43(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43)
+
+#define RTTI_APPLY_44(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44)
+
+#define RTTI_APPLY_45(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45)
+
+#define RTTI_APPLY_46(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46)
+
+#define RTTI_APPLY_47(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47)
+
+#define RTTI_APPLY_48(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48)
+
+#define RTTI_APPLY_49(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49)
+
+#define RTTI_APPLY_50(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50)
+
+#define RTTI_APPLY_51(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51)
+
+#define RTTI_APPLY_52(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52)
+
+#define RTTI_APPLY_53(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53)
+
+#define RTTI_APPLY_54(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54)
+
+#define RTTI_APPLY_55(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55)
+
+#define RTTI_APPLY_56(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56)
+
+#define RTTI_APPLY_57(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57)
+
+#define RTTI_APPLY_58(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58)
+
+#define RTTI_APPLY_59(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58, a59) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58) M(T, a59)
+
+#define RTTI_APPLY_60(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58) M(T, a59) M(T, a60)
+
+#define RTTI_APPLY_61(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58) M(T, a59) M(T, a60) M(T, a61)
+
+#define RTTI_APPLY_62(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, \
+                      a62) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58) M(T, a59) M(T, a60) M(T, a61) M(T, a62)
+
+#define RTTI_APPLY_63(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, \
+                      a62, a63) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58) M(T, a59) M(T, a60) M(T, a61) M(T, a62) M(T, a63)
+
+#define RTTI_APPLY_64(M, T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, \
+                      a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, \
+                      a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, \
+                      a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, \
+                      a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, \
+                      a62, a63, a64) \
+    M(T, a1) M(T, a2) M(T, a3) M(T, a4) M(T, a5) M(T, a6) M(T, a7) M(T, a8) M(T, a9) \
+    M(T, a10) M(T, a11) M(T, a12) M(T, a13) M(T, a14) M(T, a15) M(T, a16) M(T, a17) \
+    M(T, a18) M(T, a19) M(T, a20) M(T, a21) M(T, a22) M(T, a23) M(T, a24) M(T, a25) \
+    M(T, a26) M(T, a27) M(T, a28) M(T, a29) M(T, a30) M(T, a31) M(T, a32) M(T, a33) \
+    M(T, a34) M(T, a35) M(T, a36) M(T, a37) M(T, a38) M(T, a39) M(T, a40) M(T, a41) \
+    M(T, a42) M(T, a43) M(T, a44) M(T, a45) M(T, a46) M(T, a47) M(T, a48) M(T, a49) \
+    M(T, a50) M(T, a51) M(T, a52) M(T, a53) M(T, a54) M(T, a55) M(T, a56) M(T, a57) \
+    M(T, a58) M(T, a59) M(T, a60) M(T, a61) M(T, a62) M(T, a63) M(T, a64)
 
 #define RTTI_APPLY(M, T, ...) \
     RTTI_EXPAND(RTTI_CAT(RTTI_APPLY_, RTTI_NARG(__VA_ARGS__))(M, T, __VA_ARGS__))
@@ -3778,6 +4275,695 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
     decltype(&T::a11), decltype(&T::a12), decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), \
     decltype(&T::a16)
 
+#define RTTI_MEMBER_TYPES_17(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17)
+
+#define RTTI_MEMBER_TYPES_18(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18)
+
+#define RTTI_MEMBER_TYPES_19(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19)
+
+#define RTTI_MEMBER_TYPES_20(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20)
+
+#define RTTI_MEMBER_TYPES_21(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21)
+
+#define RTTI_MEMBER_TYPES_22(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22)
+
+#define RTTI_MEMBER_TYPES_23(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23)
+
+#define RTTI_MEMBER_TYPES_24(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24)
+
+#define RTTI_MEMBER_TYPES_25(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25)
+
+#define RTTI_MEMBER_TYPES_26(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26)
+
+#define RTTI_MEMBER_TYPES_27(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27)
+
+#define RTTI_MEMBER_TYPES_28(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28)
+
+#define RTTI_MEMBER_TYPES_29(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29)
+
+#define RTTI_MEMBER_TYPES_30(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30)
+
+#define RTTI_MEMBER_TYPES_31(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31)
+
+#define RTTI_MEMBER_TYPES_32(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32)
+
+#define RTTI_MEMBER_TYPES_33(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33)
+
+#define RTTI_MEMBER_TYPES_34(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34)
+
+#define RTTI_MEMBER_TYPES_35(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35)
+
+#define RTTI_MEMBER_TYPES_36(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36)
+
+#define RTTI_MEMBER_TYPES_37(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37)
+
+#define RTTI_MEMBER_TYPES_38(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38)
+
+#define RTTI_MEMBER_TYPES_39(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39)
+
+#define RTTI_MEMBER_TYPES_40(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40)
+
+#define RTTI_MEMBER_TYPES_41(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41)
+
+#define RTTI_MEMBER_TYPES_42(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42)
+
+#define RTTI_MEMBER_TYPES_43(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43)
+
+#define RTTI_MEMBER_TYPES_44(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44)
+
+#define RTTI_MEMBER_TYPES_45(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45)
+
+#define RTTI_MEMBER_TYPES_46(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46)
+
+#define RTTI_MEMBER_TYPES_47(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47)
+
+#define RTTI_MEMBER_TYPES_48(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48)
+
+#define RTTI_MEMBER_TYPES_49(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49)
+
+#define RTTI_MEMBER_TYPES_50(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50)
+
+#define RTTI_MEMBER_TYPES_51(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51)
+
+#define RTTI_MEMBER_TYPES_52(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52)
+
+#define RTTI_MEMBER_TYPES_53(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53)
+
+#define RTTI_MEMBER_TYPES_54(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54)
+
+#define RTTI_MEMBER_TYPES_55(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55)
+
+#define RTTI_MEMBER_TYPES_56(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56)
+
+#define RTTI_MEMBER_TYPES_57(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57)
+
+#define RTTI_MEMBER_TYPES_58(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58)
+
+#define RTTI_MEMBER_TYPES_59(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58), decltype(&T::a59)
+
+#define RTTI_MEMBER_TYPES_60(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58), decltype(&T::a59), decltype(&T::a60)
+
+#define RTTI_MEMBER_TYPES_61(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58), decltype(&T::a59), decltype(&T::a60), \
+    decltype(&T::a61)
+
+#define RTTI_MEMBER_TYPES_62(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61, a62) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58), decltype(&T::a59), decltype(&T::a60), \
+    decltype(&T::a61), decltype(&T::a62)
+
+#define RTTI_MEMBER_TYPES_63(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61, a62, a63) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58), decltype(&T::a59), decltype(&T::a60), \
+    decltype(&T::a61), decltype(&T::a62), decltype(&T::a63)
+
+#define RTTI_MEMBER_TYPES_64(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64) \
+    decltype(&T::a1), decltype(&T::a2), decltype(&T::a3), decltype(&T::a4), \
+    decltype(&T::a5), decltype(&T::a6), decltype(&T::a7), decltype(&T::a8), \
+    decltype(&T::a9), decltype(&T::a10), decltype(&T::a11), decltype(&T::a12), \
+    decltype(&T::a13), decltype(&T::a14), decltype(&T::a15), decltype(&T::a16), \
+    decltype(&T::a17), decltype(&T::a18), decltype(&T::a19), decltype(&T::a20), \
+    decltype(&T::a21), decltype(&T::a22), decltype(&T::a23), decltype(&T::a24), \
+    decltype(&T::a25), decltype(&T::a26), decltype(&T::a27), decltype(&T::a28), \
+    decltype(&T::a29), decltype(&T::a30), decltype(&T::a31), decltype(&T::a32), \
+    decltype(&T::a33), decltype(&T::a34), decltype(&T::a35), decltype(&T::a36), \
+    decltype(&T::a37), decltype(&T::a38), decltype(&T::a39), decltype(&T::a40), \
+    decltype(&T::a41), decltype(&T::a42), decltype(&T::a43), decltype(&T::a44), \
+    decltype(&T::a45), decltype(&T::a46), decltype(&T::a47), decltype(&T::a48), \
+    decltype(&T::a49), decltype(&T::a50), decltype(&T::a51), decltype(&T::a52), \
+    decltype(&T::a53), decltype(&T::a54), decltype(&T::a55), decltype(&T::a56), \
+    decltype(&T::a57), decltype(&T::a58), decltype(&T::a59), decltype(&T::a60), \
+    decltype(&T::a61), decltype(&T::a62), decltype(&T::a63), decltype(&T::a64)
+
 #define RTTI_MEMBER_VALUES_0(T)
 #define RTTI_MEMBER_VALUES_1(T, a1) &T::a1
 #define RTTI_MEMBER_VALUES_2(T, a1, a2) &T::a1, &T::a2
@@ -3813,6 +4999,422 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
 #define RTTI_MEMBER_VALUES_16(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) \
     &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
     &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16
+
+#define RTTI_MEMBER_VALUES_17(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17
+
+#define RTTI_MEMBER_VALUES_18(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18
+
+#define RTTI_MEMBER_VALUES_19(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19
+
+#define RTTI_MEMBER_VALUES_20(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20
+
+#define RTTI_MEMBER_VALUES_21(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21
+
+#define RTTI_MEMBER_VALUES_22(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22
+
+#define RTTI_MEMBER_VALUES_23(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23
+
+#define RTTI_MEMBER_VALUES_24(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24
+
+#define RTTI_MEMBER_VALUES_25(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25
+
+#define RTTI_MEMBER_VALUES_26(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26
+
+#define RTTI_MEMBER_VALUES_27(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27
+
+#define RTTI_MEMBER_VALUES_28(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28
+
+#define RTTI_MEMBER_VALUES_29(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29
+
+#define RTTI_MEMBER_VALUES_30(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30
+
+#define RTTI_MEMBER_VALUES_31(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31
+
+#define RTTI_MEMBER_VALUES_32(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32
+
+#define RTTI_MEMBER_VALUES_33(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33
+
+#define RTTI_MEMBER_VALUES_34(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34
+
+#define RTTI_MEMBER_VALUES_35(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35
+
+#define RTTI_MEMBER_VALUES_36(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36
+
+#define RTTI_MEMBER_VALUES_37(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37
+
+#define RTTI_MEMBER_VALUES_38(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38
+
+#define RTTI_MEMBER_VALUES_39(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39
+
+#define RTTI_MEMBER_VALUES_40(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40
+
+#define RTTI_MEMBER_VALUES_41(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41
+
+#define RTTI_MEMBER_VALUES_42(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42
+
+#define RTTI_MEMBER_VALUES_43(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43
+
+#define RTTI_MEMBER_VALUES_44(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44
+
+#define RTTI_MEMBER_VALUES_45(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45
+
+#define RTTI_MEMBER_VALUES_46(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46
+
+#define RTTI_MEMBER_VALUES_47(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47
+
+#define RTTI_MEMBER_VALUES_48(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48
+
+#define RTTI_MEMBER_VALUES_49(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49
+
+#define RTTI_MEMBER_VALUES_50(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50
+
+#define RTTI_MEMBER_VALUES_51(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51
+
+#define RTTI_MEMBER_VALUES_52(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52
+
+#define RTTI_MEMBER_VALUES_53(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53
+
+#define RTTI_MEMBER_VALUES_54(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54
+
+#define RTTI_MEMBER_VALUES_55(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55
+
+#define RTTI_MEMBER_VALUES_56(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56
+
+#define RTTI_MEMBER_VALUES_57(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57
+
+#define RTTI_MEMBER_VALUES_58(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58
+
+#define RTTI_MEMBER_VALUES_59(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58, &T::a59
+
+#define RTTI_MEMBER_VALUES_60(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58, &T::a59, &T::a60
+
+#define RTTI_MEMBER_VALUES_61(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58, &T::a59, &T::a60, &T::a61
+
+#define RTTI_MEMBER_VALUES_62(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61, a62) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58, &T::a59, &T::a60, &T::a61, &T::a62
+
+#define RTTI_MEMBER_VALUES_63(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61, a62, a63) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58, &T::a59, &T::a60, &T::a61, &T::a62, &T::a63
+
+#define RTTI_MEMBER_VALUES_64(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, \
+    a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64) \
+    &T::a1, &T::a2, &T::a3, &T::a4, &T::a5, &T::a6, &T::a7, &T::a8, &T::a9, &T::a10, \
+    &T::a11, &T::a12, &T::a13, &T::a14, &T::a15, &T::a16, &T::a17, &T::a18, &T::a19, \
+    &T::a20, &T::a21, &T::a22, &T::a23, &T::a24, &T::a25, &T::a26, &T::a27, &T::a28, \
+    &T::a29, &T::a30, &T::a31, &T::a32, &T::a33, &T::a34, &T::a35, &T::a36, &T::a37, \
+    &T::a38, &T::a39, &T::a40, &T::a41, &T::a42, &T::a43, &T::a44, &T::a45, &T::a46, \
+    &T::a47, &T::a48, &T::a49, &T::a50, &T::a51, &T::a52, &T::a53, &T::a54, &T::a55, \
+    &T::a56, &T::a57, &T::a58, &T::a59, &T::a60, &T::a61, &T::a62, &T::a63, &T::a64
 
 // Empty-aware selector: the empty field list yields the _0 (empty) entries,
 // otherwise the per-count joining macro for the real field count.
@@ -4007,6 +5609,330 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
 #define RTTI_TEMPLATE_ARGS_16(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) \
     a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16
 
+#define RTTI_TEMPLATE_ARGS_17(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17
+
+#define RTTI_TEMPLATE_ARGS_18(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18
+
+#define RTTI_TEMPLATE_ARGS_19(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19
+
+#define RTTI_TEMPLATE_ARGS_20(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20
+
+#define RTTI_TEMPLATE_ARGS_21(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21
+
+#define RTTI_TEMPLATE_ARGS_22(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22
+
+#define RTTI_TEMPLATE_ARGS_23(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23
+
+#define RTTI_TEMPLATE_ARGS_24(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24
+
+#define RTTI_TEMPLATE_ARGS_25(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25
+
+#define RTTI_TEMPLATE_ARGS_26(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26
+
+#define RTTI_TEMPLATE_ARGS_27(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27
+
+#define RTTI_TEMPLATE_ARGS_28(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28
+
+#define RTTI_TEMPLATE_ARGS_29(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29
+
+#define RTTI_TEMPLATE_ARGS_30(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30
+
+#define RTTI_TEMPLATE_ARGS_31(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31
+
+#define RTTI_TEMPLATE_ARGS_32(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32
+
+#define RTTI_TEMPLATE_ARGS_33(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33
+
+#define RTTI_TEMPLATE_ARGS_34(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34
+
+#define RTTI_TEMPLATE_ARGS_35(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35
+
+#define RTTI_TEMPLATE_ARGS_36(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36
+
+#define RTTI_TEMPLATE_ARGS_37(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37
+
+#define RTTI_TEMPLATE_ARGS_38(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38
+
+#define RTTI_TEMPLATE_ARGS_39(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39
+
+#define RTTI_TEMPLATE_ARGS_40(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40
+
+#define RTTI_TEMPLATE_ARGS_41(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41
+
+#define RTTI_TEMPLATE_ARGS_42(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42
+
+#define RTTI_TEMPLATE_ARGS_43(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43
+
+#define RTTI_TEMPLATE_ARGS_44(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44
+
+#define RTTI_TEMPLATE_ARGS_45(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45
+
+#define RTTI_TEMPLATE_ARGS_46(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46
+
+#define RTTI_TEMPLATE_ARGS_47(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47
+
+#define RTTI_TEMPLATE_ARGS_48(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48
+
+#define RTTI_TEMPLATE_ARGS_49(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49
+
+#define RTTI_TEMPLATE_ARGS_50(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50
+
+#define RTTI_TEMPLATE_ARGS_51(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51
+
+#define RTTI_TEMPLATE_ARGS_52(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52
+
+#define RTTI_TEMPLATE_ARGS_53(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53
+
+#define RTTI_TEMPLATE_ARGS_54(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54
+
+#define RTTI_TEMPLATE_ARGS_55(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55
+
+#define RTTI_TEMPLATE_ARGS_56(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56
+
+#define RTTI_TEMPLATE_ARGS_57(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57
+
+#define RTTI_TEMPLATE_ARGS_58(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58
+
+#define RTTI_TEMPLATE_ARGS_59(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58, a59) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58, a59
+
+#define RTTI_TEMPLATE_ARGS_60(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58, a59, a60) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58, a59, a60
+
+#define RTTI_TEMPLATE_ARGS_61(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58, a59, a60, a61) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61
+
+#define RTTI_TEMPLATE_ARGS_62(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62
+
+#define RTTI_TEMPLATE_ARGS_63(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
+
+#define RTTI_TEMPLATE_ARGS_64(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, \
+    a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, \
+    a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, \
+    a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64) \
+    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, \
+    a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, \
+    a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64
+
 // Empty-aware selector: the empty argument list yields no arguments (forming
 // T<>, valid for a template with all-defaulted parameters); any non-empty list
 // (including one whose wrapped, comma-bearing argument sits at a non-first
@@ -4088,6 +6014,696 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
         RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
         RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
         RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16)
+
+#define RTTI_TAO_STRIP_17(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17)
+
+#define RTTI_TAO_STRIP_18(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18)
+
+#define RTTI_TAO_STRIP_19(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19)
+
+#define RTTI_TAO_STRIP_20(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20)
+
+#define RTTI_TAO_STRIP_21(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21)
+
+#define RTTI_TAO_STRIP_22(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22)
+
+#define RTTI_TAO_STRIP_23(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23)
+
+#define RTTI_TAO_STRIP_24(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24)
+
+#define RTTI_TAO_STRIP_25(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25)
+
+#define RTTI_TAO_STRIP_26(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26)
+
+#define RTTI_TAO_STRIP_27(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27)
+
+#define RTTI_TAO_STRIP_28(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28)
+
+#define RTTI_TAO_STRIP_29(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29)
+
+#define RTTI_TAO_STRIP_30(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30)
+
+#define RTTI_TAO_STRIP_31(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31)
+
+#define RTTI_TAO_STRIP_32(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32)
+
+#define RTTI_TAO_STRIP_33(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33)
+
+#define RTTI_TAO_STRIP_34(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34)
+
+#define RTTI_TAO_STRIP_35(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35)
+
+#define RTTI_TAO_STRIP_36(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36)
+
+#define RTTI_TAO_STRIP_37(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37)
+
+#define RTTI_TAO_STRIP_38(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38)
+
+#define RTTI_TAO_STRIP_39(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39)
+
+#define RTTI_TAO_STRIP_40(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40)
+
+#define RTTI_TAO_STRIP_41(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41)
+
+#define RTTI_TAO_STRIP_42(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42)
+
+#define RTTI_TAO_STRIP_43(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43)
+
+#define RTTI_TAO_STRIP_44(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44)
+
+#define RTTI_TAO_STRIP_45(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45)
+
+#define RTTI_TAO_STRIP_46(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46)
+
+#define RTTI_TAO_STRIP_47(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47)
+
+#define RTTI_TAO_STRIP_48(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48)
+
+#define RTTI_TAO_STRIP_49(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49)
+
+#define RTTI_TAO_STRIP_50(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50)
+
+#define RTTI_TAO_STRIP_51(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51)
+
+#define RTTI_TAO_STRIP_52(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52)
+
+#define RTTI_TAO_STRIP_53(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53)
+
+#define RTTI_TAO_STRIP_54(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54)
+
+#define RTTI_TAO_STRIP_55(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55)
+
+#define RTTI_TAO_STRIP_56(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56)
+
+#define RTTI_TAO_STRIP_57(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57)
+
+#define RTTI_TAO_STRIP_58(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58)
+
+#define RTTI_TAO_STRIP_59(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58, a59) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58), RTTI_TAO_ELEM(a59)
+
+#define RTTI_TAO_STRIP_60(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58, a59, a60) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58), RTTI_TAO_ELEM(a59), RTTI_TAO_ELEM(a60)
+
+#define RTTI_TAO_STRIP_61(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58, a59, a60, a61) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58), RTTI_TAO_ELEM(a59), RTTI_TAO_ELEM(a60), \
+    RTTI_TAO_ELEM(a61)
+
+#define RTTI_TAO_STRIP_62(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58, a59, a60, a61, a62) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58), RTTI_TAO_ELEM(a59), RTTI_TAO_ELEM(a60), \
+    RTTI_TAO_ELEM(a61), RTTI_TAO_ELEM(a62)
+
+#define RTTI_TAO_STRIP_63(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58), RTTI_TAO_ELEM(a59), RTTI_TAO_ELEM(a60), \
+    RTTI_TAO_ELEM(a61), RTTI_TAO_ELEM(a62), RTTI_TAO_ELEM(a63)
+
+#define RTTI_TAO_STRIP_64(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, \
+    a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, \
+    a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64) \
+    RTTI_TAO_ELEM(a1), RTTI_TAO_ELEM(a2), RTTI_TAO_ELEM(a3), RTTI_TAO_ELEM(a4), \
+    RTTI_TAO_ELEM(a5), RTTI_TAO_ELEM(a6), RTTI_TAO_ELEM(a7), RTTI_TAO_ELEM(a8), \
+    RTTI_TAO_ELEM(a9), RTTI_TAO_ELEM(a10), RTTI_TAO_ELEM(a11), RTTI_TAO_ELEM(a12), \
+    RTTI_TAO_ELEM(a13), RTTI_TAO_ELEM(a14), RTTI_TAO_ELEM(a15), RTTI_TAO_ELEM(a16), \
+    RTTI_TAO_ELEM(a17), RTTI_TAO_ELEM(a18), RTTI_TAO_ELEM(a19), RTTI_TAO_ELEM(a20), \
+    RTTI_TAO_ELEM(a21), RTTI_TAO_ELEM(a22), RTTI_TAO_ELEM(a23), RTTI_TAO_ELEM(a24), \
+    RTTI_TAO_ELEM(a25), RTTI_TAO_ELEM(a26), RTTI_TAO_ELEM(a27), RTTI_TAO_ELEM(a28), \
+    RTTI_TAO_ELEM(a29), RTTI_TAO_ELEM(a30), RTTI_TAO_ELEM(a31), RTTI_TAO_ELEM(a32), \
+    RTTI_TAO_ELEM(a33), RTTI_TAO_ELEM(a34), RTTI_TAO_ELEM(a35), RTTI_TAO_ELEM(a36), \
+    RTTI_TAO_ELEM(a37), RTTI_TAO_ELEM(a38), RTTI_TAO_ELEM(a39), RTTI_TAO_ELEM(a40), \
+    RTTI_TAO_ELEM(a41), RTTI_TAO_ELEM(a42), RTTI_TAO_ELEM(a43), RTTI_TAO_ELEM(a44), \
+    RTTI_TAO_ELEM(a45), RTTI_TAO_ELEM(a46), RTTI_TAO_ELEM(a47), RTTI_TAO_ELEM(a48), \
+    RTTI_TAO_ELEM(a49), RTTI_TAO_ELEM(a50), RTTI_TAO_ELEM(a51), RTTI_TAO_ELEM(a52), \
+    RTTI_TAO_ELEM(a53), RTTI_TAO_ELEM(a54), RTTI_TAO_ELEM(a55), RTTI_TAO_ELEM(a56), \
+    RTTI_TAO_ELEM(a57), RTTI_TAO_ELEM(a58), RTTI_TAO_ELEM(a59), RTTI_TAO_ELEM(a60), \
+    RTTI_TAO_ELEM(a61), RTTI_TAO_ELEM(a62), RTTI_TAO_ELEM(a63), RTTI_TAO_ELEM(a64)
 #define RTTI_TAO_STRIP(...) \
     RTTI_CAT(RTTI_TAO_STRIP_, RTTI_NARG(__VA_ARGS__))(__VA_ARGS__)
 
@@ -4261,6 +6877,693 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
     RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
     RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
     RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16)
+
+#define RTTI_CTOR_TYPES_17(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17)
+
+#define RTTI_CTOR_TYPES_18(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18)
+
+#define RTTI_CTOR_TYPES_19(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19)
+
+#define RTTI_CTOR_TYPES_20(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20)
+
+#define RTTI_CTOR_TYPES_21(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21)
+
+#define RTTI_CTOR_TYPES_22(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22)
+
+#define RTTI_CTOR_TYPES_23(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23)
+
+#define RTTI_CTOR_TYPES_24(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24)
+
+#define RTTI_CTOR_TYPES_25(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25)
+
+#define RTTI_CTOR_TYPES_26(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26)
+
+#define RTTI_CTOR_TYPES_27(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27)
+
+#define RTTI_CTOR_TYPES_28(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28)
+
+#define RTTI_CTOR_TYPES_29(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29)
+
+#define RTTI_CTOR_TYPES_30(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30)
+
+#define RTTI_CTOR_TYPES_31(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31)
+
+#define RTTI_CTOR_TYPES_32(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32)
+
+#define RTTI_CTOR_TYPES_33(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33)
+
+#define RTTI_CTOR_TYPES_34(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34)
+
+#define RTTI_CTOR_TYPES_35(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35)
+
+#define RTTI_CTOR_TYPES_36(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36)
+
+#define RTTI_CTOR_TYPES_37(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37)
+
+#define RTTI_CTOR_TYPES_38(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38)
+
+#define RTTI_CTOR_TYPES_39(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39)
+
+#define RTTI_CTOR_TYPES_40(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40)
+
+#define RTTI_CTOR_TYPES_41(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41)
+
+#define RTTI_CTOR_TYPES_42(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42)
+
+#define RTTI_CTOR_TYPES_43(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43)
+
+#define RTTI_CTOR_TYPES_44(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44)
+
+#define RTTI_CTOR_TYPES_45(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45)
+
+#define RTTI_CTOR_TYPES_46(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46)
+
+#define RTTI_CTOR_TYPES_47(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47)
+
+#define RTTI_CTOR_TYPES_48(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48)
+
+#define RTTI_CTOR_TYPES_49(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49)
+
+#define RTTI_CTOR_TYPES_50(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50)
+
+#define RTTI_CTOR_TYPES_51(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51)
+
+#define RTTI_CTOR_TYPES_52(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52)
+
+#define RTTI_CTOR_TYPES_53(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53)
+
+#define RTTI_CTOR_TYPES_54(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54)
+
+#define RTTI_CTOR_TYPES_55(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55)
+
+#define RTTI_CTOR_TYPES_56(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56)
+
+#define RTTI_CTOR_TYPES_57(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57)
+
+#define RTTI_CTOR_TYPES_58(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58)
+
+#define RTTI_CTOR_TYPES_59(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58, a59) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58), RTTI_CTOR_TYPE(a59)
+
+#define RTTI_CTOR_TYPES_60(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58, a59, a60) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58), RTTI_CTOR_TYPE(a59), RTTI_CTOR_TYPE(a60)
+
+#define RTTI_CTOR_TYPES_61(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58, a59, a60, a61) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58), RTTI_CTOR_TYPE(a59), RTTI_CTOR_TYPE(a60), \
+    RTTI_CTOR_TYPE(a61)
+
+#define RTTI_CTOR_TYPES_62(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58, a59, a60, a61, a62) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58), RTTI_CTOR_TYPE(a59), RTTI_CTOR_TYPE(a60), \
+    RTTI_CTOR_TYPE(a61), RTTI_CTOR_TYPE(a62)
+
+#define RTTI_CTOR_TYPES_63(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58, a59, a60, a61, a62, a63) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58), RTTI_CTOR_TYPE(a59), RTTI_CTOR_TYPE(a60), \
+    RTTI_CTOR_TYPE(a61), RTTI_CTOR_TYPE(a62), RTTI_CTOR_TYPE(a63)
+
+#define RTTI_CTOR_TYPES_64(T, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, \
+    a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, \
+    a55, a56, a57, a58, a59, a60, a61, a62, a63, a64) \
+    RTTI_CTOR_TYPE(a1), RTTI_CTOR_TYPE(a2), RTTI_CTOR_TYPE(a3), RTTI_CTOR_TYPE(a4), \
+    RTTI_CTOR_TYPE(a5), RTTI_CTOR_TYPE(a6), RTTI_CTOR_TYPE(a7), RTTI_CTOR_TYPE(a8), \
+    RTTI_CTOR_TYPE(a9), RTTI_CTOR_TYPE(a10), RTTI_CTOR_TYPE(a11), RTTI_CTOR_TYPE(a12), \
+    RTTI_CTOR_TYPE(a13), RTTI_CTOR_TYPE(a14), RTTI_CTOR_TYPE(a15), RTTI_CTOR_TYPE(a16), \
+    RTTI_CTOR_TYPE(a17), RTTI_CTOR_TYPE(a18), RTTI_CTOR_TYPE(a19), RTTI_CTOR_TYPE(a20), \
+    RTTI_CTOR_TYPE(a21), RTTI_CTOR_TYPE(a22), RTTI_CTOR_TYPE(a23), RTTI_CTOR_TYPE(a24), \
+    RTTI_CTOR_TYPE(a25), RTTI_CTOR_TYPE(a26), RTTI_CTOR_TYPE(a27), RTTI_CTOR_TYPE(a28), \
+    RTTI_CTOR_TYPE(a29), RTTI_CTOR_TYPE(a30), RTTI_CTOR_TYPE(a31), RTTI_CTOR_TYPE(a32), \
+    RTTI_CTOR_TYPE(a33), RTTI_CTOR_TYPE(a34), RTTI_CTOR_TYPE(a35), RTTI_CTOR_TYPE(a36), \
+    RTTI_CTOR_TYPE(a37), RTTI_CTOR_TYPE(a38), RTTI_CTOR_TYPE(a39), RTTI_CTOR_TYPE(a40), \
+    RTTI_CTOR_TYPE(a41), RTTI_CTOR_TYPE(a42), RTTI_CTOR_TYPE(a43), RTTI_CTOR_TYPE(a44), \
+    RTTI_CTOR_TYPE(a45), RTTI_CTOR_TYPE(a46), RTTI_CTOR_TYPE(a47), RTTI_CTOR_TYPE(a48), \
+    RTTI_CTOR_TYPE(a49), RTTI_CTOR_TYPE(a50), RTTI_CTOR_TYPE(a51), RTTI_CTOR_TYPE(a52), \
+    RTTI_CTOR_TYPE(a53), RTTI_CTOR_TYPE(a54), RTTI_CTOR_TYPE(a55), RTTI_CTOR_TYPE(a56), \
+    RTTI_CTOR_TYPE(a57), RTTI_CTOR_TYPE(a58), RTTI_CTOR_TYPE(a59), RTTI_CTOR_TYPE(a60), \
+    RTTI_CTOR_TYPE(a61), RTTI_CTOR_TYPE(a62), RTTI_CTOR_TYPE(a63), RTTI_CTOR_TYPE(a64)
 
 // Register a reflected constructor for T at namespace scope. At least one
 // (name, type, optional) parameter is required. Example:
