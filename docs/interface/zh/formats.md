@@ -34,7 +34,7 @@
 
 ## 1. JSON(`rtti::json`)
 
-`include/rtti/json.hpp`(259 行)。由 `RTTI_ENABLE_JSON` 门控。
+`include/rtti/json.hpp`(260 行)。由 `RTTI_ENABLE_JSON` 门控。
 
 ### 1.1 `write_config`(json.hpp:64-76)
 
@@ -55,7 +55,7 @@ SAX 回调,全部可选 `std::function`;任一返回 `false` 即提前取消解�
 `string_value(string_view)`、`integer_value(int64_t)`、
 `real_value(double)`、`bool_value(bool)`、`null_value()`。
 
-### 1.3 `document`(json.hpp:105-160)
+### 1.3 `document`(json.hpp:105-161)
 
 实现 `rtti::value_io`;持有字符串 arena、节点池与根节点。可移动、不可拷贝。
 读侧代理根节点并提供
@@ -154,32 +154,32 @@ template <typename T> inline std::string serialize(const T& obj, const write_con
 
 ## 3. INI(`rtti::ini`)
 
-`include/rtti/ini.hpp`(367 行)。由 `RTTI_ENABLE_INI` 门控。
+`include/rtti/ini.hpp`(391 行)。由 `RTTI_ENABLE_INI` 门控。
 
-### 3.1 `kMaxSectionDepth`(ini.hpp:76)
+### 3.1 `kMaxSectionDepth`(ini.hpp:77)
 
 `inline constexpr std::size_t kMaxSectionDepth = 512;` — 点分节头组件数上限,
 与 JSON/XML/TOML 解析侧 `max_depth` 对齐;超深节头返回
 `error_code::too_deep`。
 
-### 3.2 `write_config`(ini.hpp:81-93)
+### 3.2 `write_config`(ini.hpp:82-94)
 
 `with_comments`(`bool`,默认 `false`)— 输出解析时保留的注释;另有
 `key_case` / `rename_map` / `skip_empty` / `indent_char`(为对称性接受;行式
 写回器忽略缩进)。
 
-### 3.3 `detail::node`(ini.hpp:102-181)
+### 3.3 `detail::node`(ini.hpp:103-194)
 
 公开读写 `value_io` 方法,加解析辅助:`set_scalar_text`、`find_child(name)`、
 `set_key_impl`(重复标量将自身替换为容纳全部出现的数组槽;重复数组追加)、
 `replace_child`。
 
-### 3.4 `document`(ini.hpp:191-236)
+### 3.4 `document`(ini.hpp:215-260)
 
 自托管树;`move` 默认;不可拷贝。根是一个对象(全局、无节区)。全部 `value_io`
 委托给根。
 
-### 3.5 `open_section`(ini.hpp:245-247)
+### 3.5 `open_section`(ini.hpp:269-271)
 
 ```cpp
 detail::node* open_section(detail::node* current, rtti::string_view name,
@@ -190,7 +190,7 @@ detail::node* open_section(detail::node* current, rtti::string_view name,
 路径挂在最后一个元素下。比 `max_depth` 更深时返回 `nullptr` 并置 `too_deep`
 (不会构建 `serialize()` 日后可能递归越界的无界树)。
 
-### 3.6 `parse_events`(ini.hpp:259-266)
+### 3.6 `parse_events`(ini.hpp:283-290)
 
 `section_start(string_view)`(节名,全局为 `""`)、`section_end(string_view)`、
 `key_value(string_view, string_view)`。注释不产生事件;`[a.b]` 这种点分头作为
@@ -227,17 +227,17 @@ template <typename T> result<T> parse_as(rtti::string_view src, const write_conf
 
 ## 4. TOML(`rtti::toml`)
 
-`include/rtti/toml.hpp`(324 行)。由 `RTTI_ENABLE_TOML` 门控。TOML v1.0 核心子集。
+`include/rtti/toml.hpp`(343 行)。由 `RTTI_ENABLE_TOML` 门控。TOML v1.0 核心子集。
 
-### 4.1 `write_config`(toml.hpp:79-84)
+### 4.1 `write_config`(toml.hpp:80-85)
 
 `key_case` / `rename_map` / `skip_empty` / `indent_char`(为对称性接受;行式写回器忽略缩进)。
 
-### 4.2 `parse_config`(toml.hpp:86-88)
+### 4.2 `parse_config`(toml.hpp:87-89)
 
 `max_depth`(`size_t`,默认 `512`)— 数组/内联表嵌套上限(`too_deep`)。
 
-### 4.3 `parse_events`(toml.hpp:94-106)
+### 4.3 `parse_events`(toml.hpp:95-107)
 
 `table_start(string_view)`、`table_end(string_view)`、
 `array_table_start(string_view)`、`array_table_end(string_view)`、
@@ -247,7 +247,7 @@ template <typename T> result<T> parse_as(rtti::string_view src, const write_conf
 类型化标量事件先于该键的 `key_value` 触发。无节键由隐式
 `table_start("")/table_end("")` 括起。
 
-### 4.4 `document`(toml.hpp:185-232)
+### 4.4 `document`(toml.hpp:204-251)
 
 自托管树;仅可移动。根永远是对象。`value_io` 委托给根。`detail::node` 持有
 自有的标量文本,另有 `is_datetime`(日期时间输出时不加引号)。

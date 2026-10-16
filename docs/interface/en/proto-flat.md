@@ -89,13 +89,15 @@ path (`encode_obj`/`decode_obj`/`decode_packed`/`decode_repeated`/
 `tree_decode_packed`/`tree_decode_repeated`/`tree_equals_default`/
 `tree_set_default`).
 
-### 1.4 Typed codecs (proto.hpp:516-538)
+### 1.4 Typed codecs (proto.hpp:516-621)
 
 ```cpp
 template <typename T> error_code encode_message(const T& obj, detail::wire_writer& w,
-                                                std::size_t depth, std::size_t max_depth);
+                                                const schema_info& si, std::size_t depth,
+                                                std::size_t max_depth);
 template <typename T> error_code decode_message(T& obj, detail::wire_reader& r,
-                                                std::size_t depth, std::size_t max_depth);
+                                                const schema_info& si, std::size_t depth,
+                                                std::size_t max_depth);
 ```
 
 `detail::wire_reader` / `detail::wire_writer` (proto.hpp:161-276) offer bounded
@@ -103,13 +105,15 @@ reads (`remaining()`, `offset()`, `read_varint`, etc.) and writes
 (`write_varint`, `write_tag`, `write_bytes`, `write_fixed*`, …). Every read is
 end-checked, so malformed input never reads out of range.
 
-### 1.5 Tree bridge (`value_io`) (proto.hpp:637-655, 2110-2530)
+### 1.5 Tree bridge (`value_io`) (proto.hpp:637-655, 2110-2660)
 
 ```cpp
 error_code encode_message_tree(const rtti::value_io* obj, detail::wire_writer& w,
-                               std::size_t depth, std::size_t max_depth);
+                               const schema_info& si, std::size_t depth,
+                               std::size_t max_depth);
 error_code decode_message_tree(rtti::value_io* obj, detail::wire_reader& r,
-                               std::size_t depth, std::size_t max_depth);
+                               const schema_info& si, std::size_t depth,
+                               std::size_t max_depth);
 error_code decode_generic(rtti::value_io* obj, detail::wire_reader& r,
                           std::size_t depth, std::size_t max_depth);
 // extension-path helpers:
@@ -135,7 +139,7 @@ Loading balance: extensions registered this way participate in
 `detail::node` and `class document` are `value_io` trees used by the wire↔tree
 bridge and the DOM parse result.
 
-### 1.8 Public entry points (proto.hpp:2669-2814)
+### 1.8 Public entry points (proto.hpp:2669-2802)
 
 ```cpp
 struct parse_config { /* depth budget, e.g. max_depth */ };
@@ -164,7 +168,7 @@ packed numeric fields and oneof groups follow protobuf semantics.
 
 `include/rtti/flat_schema.hpp`. Gated by `RTTI_ENABLE_FLAT`.
 
-### 2.1 Schema descriptors (flat_schema.hpp:89-180)
+### 2.1 Schema descriptors (flat_schema.hpp:89-182)
 
 ```cpp
 enum class fbs_type : std::uint8_t { /* scalar/struct/table/vector/union/string/… */ };
@@ -177,7 +181,7 @@ struct fbs_schema_desc;
 result<fbs_schema_desc> parse_schema(rtti::string_view src);
 ```
 
-### 2.2 Compile & query (flat_schema.hpp:188-223)
+### 2.2 Compile & query (flat_schema.hpp:188-224)
 
 ```cpp
 struct compile_config;                    // e.g. root_type, identifier

@@ -59,7 +59,7 @@ Full documentation lives under `docs/` (bilingual, mutually linked):
 - `examples/` — 9 documented demo programs (`reflection_demo`,
   `core_convert_demo`, `json_demo`, `xml_demo`, `ini_demo`, `toml_demo`,
   `proto_demo`, `format_demo`, `flatbuffers_demo`), each compilable
-  standalone with MSVC `cl`.
+  standalone with MSVC `cl`. MSVC consumers must add `/Zc:preprocessor` (CMake consumers inherit it from the `rtti` target).
 
 Format adapters (JSON/XML/INI/TOML/protobuf/FlatBuffers) are optional build
 gates. The reflect core compiles with all six gates off, and the stripped

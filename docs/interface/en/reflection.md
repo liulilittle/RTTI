@@ -5,7 +5,7 @@
 - **Include dependencies**:
   - System/STL: `<charconv>`, `<cstddef>`, `<cstdint>`, `<cstdlib>`, `<cstring>`, `<functional>`, `<initializer_list>`, `<limits>`, `<mutex>`, `<optional>`, `<string>`, `<tuple>`, `<type_traits>`, `<variant>`, `<typeinfo>`, `<utility>`, `<vector>`
   - Project: `<rtti/memory.hpp>` (provides `rtti::string_view`), `<rtti/naming.hpp>` (provides `rtti::detail::naming_policy`, `key_case`, `apply_naming`)
-  - Tail include: `<rtti/convert.hpp>` (the format-agnostic converters `from_value` / `to_value` / `from_value_named` / `to_value_named` / `member_to_value` / `member_to_value_named`, pushed to the end of the file to break the include cycle — see §23)
+  - Tail include: `<rtti/convert.hpp>` (the format-agnostic converters `from_value` / `to_value` / `from_value_named` / `to_value_named` / `member_to_value` / `member_to_value_named`, pushed to the end of the file to break the include cycle — see §26)
   - Transitive: `<rtti/error.hpp>` via `memory.hpp` (defines `rtti::error_code`, `rtti::result<T>`, `rtti::error_info`)
 - **Namespace**: `rtti` (registration macros are emitted at namespace scope inside `namespace rtti { ... }`)
 - **Language / standard**: C++17, English-internal comments, no third-party dependencies
@@ -309,7 +309,7 @@ struct key_traits<std::string> {
 
 Key-handling policy for associative containers. The generic fallback supports any key constructible from a `string_view`; `std::string` has a dedicated specialization. `assign` copies a runtime key into `K`; `view` presents a stored key as `string_view`.
 
-> APIs in this chapter are extracted from `reflection.hpp:75-264`.
+> APIs in this chapter are extracted from `reflection.hpp:75-278`.
 
 ---
 
@@ -360,7 +360,7 @@ Declares the direct base types of a reflected type. `RTTI_DEFINE_TYPE_DERIVED` s
 
 Covered in §1.18.
 
-> APIs in this chapter are extracted from `reflection.hpp:61-73` and `reflection.hpp:807-812`.
+> APIs in this chapter are extracted from `reflection.hpp:61-73` and `reflection.hpp:867-872`.
 
 ---
 
@@ -512,7 +512,7 @@ error_code member_to_value_named(value_io* dst, const M& v,
                                  const rtti::detail::naming_policy& np);
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:266-405` (declarations at `reflection.hpp:35-59`).
+> APIs in this chapter are extracted from `reflection.hpp:280-444` (declarations at `reflection.hpp:35-59`).
 
 ---
 
@@ -618,7 +618,7 @@ Behavior highlights:
   - `size`: element count for every supported family, else `0`.
   - `for_each`: map → iterates key/value pairs, writes each value into `scratch`, invokes `fn(index, key_view, scratch)`; set/sequence → each element, `fn(index, string_view(), scratch)`; queue → a copy drained with `front()`/`pop()`; stack/priority_queue → a copy drained with `top()`/`pop()`. A conversion error aborts with that `error_code`. Non-container → `kind_mismatch`.
 
-> APIs in this chapter are extracted from `reflection.hpp:407-805`.
+> APIs in this chapter are extracted from `reflection.hpp:446-865`.
 
 ---
 
@@ -700,10 +700,10 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
 }
 ```
 
-- `member_access` (reflection.hpp:1399) is the access level of a reflected
+- `member_access` (reflection.hpp:1896) is the access level of a reflected
   field; the trailing underscore names dodge the `public`/`protected`/`private`
   keywords, and the 1/2/3 values are ABI-stable.
-- `field_access_of<T>(i)` (reflection.hpp:3697) returns the `i`-th field's
+- `field_access_of<T>(i)` (reflection.hpp:4194) returns the `i`-th field's
   access level — `constexpr`, and identical to `fields_of<T>::desc[i].access`.
 - For a **non-intrusive** registration (`RTTI_DEFINE_TYPE` /
   `RTTI_DEFINE_TYPE_DERIVED`), the access level is resolved at namespace scope
@@ -720,9 +720,9 @@ accessors as public ones (`field_access_base::get/set`, `get_field` /
 `set_field`, `from_value` / `to_value`); only the classification is fixed by the
 registration mode.
 
-> APIs in this chapter are extracted from `reflection.hpp:814-857`.
-> `field_access_of` extracted from `reflection.hpp:3697`; `member_access` from
-> `reflection.hpp:1399`.
+> APIs in this chapter are extracted from `reflection.hpp:874-917`.
+> `field_access_of` extracted from `reflection.hpp:4194`; `member_access` from
+> `reflection.hpp:1896`.
 
 ---
 
@@ -937,7 +937,7 @@ assert(rtti::has_attr<Point2D>("color"));
 assert(rtti::find_attr<Point2D>("color")->args[0].as_string() == "red");
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:859-1163`.
+> APIs in this chapter are extracted from `reflection.hpp:919-1221`.
 
 ---
 
@@ -1010,7 +1010,7 @@ assert(rtti::enum_to_string<Color>(Color::Green) == std::string_view("Green"));
 assert(rtti::enum_from_string<Color>("Blue") == Color::Blue);
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:1268-1323`.
+> APIs in this chapter are extracted from `reflection.hpp:1825-1880`.
 
 ---
 
@@ -1086,11 +1086,11 @@ struct enum_desc {
 ```
 
 Each `field_type_desc` row carries a compile-time `member_access` (
-`public_` = 1 / `protected_` = 2 / `private_` = 3, `reflection.hpp:1399`).
+`public_` = 1 / `protected_` = 2 / `private_` = 3, `reflection.hpp:1896`).
 The access level is also reachable through the public query
-`rtti::field_access_of<T>(index)` (`reflection.hpp:3697`), and it is
+`rtti::field_access_of<T>(index)` (`reflection.hpp:4194`), and it is
 evaluated at namespace scope through a per-field probe pair, never from a
-friend context — see §20.
+friend context — see §19.4.
 
 ### 8.3 `type_desc`
 
@@ -1177,7 +1177,7 @@ inline const type_desc* find_desc(const std::type_info& ti) noexcept;
 
 `register_desc` skips nulls and deduplicates by `std::type_info` equality under a mutex; `find_desc` looks a dynamic type up. Used to re-root the base-chain walk for the full-precision `instance::as`.
 
-> APIs in this chapter are extracted from `reflection.hpp:1325-1420` and `reflection.hpp:1509-1704`.
+> APIs in this chapter are extracted from `reflection.hpp:1882-1984` and `reflection.hpp:2073-2278`.
 
 ---
 
@@ -1208,7 +1208,7 @@ inline constexpr bool has_virtual_destructor_v = has_virtual_destructor<T>::valu
 | `is_polymorphic<T>` / `is_polymorphic_v<T>` | True when `T` has at least one virtual function (has a vtable). |
 | `has_virtual_destructor<T>` / `has_virtual_destructor_v<T>` | True when `T` has a virtual destructor. |
 
-> APIs in this chapter are extracted from `reflection.hpp:1422-1441`.
+> APIs in this chapter are extracted from `reflection.hpp:1986-2005`.
 
 ---
 
@@ -1286,7 +1286,7 @@ const void* enum_values();
 - `enum_names<E>()` returns that array (used to build the runtime `enum_desc`).
 - `enum_value_array<E>(seq)` / `enum_values<E>()` return the parallel raw-byte value array; `enum_values<E>()` returns `nullptr` when the enum registers zero enumerators.
 
-> APIs in this chapter are extracted from `reflection.hpp:1443-1507`.
+> APIs in this chapter are extracted from `reflection.hpp:2007-2071`.
 
 ---
 
@@ -1374,7 +1374,7 @@ assert(rtti::template_arg_count<Box<int, std::string>>() == 2);
 using T0 = rtti::template_arg_at<Box<int, std::string>, 0>;  // int
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:1706-1804`.
+> APIs in this chapter are extracted from `reflection.hpp:2280-2378`.
 
 ---
 
@@ -1399,7 +1399,7 @@ The machinery is implemented in `namespace rtti::detail`:
 - `derived_field_appender<D, C>` / `derived_desc_appender<D, C>` — recursively append C's own bases' fields, then C's own fields (base-first ordering identical to `fields_of<C>`).
 - `derived_pool<D>::accessors()` / `derived_pool<D>::descriptors()` — once-built merged tables (magic statics, thread-safe), returned for `fields<D>()` / `desc`.
 
-> APIs in this chapter are extracted from `reflection.hpp:1806-2010`.
+> APIs in this chapter are extracted from `reflection.hpp:2380-2619`.
 
 ---
 
@@ -1490,7 +1490,7 @@ The internal machinery (`namespace rtti::detail`) implements spec 18.3 matching:
 - `ctor_prepare<T, Tuple>` — validates the table (`kind_mismatch` for an unregistered/inconsistent table) then fills `values`.
 - `ctor_factory<T, Tuple>(args, count, ec)` — the generic registry factory entry point referenced by `RTTI_DEFINE_CTOR`; returns a heap `T*` or `nullptr` with the `error_code` set.
 
-> APIs in this chapter are extracted from `reflection.hpp:2012-2397`.
+> APIs in this chapter are extracted from `reflection.hpp:2621-3006`.
 
 ---
 
@@ -1550,7 +1550,7 @@ assert(rtti::as<Derived>(b) == &d);   // downcast, polymorphic source
 assert(!rtti::cast<int>(b).ok());     // kind_mismatch
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:2399-2455`.
+> APIs in this chapter are extracted from `reflection.hpp:3008-3064`.
 
 ---
 
@@ -1667,7 +1667,7 @@ if (obj.get("x", v) == rtti::error_code::ok) { /* ... */ }
 if (obj.set("x", rtti::field_value::of(int64_t(7))) == rtti::error_code::ok) { /* ... */ }
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:2457-2717`.
+> APIs in this chapter are extracted from `reflection.hpp:3066-3326`.
 
 ---
 
@@ -1747,7 +1747,7 @@ Conversion behavior detail of `as<T>()`:
 
 The internal helpers `detail::same_type_id`, `detail::derived_from_desc` (depth-guarded walk of the runtime base chain, max depth 64), `detail::adjust_to` (compose offset-correct adjusters from `from` toward `target`, depth-guarded) and `detail::scalar_convertible` (runtime scalar-convertibility judge used by upstream converters) support these conversions.
 
-> APIs in this chapter are extracted from `reflection.hpp:2719-2980` (helpers at `reflection.hpp:2982-3075`).
+> APIs in this chapter are extracted from `reflection.hpp:3328-3589` (helpers at `reflection.hpp:3591-3684`).
 
 ---
 
@@ -1875,7 +1875,7 @@ auto r2 = rtti::reflect_method(c, "mul", args, 2);
 assert(r2.ok() && r2.value.as_integer() == 12);
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:3077-3517`.
+> APIs in this chapter are extracted from `reflection.hpp:3686-4125`.
 
 ---
 
@@ -1922,7 +1922,7 @@ Bounded argument counting + flat iteration. Iteration is pre-expanded and non-re
     RTTI_CAT2(RTTI_IS_EMPTY_APPLY_, RTTI_IS_BEGIN_PARENS(__VA_ARGS__ ()))
 ```
 
-`RTTI_IS_BEGIN_PARENS(...)` detects whether the variadic list is empty (Boost PP `is_begin_parens` idiom; requires the conformant preprocessor `/Zc:preprocessor`, which the reflect core always compiles under). `RTTI_IS_EMPTY(...)` is 1 when the list is empty, 0 otherwise.
+`RTTI_IS_BEGIN_PARENS(...)` detects whether the variadic list is empty (Boost PP `is_begin_parens` idiom; requires MSVC's conformant preprocessor `/Zc:preprocessor`). The CMake `rtti` target adds the flag `PUBLIC` (`CMakeLists.txt:83-86`), so CMake consumers inherit it automatically; a manual `cl` or IDE build must pass `/Zc:preprocessor` explicitly, or this macro family mis-expands under the traditional preprocessor. `RTTI_IS_EMPTY(...)` is 1 when the list is empty, 0 otherwise.
 
 ### 18.3 Argument counting
 
@@ -1956,7 +1956,7 @@ Counts arguments 0..64. The single-level form (`RTTI_NARG` → `RTTI_NARG_I`, no
 
 `RTTI_APPLY(M, T, a...)` expands `M(T, a1) M(T, a2) ...` for each argument (pre-expanded, non-recursive). `RTTI_APPLY_OPT` expands to nothing when the list is empty.
 
-> APIs in this chapter are extracted from `reflection.hpp:1165-1266`.
+> APIs in this chapter are extracted from `reflection.hpp:1225-1823`.
 
 ---
 
@@ -2028,7 +2028,7 @@ These emit the `members` tuple of a type's OWN fields (spec 19), which the deriv
 
 Non-intrusive registration emits, at namespace scope, a per-type
 `rtti::detail::rtti_access_holder<T>` whose per-field probe pair
-(`rtti_access_ext_<f>` / `rtti_access_der_<f>`, reflection.hpp:3673-3686)
+(`rtti_access_ext_<f>` / `rtti_access_der_<f>`, reflection.hpp:4170-4183)
 checks, via SFINAE on `decltype(&U::f)`, whether the field is accessible from
 outside (`ext`, → `public_`) or from a derived context (`der`, → `protected_`),
 or neither (→ `private_`). The holder is **not** a member of `fields_of` and is
@@ -2049,7 +2049,7 @@ inside `T`; every intrusive field therefore reports `private_` — the
 conservative documented boundary (matching `field_type_desc::access`'s
 default).
 
-> APIs in this chapter are extracted from `reflection.hpp:3520-3630`.
+> APIs in this chapter are extracted from `reflection.hpp:4127-5430`.
 
 ---
 
@@ -2195,7 +2195,7 @@ Used inside a class body; the `rtti_registration` nested struct is picked up by 
 
 The intrusive variant plus `rtti_has_default` (enables `has_default<T>`).
 
-> APIs in this chapter are extracted from `reflection.hpp:3632-3729`.
+> APIs in this chapter are extracted from `reflection.hpp:5432-5559`.
 
 ---
 
@@ -2239,7 +2239,7 @@ enum class Color { Red, Green, Blue };
 RTTI_DEFINE_ENUM(Color, Red, Green, Blue)   // namespace scope
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:3731-3746`.
+> APIs in this chapter are extracted from `reflection.hpp:5561-5576`.
 
 ---
 
@@ -2305,7 +2305,7 @@ Non-intrusive registration of a template instance's argument list at namespace s
 
 **Effect**: specializes `template_info<Inst>` with `count`, `args` (a `std::tuple`), and `registered`. After use, `is_template_instance`, `template_arg_count`, `template_args`, `template_arg_at`, `template_args_of`, `template_arg_desc_of`, `for_each_template_arg` all work. An unregistered template instance (or non-template type) reports a safe empty table.
 
-> APIs in this chapter are extracted from `reflection.hpp:3748-3901`.
+> APIs in this chapter are extracted from `reflection.hpp:5578-6745`.
 
 ---
 
@@ -2387,7 +2387,7 @@ assert(rtti::attrs_defined<Point>());
 assert(rtti::field_has_attr<Point>("x", "unit"));
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:3903-3957`.
+> APIs in this chapter are extracted from `reflection.hpp:6747-6801`.
 
 ---
 
@@ -2463,7 +2463,7 @@ RTTI_DEFINE_CTOR(MyType, ("x", int, false), ("y", std::string, true))
 // rtti::make_object<MyType>(rtti::ctor_arg::scalar("x", field_value::of(int64_t(1))))
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:3959-4056`.
+> APIs in this chapter are extracted from `reflection.hpp:6803-7587`.
 
 ---
 
@@ -2552,7 +2552,7 @@ RTTI_DEFINE_METHOD(Calc, mul)
 assert(rtti::method_count<Calc>() == 2);
 ```
 
-> APIs in this chapter are extracted from `reflection.hpp:4058-4133`.
+> APIs in this chapter are extracted from `reflection.hpp:7589-7664`.
 
 ---
 
@@ -2568,29 +2568,29 @@ Physical layout of the header (all line numbers refer to the current file):
 
 | Lines | Section |
 |---|---|
-| 1-29 | Header comment, standard includes |
-| 30-269 | `namespace rtti` open, converter forward declarations, `fields_of`, `base_types`, container-shape traits, `key_traits`, `type_id` |
-| 266-805 | `type_id`, `field_value`, `field_value_to`, `value_io`, `field_access_base`, `typed_field_access` |
-| 807-857 | Intrusive `fields_of` pickup, `field_count`, `fields`, `for_each_field`, `has_default` |
-| 859-1163 | Attribute system (`attr_arg`, `attr`, tables, `make_attr`, queries) |
-| 1225-1825 | Macro infrastructure (`RTTI_NARG`, `RTTI_APPLY`, `RTTI_IS_EMPTY`, …) |
-| 1826-1890 | Enum reflection (`enum_label`, `enum_table`, enum queries) |
-| 1891-1975 | Type-description system (`type_kind`, `type_desc` family) |
-| 1976-2072 | Compile-time judgments, family discrimination, enum helpers |
-| 2073-2279 | `type_of` and `detail::type_of_impl` |
-| 2280-2379 | Template-argument reflection |
-| 2380-2629 | Derived-type merge machinery |
-| 2630-3006 | Reflective construction (`ctor_arg`, `ctor_param`, `ctor_registry`) |
+| 1-28 | Header comment, standard includes |
+| 30-281 | `namespace rtti` open, converter forward declarations, `fields_of`, `base_types`, container-shape traits, `key_traits`, `type_id` |
+| 280-865 | `type_id`, `field_value`, `field_value_to`, `value_io`, `field_access_base`, `typed_field_access` |
+| 867-917 | Intrusive `fields_of` pickup, `field_count`, `fields`, `for_each_field`, `has_default` |
+| 919-1221 | Attribute system (`attr_arg`, `attr`, tables, `make_attr`, queries) |
+| 1225-1823 | Macro infrastructure (`RTTI_NARG`, `RTTI_APPLY`, `RTTI_IS_EMPTY`, …) |
+| 1825-1880 | Enum reflection (`enum_label`, `enum_table`, enum queries) |
+| 1882-1984 | Type-description system (`type_kind`, `type_desc` family) |
+| 1986-2071 | Compile-time judgments, family discrimination, enum helpers |
+| 2073-2278 | `type_of` and `detail::type_of_impl` |
+| 2280-2378 | Template-argument reflection |
+| 2380-2619 | Derived-type merge machinery |
+| 2621-3006 | Reflective construction (`ctor_arg`, `ctor_param`, `ctor_registry`) |
 | 3008-3064 | `as` / `cast` reference conversions |
 | 3066-3326 | `object_ref<T>` |
 | 3328-3589 | `instance` type-erased handle |
-| 3591-3685 | Conversion helpers (`same_type_id`, `derived_from_desc`, `adjust_to`, `scalar_convertible`) |
-| 3686-4126 | Method reflection |
-| 4127-5436 | Field-registration helper macros |
-| 5437-5585 | Type / enum registration macros |
-| 5586-6745 | Template-info registration macros |
-| 6747-7605 | Attribute / constructor registration macros |
-| 7606-7676 | Method registration macros, tail include |
+| 3591-3684 | Conversion helpers (`same_type_id`, `derived_from_desc`, `adjust_to`, `scalar_convertible`) |
+| 3686-4125 | Method reflection |
+| 4127-5430 | Field-registration helper macros |
+| 5432-5576 | Type / enum registration macros |
+| 5578-6745 | Template-info registration macros |
+| 6747-7587 | Attribute / constructor registration macros |
+| 7589-7676 | Method registration macros, tail include |
 
 ---
 

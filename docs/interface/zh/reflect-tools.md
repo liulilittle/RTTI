@@ -501,7 +501,7 @@ kind 不匹配报 `kind_mismatch`。
 优先于 JSON 适配器采用的 `null` 映射)。
 
 树与解析器在 `src/text_node.cpp`(仅编译一次),故头保持轻量:只有类声明与入口
-点位于 `to_string.hpp:87-133`。`from_string` 错误映射:解析器码(`invalid_root`
+点位于 `to_string.hpp:95-141`。`from_string` 错误映射:解析器码(`invalid_root`
 / `unexpected_token` / `unterminated_string` / `invalid_number` / `invalid_utf8`
 / `too_deep`)对应畸形文本;`kind_mismatch` / `missing_key` 对应转换类型不匹配;
 `overflow` 对应数值范围违例。

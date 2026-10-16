@@ -552,7 +552,7 @@ matters more than the `null` mapping the JSON adapters use).
 
 The tree and the parser live in `src/text_node.cpp` (compiled once), so the
 header stays light: only the class declaration and entry points are in
-`to_string.hpp:87-133`. `from_string` error mapping: parser codes
+`to_string.hpp:95-141`. `from_string` error mapping: parser codes
 (`invalid_root` / `unexpected_token` / `unterminated_string` / `invalid_number`
 / `invalid_utf8` / `too_deep`) for malformed text, `kind_mismatch` / `missing_key`
 for conversion type mismatches, `overflow` for numeric range violations.

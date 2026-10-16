@@ -56,11 +56,11 @@ whose definitions are compiled into the static library:
 | `date_time.hpp` | `src/date_time.cpp` |
 | `naming.hpp` | `src/naming.cpp` |
 
-`README.md` (lines 24–37) states: `src/` — "static-library sources", i.e. the
+`README.md:56` states: `src/` — "static-library sources", i.e. the
 reflect core alone (with every format-adapter gate off) still links against a
 static library. The CMake target is `rtti` (`add_library(rtti STATIC …)`,
 `CMakeLists.txt:22`), exposed as `rtti::rtti` with a `BUILD_INTERFACE`/
-`INSTALL_INTERFACE` include directory (`CMakeLists.txt:58–60`, `97`). A consumer
+`INSTALL_INTERFACE` include directory (`CMakeLists.txt:58–60`, `104`). A consumer
 must link the library and may then `#include <rtti/…>`.
 
 The header-only exceptions inside this cluster are genuinely inline:
@@ -345,7 +345,7 @@ from_base("ff", 36, out, kUpper, true) == ok, out == 555       // explicit flag
 ### 2.7 Converter bridge (defined in `convert.hpp`, spec §15.4)
 
 The value-tree serialization bridge for the base-N integer lane is declared in
-`include/rtti/convert.hpp:572–620` (inline):
+`include/rtti/convert.hpp:600–648` (inline):
 
 ```cpp
 error_code to_value_base(value_io* dst, std::uint64_t value, unsigned base, const char* digits = nullptr);
@@ -364,7 +364,7 @@ functions documented above.
 ## 3. `date_time.hpp` — Unix-epoch nanosecond timestamp
 
 > Extraction range: `include/rtti/date_time.hpp` lines 1–247.
-> Implementation: `src/date_time.cpp` lines 1–398.
+> Implementation: `src/date_time.cpp` lines 1–410.
 
 `rtti::date_time` is a value type holding **Unix epoch nanoseconds** as a
 single `int64_t`, with ISO 8601 parsing/formatting and precision-aware unit
@@ -520,7 +520,7 @@ static result<date_time> parse(string_view iso);    // :102
   - `error_code::ok` with the parsed instant;
   - `invalid_number` on any malformed text (never throws);
   - `overflow` when the resulting instant leaves the int64 ns range.
-- **Notes** (`src/date_time.cpp:186–282`) — fractional digits 1..9 are kept
+- **Notes** (`src/date_time.cpp:186–294`) — fractional digits 1..9 are kept
   verbatim as nanoseconds (10+ digits rejected). Timezone designators accepted:
   `Z` or `z` for UTC, `+/-HH:MM` for offsets (hour 00..23, minute 00..59),
   normalized to UTC. Calendar rules are honored (leap years, month lengths,
@@ -636,7 +636,7 @@ epoch_ns_from_digits(9999999999999, ns) == overflow        // 13-digit lane over
 ### 3.9 Converter bridge (defined in `convert.hpp`)
 
 The read path of `date_time` through `value_io` is the `converter<date_time>`
-specialization (`convert.hpp:447–483`):
+specialization (`convert.hpp:475–511`):
 
 - **read** (`from_value(src, dt)`): an integer scalar's unit is inferred via
   `epoch_ns_from_digits`; an ISO text scalar is parsed via `parse()`;
@@ -646,10 +646,10 @@ specialization (`convert.hpp:447–483`):
 Explicit output modes:
 
 ```cpp
-enum class date_time_output { numeric_seconds, numeric_ms, numeric_us, numeric_ns, iso_string };  // convert.hpp:439–445
+enum class date_time_output { numeric_seconds, numeric_ms, numeric_us, numeric_ns, iso_string };  // convert.hpp:467–473
 
 inline error_code to_value_dt(value_io* dst, const date_time& in,
-                              date_time_output mode);          // convert.hpp:490–491
+                              date_time_output mode);          // convert.hpp:518–519
 ```
 
 - `to_value_dt` writes the scalar in the requested unit; `iso_string` emits the
@@ -661,7 +661,7 @@ inline error_code to_value_dt(value_io* dst, const date_time& in,
 > unit. Only `to_value_dt` exists as a dedicated entry point.
 
 - **Reflected members**: a `date_time` member is serialized through the
-  ISO-string lane (`member_to_value`, `convert.hpp:543–561`) so
+  ISO-string lane (`member_to_value`, `convert.hpp:571–589`) so
   sub-second precision survives reflected-struct round-trips.
 
 **Examples** (`date_time_test.cpp:278–378`):
@@ -748,7 +748,7 @@ struct naming_policy {                             // naming.hpp:41–45
   (empty string, empty container, numeric zero, `false` bool, or null).
 
 Aggregated by the format adapters' `write_config` from the per-adapter
-`key_case` / `rename_map` / `skip_empty` fields (e.g. `json.hpp:60–75`
+`key_case` / `rename_map` / `skip_empty` fields (e.g. `json.hpp:60–76`
 re-exports `rtti::detail::key_case` and mirrors the structure).
 
 ### 4.5 `apply_naming`
@@ -809,7 +809,7 @@ The template `cmake/version.hpp.in:2–6` substitutes
 `@PROJECT_VERSION_MAJOR@` / `@PROJECT_VERSION_MINOR@` /
 `@PROJECT_VERSION_PATCH@` / `@PROJECT_VERSION@`. Bumping the version means
 editing `project(RTTI VERSION …)`; the header and the package version file
-(`write_basic_package_version_file`, `CMakeLists.txt:103–106`) stay in sync.
+(`write_basic_package_version_file`, `CMakeLists.txt:110–113`) stay in sync.
 
 **Test** (`tests/type_support_test.cpp:38–39`):
 
@@ -845,13 +845,13 @@ Tested in `tests/reflection_smoke.cpp:7–11`.
 ### 6.2 Forward declarations (defined in `reflection.hpp`)
 
 ```cpp
-class attr_arg;                                  // :16   defined reflection.hpp:873
-struct attr;                                     // :17   defined reflection.hpp:926
-struct field_attr_entry;                         // :18   defined reflection.hpp:932
-struct field_attr_list;                          // :19   defined reflection.hpp:938
-template <typename T, typename> struct attr_table;     // :20   defined reflection.hpp:946
-template <typename T, typename> struct field_attr_table; // :21  defined reflection.hpp:954
-template <typename T, typename> struct template_info;   // :25   defined reflection.hpp:1721
+class attr_arg;                                  // :16   defined reflection.hpp:933
+struct attr;                                     // :17   defined reflection.hpp:986
+struct field_attr_entry;                         // :18   defined reflection.hpp:992
+struct field_attr_list;                          // :19   defined reflection.hpp:998
+template <typename T, typename> struct attr_table;     // :20   defined reflection.hpp:1006
+template <typename T, typename> struct field_attr_table; // :21  defined reflection.hpp:1014
+template <typename T, typename> struct template_info;   // :25   defined reflection.hpp:2295
 ```
 
 These belong to the attribute system and the explicit template-argument

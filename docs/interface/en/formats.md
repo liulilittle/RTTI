@@ -35,7 +35,7 @@ Naming policy: when `cfg.rename_map == nullptr && cfg.key_case ==
 
 ## 1. JSON (`rtti::json`)
 
-`include/rtti/json.hpp` (259 lines). Gated by `RTTI_ENABLE_JSON`.
+`include/rtti/json.hpp` (260 lines). Gated by `RTTI_ENABLE_JSON`.
 
 ### 1.1 `write_config` (json.hpp:64-76)
 
@@ -56,7 +56,7 @@ parse early (`parse_stream` then returns `ok`): `object_start()`,
 `string_value(string_view)`, `integer_value(int64_t)`, `real_value(double)`,
 `bool_value(bool)`, `null_value()`.
 
-### 1.3 `document` (json.hpp:105-160)
+### 1.3 `document` (json.hpp:105-161)
 
 Implements `rtti::value_io`; owns its string arena, node pool and root.
 Movable, non-copyable. Read side proxies the root node and provides
@@ -161,32 +161,32 @@ template <typename T> inline std::string serialize(const T& obj, const write_con
 
 ## 3. INI (`rtti::ini`)
 
-`include/rtti/ini.hpp` (367 lines). Gated by `RTTI_ENABLE_INI`.
+`include/rtti/ini.hpp` (391 lines). Gated by `RTTI_ENABLE_INI`.
 
-### 3.1 `kMaxSectionDepth` (ini.hpp:76)
+### 3.1 `kMaxSectionDepth` (ini.hpp:77)
 
 `inline constexpr std::size_t kMaxSectionDepth = 512;` — dotted section-header
 component cap, aligned with the JSON/XML/TOML parse-side `max_depth`. Deeper
 headers return `error_code::too_deep`.
 
-### 3.2 `write_config` (ini.hpp:81-93)
+### 3.2 `write_config` (ini.hpp:82-94)
 
 `with_comments` (`bool`, default `false`) — emit comments preserved during
 parsing; plus `key_case` / `rename_map` / `skip_empty` / `indent_char`
 (accepted for symmetry; line-based writer ignores indentation).
 
-### 3.3 `detail::node` (ini.hpp:102-181)
+### 3.3 `detail::node` (ini.hpp:103-194)
 
 Public read/write `value_io` methods, plus parser helpers: `set_scalar_text`,
 `find_child(name)`, `set_key_impl` (a repeated scalar replaces itself with an
 array slot; a repeated array appends), `replace_child`.
 
-### 3.4 `document` (ini.hpp:191-236)
+### 3.4 `document` (ini.hpp:215-260)
 
 Owned tree; `move`-defaulted `move` ctor/assignment; non-copyable. Root is an
 object (the global, section-less area). Delegates all `value_io` to the root.
 
-### 3.5 `open_section` (ini.hpp:245-247)
+### 3.5 `open_section` (ini.hpp:269-271)
 
 ```cpp
 detail::node* open_section(detail::node* current, rtti::string_view name,
@@ -199,7 +199,7 @@ attach to the last element. Deeper than `max_depth` returns `nullptr` with
 `too_deep` set (instead of building an unbounded tree that `serialize()` could
 later recurse into).
 
-### 3.6 Live `parse_events` (ini.hpp:259-266)
+### 3.6 Live `parse_events` (ini.hpp:283-290)
 
 `section_start(string_view)` (name, `""` for global), `section_end(string_view)`,
 `key_value(string_view, string_view)`. Comments never fire events; a dotted
@@ -239,20 +239,20 @@ template <typename T> result<T> parse_as(rtti::string_view src, const write_conf
 
 ## 4. TOML (`rtti::toml`)
 
-`include/rtti/toml.hpp` (324 lines). Gated by `RTTI_ENABLE_TOML`. TOML v1.0 core
+`include/rtti/toml.hpp` (343 lines). Gated by `RTTI_ENABLE_TOML`. TOML v1.0 core
 subset.
 
-### 4.1 `write_config` (toml.hpp:79-84)
+### 4.1 `write_config` (toml.hpp:80-85)
 
 `key_case` / `rename_map` / `skip_empty` / `indent_char` (accepted for symmetry;
 line-based writer ignores indentation).
 
-### 4.2 `parse_config` (toml.hpp:86-88)
+### 4.2 `parse_config` (toml.hpp:87-89)
 
 `max_depth` (`size_t`, default `512`) — array/inline-table nesting limit
 (`too_deep`).
 
-### 4.3 `parse_events` (toml.hpp:94-106)
+### 4.3 `parse_events` (toml.hpp:95-107)
 
 `table_start(string_view)`, `table_end(string_view)`,
 `array_table_start(string_view)`, `array_table_end(string_view)`,
@@ -262,7 +262,7 @@ value — quotes/brackets included), `array_start()`, `array_end()`,
 `bool_value(bool)`. Typed scalar events fire before that key's `key_value`.
 Section-less keys are bracketed by an implicit `table_start("")/table_end("")`.
 
-### 4.4 `document` (toml.hpp:185-232)
+### 4.4 `document` (toml.hpp:204-251)
 
 Owned tree; move-only. Root is always an object. Delegates `value_io` to root.
 `detail::node` stores scalar text owned, plus `is_datetime` (date/time kept

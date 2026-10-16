@@ -83,13 +83,15 @@ template <typename T> inline const schema_info* schema_of();
 `set_default`)与树路径(`tree_encode`/`tree_decode`/`tree_decode_packed`/
 `tree_decode_repeated`/`tree_equals_default`/`tree_set_default`)。
 
-### 1.4 类型化编解码(proto.hpp:516-538)
+### 1.4 类型化编解码(proto.hpp:516-621)
 
 ```cpp
 template <typename T> error_code encode_message(const T& obj, detail::wire_writer& w,
-                                                std::size_t depth, std::size_t max_depth);
+                                                const schema_info& si, std::size_t depth,
+                                                std::size_t max_depth);
 template <typename T> error_code decode_message(T& obj, detail::wire_reader& r,
-                                                std::size_t depth, std::size_t max_depth);
+                                                const schema_info& si, std::size_t depth,
+                                                std::size_t max_depth);
 ```
 
 `detail::wire_reader` / `detail::wire_writer`(proto.hpp:161-276)提供有界读取
@@ -97,13 +99,15 @@ template <typename T> error_code decode_message(T& obj, detail::wire_reader& r,
 `write_tag`、`write_bytes`、`write_fixed*` 等)。每次读取都先查末端,畸形输入
 绝不越界读。
 
-### 1.5 树桥(`value_io`)(proto.hpp:637-655,2110-2530)
+### 1.5 树桥(`value_io`)(proto.hpp:637-655,2110-2660)
 
 ```cpp
 error_code encode_message_tree(const rtti::value_io* obj, detail::wire_writer& w,
-                               std::size_t depth, std::size_t max_depth);
+                               const schema_info& si, std::size_t depth,
+                               std::size_t max_depth);
 error_code decode_message_tree(rtti::value_io* obj, detail::wire_reader& r,
-                               std::size_t depth, std::size_t max_depth);
+                               const schema_info& si, std::size_t depth,
+                               std::size_t max_depth);
 error_code decode_generic(rtti::value_io* obj, detail::wire_reader& r,
                           std::size_t depth, std::size_t max_depth);
 // 扩展路径助手:
@@ -127,7 +131,7 @@ inline void clear_extensions() noexcept;
 
 `detail::node` 与 `class document` 是 wire↔树桥与 DOM 解析结果所用的 `value_io` 树。
 
-### 1.8 公共入口(proto.hpp:2669-2814)
+### 1.8 公共入口(proto.hpp:2669-2802)
 
 ```cpp
 struct parse_config { /* 深度预算,如 max_depth */ };
@@ -156,7 +160,7 @@ oneof 组遵循 protobuf 语义。
 
 `include/rtti/flat_schema.hpp`。由 `RTTI_ENABLE_FLAT` 门控。
 
-### 2.1 Schema 描述符(flat_schema.hpp:89-180)
+### 2.1 Schema 描述符(flat_schema.hpp:89-182)
 
 ```cpp
 enum class fbs_type : std::uint8_t { /* 标量/struct/table/vector/union/string/… */ };
@@ -169,7 +173,7 @@ struct fbs_schema_desc;
 result<fbs_schema_desc> parse_schema(rtti::string_view src);
 ```
 
-### 2.2 编译与查询(flat_schema.hpp:188-223)
+### 2.2 编译与查询(flat_schema.hpp:188-224)
 
 ```cpp
 struct compile_config;                    // 如 root_type、identifier

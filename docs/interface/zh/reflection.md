@@ -310,7 +310,7 @@ struct key_traits<std::string> {
 
 关联容器的键处理策略。通用回退支持任何可从 `string_view` 构造的键;`std::string` 有专门特化。`assign` 把运行期键复制进 `K`;`view` 把存键当作 `string_view` 呈现。
 
-> 本章 API 提取自 `reflection.hpp:75-264`。
+> 本章 API 提取自 `reflection.hpp:75-278`。
 
 ---
 
@@ -360,7 +360,7 @@ struct base_types {
 
 见 §1.18。
 
-> 本章 API 提取自 `reflection.hpp:61-73` 与 `reflection.hpp:807-812`。
+> 本章 API 提取自 `reflection.hpp:61-73` 与 `reflection.hpp:867-872`。
 
 ---
 
@@ -511,7 +511,7 @@ error_code member_to_value_named(value_io* dst, const M& v,
                                  const rtti::detail::naming_policy& np);
 ```
 
-> 本章 API 提取自 `reflection.hpp:266-405`(声明于 `reflection.hpp:35-59`)。
+> 本章 API 提取自 `reflection.hpp:280-444`(声明于 `reflection.hpp:35-59`)。
 
 ---
 
@@ -553,11 +553,13 @@ struct field_access_base {
 };
 ```
 
-容器操作(运行时):`field_add`、`field_add_scalar`、`erase_at`、`erase_key`、`clear`、`size`、`element_visitor` 等——见头文件 `reflection.hpp:452-475` 起。
+容器操作(运行时):`field_add`、`field_add_scalar`、`erase_at`、`erase_key`、`clear`、`size`、`element_visitor` 等——见头文件 `reflection.hpp:495-517`。
 
 ### 4.2 `typed_field_access<T, M>`
 
 模板化的具体访问器:把 `field_access_base` 的虚方法绑定到一个类型化成员指针 `M T::*`,实现 `get`/`set`(经 `field_value_to`)与 `get_value`/`set_value`(经 `converter` 链)、命名变体与容器备忘。用户通常不直接实例化——`RTTI_FIELD_DECL` 等宏生成之。
+
+> 本章 API 提取自 `reflection.hpp:446-865`。
 
 ---
 
@@ -620,9 +622,9 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
 }
 ```
 
-- `member_access`(`reflection.hpp:1399`)是反射字段的访问级别;尾下划线命名避开
+- `member_access`(`reflection.hpp:1896`)是反射字段的访问级别;尾下划线命名避开
   `public`/`protected`/`private` 关键字,1/2/3 取值 ABI 稳定。
-- `field_access_of<T>(i)`(`reflection.hpp:3697`)返回第 `i` 个字段的访问级别——
+- `field_access_of<T>(i)`(`reflection.hpp:4194`)返回第 `i` 个字段的访问级别——
   `constexpr`,且恒等于 `fields_of<T>::desc[i].access`。
 - **非侵入式**注册(`RTTI_DEFINE_TYPE` / `RTTI_DEFINE_TYPE_DERIVED`)在命名空间
   作用域按每字段探针对(`detail::rtti_access_holder<T>`)解析访问级别;类在体内
@@ -634,7 +636,7 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
   (`field_access_base::get/set`、`get_field` / `set_field`、`from_value` /
   `to_value`);只有级别分类由注册方式决定。
 
-> 本章 API 提取自 `reflection.hpp:814-857`;`field_access_of` 于 `reflection.hpp:3697`;`member_access` 于 `reflection.hpp:1399`。
+> 本章 API 提取自 `reflection.hpp:874-917`;`field_access_of` 于 `reflection.hpp:4194`;`member_access` 于 `reflection.hpp:1896`。
 
 ---
 
@@ -650,6 +652,8 @@ constexpr member_access field_access_of(std::size_t index) noexcept {
 - 查询:`attr` 查找函数族(按名/索引/键),见头文件 `reflection.hpp` §6。
 
 > 中文版以下各节与英文版结构一一对应,已含完整逐项签名、示例与提取行号(中文文档索引中文文档)。如需对照英文术语,可经每章末语言切换链接或本页头部 [`English edition`](../en/reflection.md) 查看平行英文版。
+
+> 本章 API 提取自 `reflection.hpp:919-1221`。
 
 ---
 
@@ -719,6 +723,8 @@ assert(rtti::enum_count<Color>() == 3);
 assert(rtti::enum_to_string<Color>(Color::Green) == std::string_view("Green"));
 assert(rtti::enum_from_string<Color>("Blue") == Color::Blue);
 ```
+
+> 本章 API 提取自 `reflection.hpp:1825-1880`。
 
 ---
 
@@ -881,6 +887,8 @@ inline const type_desc* find_desc(const std::type_info& ti) noexcept;
 
 `register_desc` 在互斥锁下跳过空指针并按 `std::type_info` 等值去重;`find_desc` 查找动态类型。用于完整精度 `instance::as` 的基链遍历重定根。
 
+> 本章 API 提取自 `reflection.hpp:1882-1984` 与 `reflection.hpp:2073-2278`。
+
 ---
 
 ## 9. 编译期类型判定
@@ -909,6 +917,8 @@ inline constexpr bool has_virtual_destructor_v = has_virtual_destructor<T>::valu
 | `is_abstract<T>` / `is_abstract_v<T>` | `T` 有纯虚函数(不能实例化)时为真。 |
 | `is_polymorphic<T>` / `is_polymorphic_v<T>` | `T` 至少一个虚函数(有 vtable)时为真。 |
 | `has_virtual_destructor<T>` / `has_virtual_destructor_v<T>` | `T` 有虚析构时为真。 |
+
+> 本章 API 提取自 `reflection.hpp:1986-2005`。
 
 ---
 
@@ -985,6 +995,8 @@ const void* enum_values();
 - `enum_name_array<E>(seq)` 为已注册枚举构建 NUL 结尾名字数组。
 - `enum_names<E>()` 返回该数组(用于构建运行期 `enum_desc`)。
 - `enum_value_array<E>(seq)` / `enum_values<E>()` 返回并行的原始字节值数组;`enum_values<E>()` 在枚举注册零枚举器时返回 `nullptr`。
+
+> 本章 API 提取自 `reflection.hpp:2007-2071`。
 
 ---
 
@@ -1072,6 +1084,8 @@ assert(rtti::template_arg_count<Box<int, std::string>>() == 2);
 using T0 = rtti::template_arg_at<Box<int, std::string>, 0>;  // int
 ```
 
+> 本章 API 提取自 `reflection.hpp:2280-2378`。
+
 ---
 
 ## 12. 派生类型合并机制(spec 19)
@@ -1086,6 +1100,8 @@ using T0 = rtti::template_arg_at<Box<int, std::string>, 0>;  // int
 - `is_reflected<D>()`、`is_field` 查询与 `type_of<D>()` 都在合并表上工作。
 
 机制位于 `namespace rtti::detail`:成员指针 trait、`base_total`(基 tuple 上 `fields_of<B>::count` 之和)、`derived_accessor`(D 锚定访问器)、`derived_field_appender`/`derived_desc_appender`(先基后己)、`derived_pool<D>::accessors()/descriptors()`(魔法静态一次性构建)。
+
+> 本章 API 提取自 `reflection.hpp:2380-2619`。
 
 ---
 
@@ -1164,6 +1180,8 @@ struct has_ctor_registry<T, std::void_t<typename ctor_registry<T>::param_types>>
 
 内部机制(`namespace rtti::detail`)实现 spec 18.3 匹配:标量参数填充(`is_scalar_param<D>`)、`scalar_assign<D>`(bool 宽容接受整型 0/1;枚举取自整型道;其余用严格 `field_value_to` 道)、`node_to_field_value`、`arg_matcher`(计数命名/位置实参)、`assign_param<I, Tuple>`(按名或按置;省略的 optional 参数回退默认或值初始化;缺失必选参数为 `missing_key`)、`ctor_values`(未知参数名以 `kind_mismatch` 拒绝——拼写错误胜过缺参报告)、`ctor_new_impl`/`ctor_place_impl`(堆/placement 构造)、`ctor_prepare`、`ctor_factory`(宏引用的通用工厂入口)。
 
+> 本章 API 提取自 `reflection.hpp:2621-3006`。
+
 ---
 
 ## 14. 类型转换:`as` / `cast`
@@ -1216,6 +1234,8 @@ Base* b = &d;
 assert(rtti::as<Derived>(b) == &d);   // 下转,多态源
 assert(!rtti::cast<int>(b).ok());     // kind_mismatch
 ```
+
+> 本章 API 提取自 `reflection.hpp:3008-3064`。
 
 ---
 
@@ -1322,6 +1342,8 @@ public:
 | `attr_count` / `has_attr` / `find_attr` / `field_attr` / `field_has_attr` | 委托 §6 类型级函数的属性查询。 |
 | `type_of()` | `rtti::type_of<T>()`。 |
 
+> 本章 API 提取自 `reflection.hpp:3066-3326`。
+
 ---
 
 ## 16. `instance` 类型擦除句柄
@@ -1396,6 +1418,8 @@ public:
 ```
 
 内部助手 `detail::same_type_id`、`detail::derived_from_desc`(运行期基链深度守卫遍历,最大深 64)、`detail::adjust_to`(从 `from` 向 `target` 组成偏移正确调整器,深度守卫)与 `detail::scalar_convertible`(上游转换器用的运行期标量可转换判定)支持这些转换。
+
+> 本章 API 提取自 `reflection.hpp:3328-3589`(助手于 `reflection.hpp:3591-3684`)。
 
 ---
 
@@ -1509,6 +1533,8 @@ auto r2 = rtti::reflect_method(c, "mul", args, 2);
 assert(r2.ok() && r2.value.as_integer() == 12);
 ```
 
+> 本章 API 提取自 `reflection.hpp:3686-4125`。
+
 ---
 
 ## 18. 宏设施
@@ -1554,7 +1580,7 @@ assert(r2.ok() && r2.value.as_integer() == 12);
     RTTI_CAT2(RTTI_IS_EMPTY_APPLY_, RTTI_IS_BEGIN_PARENS(__VA_ARGS__ ()))
 ```
 
-`RTTI_IS_BEGIN_PARENS(...)` 检测 variadic 列表是否为空(Boost PP `is_begin_parens` 习语;要求合规预处理器 `/Zc:preprocessor`,反射核心总在其下编译)。`RTTI_IS_EMPTY(...)` 空为 1,否则 0。
+`RTTI_IS_BEGIN_PARENS(...)` 检测 variadic 列表是否为空(Boost PP `is_begin_parens` 习语;要求 MSVC 合规预处理器 `/Zc:preprocessor`)。CMake `rtti` 目标以 `PUBLIC` 方式传播该选项(`CMakeLists.txt:83-86`),CMake 消费者自动继承;手工 `cl` 或 IDE 构建必须显式传入 `/Zc:preprocessor`,否则该宏族在传统预处理器下会错误展开。`RTTI_IS_EMPTY(...)` 空为 1,否则 0。
 
 ### 18.3 实参计数
 
@@ -1588,6 +1614,8 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 
 `RTTI_APPLY(M, T, a...)` 对每个实参展开 `M(T, a1) M(T, a2) ...`(预展开、非递归)。`RTTI_APPLY_OPT` 在列表为空时展开为空。
 
+> 本章 API 提取自 `reflection.hpp:1225-1823`。
+
 ---
 
 ## 19. 字段注册辅助宏
@@ -1619,7 +1647,7 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 ```
 
 非侵入式注册在命名空间作用域发出按类型的 `rtti::detail::rtti_access_holder<T>`,
-其逐字段探针对(`rtti_access_ext_<f>` / `rtti_access_der_<f>`,reflection.hpp:3673-3686)
+其逐字段探针对(`rtti_access_ext_<f>` / `rtti_access_der_<f>`,reflection.hpp:4170-4183)
 经 `decltype(&U::f)` 的 SFINAE 判断字段是否可以外部访问(`ext`,→ `public_`)、仅
 派生上下文可访问(`der`,→ `protected_`)、或均不可访问(→ `private_`)。该 holder
 **不是** `fields_of` 的成员、也**不是** `T` 的友元,因此用于形成 `&T::f` 的
@@ -1672,6 +1700,8 @@ assert(r2.ok() && r2.value.as_integer() == 12);
 ```
 
 这些发射一个类型**自身**字段的 `members` tuple(spec 19),派生合并机制把它转成派生类型以构建偏移正确的基访问器。
+
+> 本章 API 提取自 `reflection.hpp:4127-5430`。
 
 ---
 
@@ -1819,6 +1849,8 @@ assert(rtti::field_count<Point>() == 2);
 
 侵入式变体加 `rtti_has_default`(启用 `has_default<T>`)。
 
+> 本章 API 提取自 `reflection.hpp:5432-5559`。
+
 ---
 
 ## 21. 枚举注册宏
@@ -1850,6 +1882,8 @@ assert(rtti::field_count<Point>() == 2);
 ```
 
 **参数**:`T` — 枚举类型;`...` — 枚举器名,注册序。**效果**:特化 `rtti::enum_table<T>` 的 `count` 与 `array`。此后 `enum_count<T>()`、`enum_to_string`、`enum_from_string`、`enum_name_at`、`enum_value_at`、`for_each_enum` 都可用。
+
+> 本章 API 提取自 `reflection.hpp:5561-5576`。
 
 ---
 
@@ -1884,6 +1918,8 @@ assert(rtti::field_count<Point>() == 2);
 **参数**:`T` — 类模板;`...` — 其类型实参(至多 64;空列表允许——全默认参数的模板注册为 `T<>`,count 0 空 tuple)。含逗号实参须额外括号包裹。
 
 **效果**:特化 `template_info<Inst>` 的 `count`、`args`(`std::tuple`)与 `registered`。此后 `is_template_instance`、`template_arg_count`、`template_args`、`template_arg_at`、`template_args_of`、`template_arg_desc_of`、`for_each_template_arg` 都可用。未注册模板实例(或非模板类型)报安全空表。
+
+> 本章 API 提取自 `reflection.hpp:5578-6745`。
 
 ---
 
@@ -1964,6 +2000,8 @@ assert(rtti::attrs_defined<Point>());
 assert(rtti::field_has_attr<Point>("x", "unit"));
 ```
 
+> 本章 API 提取自 `reflection.hpp:6747-6801`。
+
 ---
 
 ## 24. 构造器注册宏
@@ -2037,6 +2075,8 @@ RTTI_DEFINE_TYPE(MyType, x_, y_)                       // namespace scope
 RTTI_DEFINE_CTOR(MyType, ("x", int, false), ("y", std::string, true))
 // rtti::make_object<MyType>(rtti::ctor_arg::scalar("x", field_value::of(int64_t(1))))
 ```
+
+> 本章 API 提取自 `reflection.hpp:6803-7587`。
 
 ---
 
@@ -2125,6 +2165,8 @@ RTTI_DEFINE_METHOD(Calc, mul)
 assert(rtti::method_count<Calc>() == 2);
 ```
 
+> 本章 API 提取自 `reflection.hpp:7589-7664`。
+
 ---
 
 ## 26. 头结构与会 include 环说明
@@ -2139,29 +2181,29 @@ assert(rtti::method_count<Calc>() == 2);
 
 | 行 | 节 |
 |---|---|
-| 1-29 | 头注释、标准 include |
-| 30-269 | `namespace rtti` 开、转换器前向声明、`fields_of`、`base_types`、容器形状 trait、`key_traits`、`type_id` |
-| 266-805 | `type_id`、`field_value`、`field_value_to`、`value_io`、`field_access_base`、`typed_field_access` |
-| 807-857 | 侵入式 `fields_of` 拾取、`field_count`、`fields`、`for_each_field`、`has_default` |
-| 859-1163 | 属性系统(`attr_arg`、`attr`、表、`make_attr`、查询) |
-| 1225-1825 | 宏基础（`RTTI_NARG`、`RTTI_APPLY`、`RTTI_IS_EMPTY`，…） |
-| 1826-1890 | 枚举反射（`enum_label`、`enum_table`、枚举查询） |
-| 1891-1975 | 类型描述系统（`type_kind`、`type_desc` 族） |
-| 1976-2072 | 编译期判断、家族判别、枚举助手 |
-| 2073-2279 | `type_of` 与 `detail::type_of_impl` |
-| 2280-2379 | 模板实参反射 |
-| 2380-2629 | 派生类型合并机制 |
-| 2630-3006 | 反射构造（`ctor_arg`、`ctor_param`、`ctor_registry`） |
+| 1-28 | 头注释、标准 include |
+| 30-281 | `namespace rtti` 开、转换器前向声明、`fields_of`、`base_types`、容器形状 trait、`key_traits`、`type_id` |
+| 280-865 | `type_id`、`field_value`、`field_value_to`、`value_io`、`field_access_base`、`typed_field_access` |
+| 867-917 | 侵入式 `fields_of` 拾取、`field_count`、`fields`、`for_each_field`、`has_default` |
+| 919-1221 | 属性系统(`attr_arg`、`attr`、表、`make_attr`、查询) |
+| 1225-1823 | 宏基础（`RTTI_NARG`、`RTTI_APPLY`、`RTTI_IS_EMPTY`，…） |
+| 1825-1880 | 枚举反射（`enum_label`、`enum_table`、枚举查询） |
+| 1882-1984 | 类型描述系统（`type_kind`、`type_desc` 族） |
+| 1986-2071 | 编译期判断、家族判别、枚举助手 |
+| 2073-2278 | `type_of` 与 `detail::type_of_impl` |
+| 2280-2378 | 模板实参反射 |
+| 2380-2619 | 派生类型合并机制 |
+| 2621-3006 | 反射构造（`ctor_arg`、`ctor_param`、`ctor_registry`） |
 | 3008-3064 | `as` / `cast` 引用转换 |
 | 3066-3326 | `object_ref<T>` |
 | 3328-3589 | `instance` 类型擦除句柄 |
-| 3591-3685 | 转换助手（`same_type_id`、`derived_from_desc`、`adjust_to`、`scalar_convertible`） |
-| 3686-4126 | 方法反射 |
-| 4127-5436 | 字段注册助手宏 |
-| 5437-5585 | 类型/枚举注册宏 |
-| 5586-6745 | 模板信息注册宏 |
-| 6747-7605 | 属性/构造器注册宏 |
-| 7606-7676 | 方法注册宏、尾部 include |
+| 3591-3684 | 转换助手（`same_type_id`、`derived_from_desc`、`adjust_to`、`scalar_convertible`） |
+| 3686-4125 | 方法反射 |
+| 4127-5430 | 字段注册助手宏 |
+| 5432-5576 | 类型/枚举注册宏 |
+| 5578-6745 | 模板信息注册宏 |
+| 6747-7587 | 属性/构造器注册宏 |
+| 7589-7676 | 方法注册宏、尾部 include |
 
 ## 27. 其它语言
 

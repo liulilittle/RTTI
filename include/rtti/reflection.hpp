@@ -1236,8 +1236,8 @@ bool field_has_attr(std::size_t field_index, string_view name) noexcept {
 
 // --- Empty-argument detection (Boost PP is_begin_parens idiom) ------------
 // Detects whether the variadic list is empty. Required because MSVC's NARG
-// cannot distinguish `()` from `(x)`. Works with the conformant preprocessor
-// (/Zc:preprocessor); the reflect core always compiles under it.
+// cannot distinguish `()` from `(x)`. Requires MSVC's conformant preprocessor
+// (/Zc:preprocessor); CMake consumers inherit it, manual `cl`/IDE must pass it.
 
 #define RTTI_IBP_SPLIT(i, ...) RTTI_IBP_SPLIT_I(i, __VA_ARGS__)
 #define RTTI_IBP_SPLIT_I(i, ...) RTTI_IBP_PRIMITIVE_CAT(RTTI_IBP_SPLIT_, i)(__VA_ARGS__)

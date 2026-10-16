@@ -22,7 +22,7 @@
 
 ---
 
-## 1. 错误码(`include/rtti/error.hpp`,第 1–102 行)
+## 1. 错误码(`include/rtti/error.hpp`,第 1–103 行)
 
 `error_code` 是反射核心与每个格式适配器共享的唯一错误通道。转换器直接返回它;解析 API 以 `result<T>` 包住它。
 
@@ -102,11 +102,11 @@ template <> struct result<void> {          // 无值负载
 
 **转换器 API 中:** `node_io` 桥的 `locate` 返回 `result<value_io*>`,`node_as` 返回 `result<T>`。核心 `from_value`/`to_value` 函数则返回裸 `error_code`。
 
-*覆盖:`error.hpp` 第 1–102 行。*
+*覆盖:`error.hpp` 第 1–103 行。*
 
 ## 2. 转换签名用到的类型(来自 `reflection.hpp` / `naming.hpp` / `date_time.hpp`)
 
-### 2.1 `class value_io`(抽象源/汇,`reflection.hpp` 第 370–405 行)
+### 2.1 `class value_io`(抽象源/汇,`reflection.hpp` 第 409–444 行)
 
 转换函数接受并产出 `value_io` 节点。每个格式适配器(JSON/XML/INI/TOML/proto/flat)在自己的 DOM 上实现此接口;因此本头与格式无关。类别镜像 JSON 风格的值范畴。
 
@@ -146,11 +146,11 @@ public:
 
 转换器语义依赖每个标量类别的读侧道序——见 §5。
 
-### 2.2 `class field_value`(类变体的标量负载,`reflection.hpp` 第 270–324 行)
+### 2.2 `class field_value`(类变体的标量负载,`reflection.hpp` 第 284–338 行)
 
 `make_scalar(field_value)` 是转换器把标量交给汇的方式。类别:`none | boolean | integer | real | string | object`。工厂:`of(bool)`、`of(int64_t)`、`of(double)`、`of(string_view)`、`of_object()`;默认构造产生 `kind::none`(空 `std::optional` 就写这个,适配器把 `none` 序列化为 null)。访问器 `as_bool()/as_integer()/as_real()/as_string()` 在类别不匹配时返回回退值(false / 0 / 0.0 / 空视图);`type()` 报告存储类别。`field_value_to(M&, const field_value&)` 是标量类型化分派助手。
 
-### 2.3 容器形状 trait(`reflection.hpp` 第 90–244 行)
+### 2.3 容器形状 trait(`reflection.hpp` 第 103–258 行)
 
 这些门控 `from_value`/`to_value` 中的 `if constexpr` 分派。
 
@@ -174,7 +174,7 @@ public:
 | `is_char_string<T>` | 任意 `std::basic_string` 特化。 |
 | `has_push_back<T>` | 有 `value_type` + `push_back`。 |
 
-相关访问器:`field_count<T>()`、`fields<T>()`(`field_access_base const*` 数组)、`for_each_field`、`has_default<T>`(用 `_WITH_DEFAULT` 宏注册时为真——源缺键时保留成员现值)、`key_traits<K>::assign/ view`(可字符串化 map 键)。`field_access_base`(第 412 行起)提供 `get_value`/`set_value`、命名变体 `get_value_named`/`set_value_named`、`is_null_value`、`is_container`、`size` 与容器变更钩子。
+相关访问器:`field_count<T>()`、`fields<T>()`(`field_access_base const*` 数组)、`for_each_field`、`has_default<T>`(用 `_WITH_DEFAULT` 宏注册时为真——源缺键时保留成员现值)、`key_traits<K>::assign/ view`(可字符串化 map 键)。`field_access_base`(第 451 行起)提供 `get_value`/`set_value`、命名变体 `get_value_named`/`set_value_named`、`is_null_value`、`is_container`、`size` 与容器变更钩子。
 
 注册宏(都在 `reflection.hpp`):`RTTI_DEFINE_TYPE(T, ...)`(字段列表)、`RTTI_DEFINE_TYPE_DERIVED(T, Base, ...)`、`RTTI_DEFINE_TYPE_WITH_DEFAULT(T, ...)`、`RTTI_DEFINE_TYPE_INTRUSIVE`、`RTTI_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT`、`RTTI_DEFINE_ENUM(T, ...)`。
 
@@ -188,7 +188,7 @@ struct naming_policy {
 };
 ```
 
-`key_case`(第 26 行):`identity`、`snake`、`camel`。`apply_naming(field, np)` 计算输出键:`rename_map` 命中优先于 `key_case`。`skip_empty` 在序列化时丢弃值为空的字段(见 §7.2)。
+`key_case`(第 26 行):`identity`、`snake`、`camel`。`apply_naming(field, np)` 计算输出键:`rename_map` 命中优先于 `key_case`。`skip_empty` 在序列化时丢弃值为空的字段(见 §6.1)。
 
 ### 2.5 `is_date_time<T>` 与纪元单位映射(`date_time.hpp`)
 
@@ -202,9 +202,9 @@ struct naming_policy {
 
 默认数字表(spec §15.2):进制 2..36 = `0-9a-z`;进制 37..62 = `0-9a-zA-Z`;进制 63..64 在索引 62 处加 `+`、索引 63 处加 `/`。默认表对进制 ≤ 36 大小写不敏感;进制 > 36 大小写敏感。
 
-*覆盖:`reflection.hpp` 第 90–324、370–430、816–857、1279–1300 行;`naming.hpp` 第 1–53 行;`date_time.hpp` 第 34–245 行;`base_convert.hpp` 第 1–112 行。*
+*覆盖:`reflection.hpp` 第 103–338、409–518、874–917、1836–1857 行;`naming.hpp` 第 1–53 行;`date_time.hpp` 第 34–245 行;`base_convert.hpp` 第 1–112 行。*
 
-## 3. `converter<T>` 表面(`convert.hpp` 第 299–650 行)
+## 3. `converter<T>` 表面(`convert.hpp` 第 303–678 行)
 
 ### 3.1 主模板 `template <typename T, typename = void> struct converter`
 
@@ -221,13 +221,13 @@ struct converter {
 - `from`:`bool` → 读 bool 道,否则整型道(`0 → false`,任何非零 → `true`),否则 `kind_mismatch`;整型(非 bool)→ `detail::scalar_integral_from`;浮点 → `detail::scalar_real_from`;到达此叶的其它类型 → `kind_mismatch`。
 - `to`:对 `sizeof(T) >= sizeof(uint64_t)` 的 `unsigned T`,高于 `INT64_MAX` 的值报 **`overflow`** 而非静默回绕 `static_cast`(spec §0 禁止静默丢失);否则 `dst->make_scalar(scalar_of(in))`。`scalar_of` 映射:bool → `field_value::of(bool)`;纯净 `char` → 其 ASCII 字节值以 `int64_t` 表示(0..255);其它整型 → `field_value::of(int64_t)`;浮点 → `field_value::of(double)`;其它 → `field_value::of_object()`。
 
-### 3.2 标量转换语义(`detail`,第 51–297 行)
+### 3.2 标量转换语义(`detail`,第 55–301 行)
 
 这是支撑主模板与字符串转换器的、带范围检查的道。
 
 | 道 | 签名 | 规则 |
 | --- | --- | --- |
-| `is_plain_char<T>` | trait,第 58 行 | 恰对 `char` 为真(spec §23.1 把 `char` 当 0..255 ASCII 字节,区别于 `signed char`/`unsigned char`)。 |
+| `is_plain_char<T>` | trait,第 63 行 | 恰对 `char` 为真(spec §23.1 把 `char` 当 0..255 ASCII 字节,区别于 `signed char`/`unsigned char`)。 |
 | `scalar_int64_to_integral` | `error_code (int64_t v, T& out)` | 无符号道/范围:负或超 max → `overflow`;有符号取正确 int64 界。失败时绝不改 `out`。 |
 | `scalar_uint64_to_integral` | `error_code (uint64_t v, T& out)` | 精确 uint64 → 整型,故 `UINT64_MAX` 无损往返,无双精度损失。 |
 | `scalar_real_to_integral` | `error_code (double v, T& out)` | 要求 `isfinite`(NaN/inf → `overflow`),向零截断,再范围检查(文档化的 2^64 / 2^63 边界处理)。绝无 UB。 |
@@ -237,23 +237,23 @@ struct converter {
 | `scalar_integral_from` | `error_code (const value_io* src, T& out)` | 按 整型→实数→字符串→bool 道序尝试(bool → 0/1)。范围违例绝不回绕。 |
 | `scalar_real_from` | `error_code (const value_io* src, T& out)` | 直接读实数道;整型道(IEEE 精度损失可接受);文本道解析。 |
 
-### 3.3 `converter<std::basic_string<Char, Traits, Alloc>>`(第 363–396 行)
+### 3.3 `converter<std::basic_string<Char, Traits, Alloc>>`(第 367–400 行)
 
 字符串是标量(文本)类型,不是序列。
 
 - `from`:字符串道 → 赋值;整型道 → 十进制文本(`std::to_string`);实数道 → 最短往返文本(`detail::scalar_format_real`);否则 `kind_mismatch`。
 - `to`:`dst->make_scalar(field_value::of(string_view(in.data(), in.size())))` → `ok`。
 
-### 3.4 已注册枚举(第 401–431 行)
+### 3.4 已注册枚举(第 429–459 行)
 
-`is_registered_enum<T>`(第 401–405 行)在 `enum_table<T>::count` 存在(经 `RTTI_DEFINE_ENUM` 注册)时为真。特化 `converter<T, enable_if_t<is_enum && is_registered_enum>>` **经标签文本**转换:
+`is_registered_enum<T>`(第 429–433 行)在 `enum_table<T>::count` 存在(经 `RTTI_DEFINE_ENUM` 注册)时为真。特化 `converter<T, enable_if_t<is_enum && is_registered_enum>>` **经标签文本**转换:
 
 - `from`:要求字符串道;线性搜索 `enum_table<T>::array` 找与文本相等的 `name`;命中 → `out = array[i].value`;未命中 → `kind_mismatch`。
 - `to`:`enum_to_string(in)`;若结果为 null 或空(`name[0] == '\0'`)→ `kind_mismatch`;否则把标签写成字符串标量。
 
 在此特化(而非任何格式适配器头)意味着所有格式共享同一份定义。
 
-### 3.5 `date_time`(第 433–483 行)
+### 3.5 `date_time`(第 461–511 行)
 
 `converter<T, enable_if_t<is_date_time<T>::value>>` 把 `date_time` 变成标量时间戳:
 
@@ -262,7 +262,7 @@ struct converter {
 
 注意:`is_date_time` 检查在入口分派中**先于** `is_reflected`,所以用户注册过的 `date_time` 也按标量时间戳转换,而非被字段遍历的对象。
 
-### 3.6 `enum class date_time_output` 与 `to_value_dt`(第 439–536 行)
+### 3.6 `enum class date_time_output` 与 `to_value_dt`(第 467–564 行)
 
 ```cpp
 enum class date_time_output {
@@ -281,7 +281,7 @@ inline error_code to_value_dt(value_io* dst, const date_time& in,
 
 **读回注意:** 公开表面**没有 `from_value_dt`**。读侧由 `date_time` 转换器特化(§3.5)服务,它自动检测数值纪元单位并接受 ISO 文本。
 
-### 3.7 反射成员写钩子 `member_to_value`(第 543–561 行)
+### 3.7 反射成员写钩子 `member_to_value`(第 571–589 行)
 
 ```cpp
 template <typename M>
@@ -293,7 +293,7 @@ inline error_code member_to_value_named(value_io* dst, const M& v,
 
 反射结构体访问器用来序列化单个成员。`date_time` 成员经 `to_value_dt(dst, v, date_time_output::iso_string)` 路由,使反射写保留亚秒精度;其它成员类型走普通转换器链。`_named` 变体对日期时间忽略 `np`、其余用 `to_value_named`(非日期时间成员仍递归应用命名策略)。
 
-### 3.8 任意进制整型桥(第 572–620 行)
+### 3.8 任意进制整型桥(第 600–648 行)
 
 ```cpp
 inline error_code to_value_base(value_io* dst, std::uint64_t value,
@@ -314,24 +314,24 @@ inline error_code from_value_base_signed(const value_io* src, unsigned base,
 
 示例(来自 `tests/base_convert_test.cpp:321-351`):`to_value_base(node, 255, 16)` 写文本 `"ff"`;`from_value_base(node, 16, back)` 还原 255。可传 RFC 4648 风格自定义表到 64 进制:`to_value_base(node, 63, 64, kBaseConvertUrlSafe)` 写 `"_"`。
 
-### 3.9 `converter<char[N], void>`(第 626–650 行)
+### 3.9 `converter<char[N], void>`(第 654–678 行)
 
 定长 C `char` 数组是**字符串目标**,不是数值序列(`is_c_array` 排除 `char[N]`,spec §12.2):
 
 - `from`:要求字符串道;若 `v.size() >= N` → `kind_mismatch`(必须给 NUL 留空间);清零缓冲再复制。绝不越界。
 - `to`:序列化到第一个 NUL 为止作为字符串标量。
 
-*覆盖:`convert.hpp` 第 51–650 行。*
+*覆盖:`convert.hpp` 第 55–678 行。*
 
-## 4. 容器、复合与反射转换器(`convert.hpp` 第 652–1269 行)
+## 4. 容器、复合与反射转换器(`convert.hpp` 第 680–1297 行)
 
 下列所有转换函数返回 `error_code`。`from_*` 把源节点读入既有目标对象;`to_*` 把值写入汇节点。写侧转换器经 `make_array()/make_object()/make_node()/push_back()/set_key()` 建树;**写中途失败会留下部分填充的树**(失败元素之前创建的子节点仍附着),并传播第一个失败元素的错误码。
 
-### 4.1 `std::vector<bool>` 处理(第 658–661 行)
+### 4.1 `std::vector<bool>` 处理(第 686–689 行)
 
 `is_vector_bool<std::vector<bool, Alloc>>` 检测位打包特化(其迭代器在某些标准库上产生代理对象)。序列写器在 `to_value` 前把每个代理复制成真 `bool`,使路径在 libstdc++/libc++/MSVC 间可移植。
 
-### 4.2 序列族 — `vector` / `list` / `deque`(第 664–709 行)
+### 4.2 序列族 — `vector` / `list` / `deque`(第 692–737 行)
 
 ```cpp
 template <typename Seq> error_code sequence_from(const value_io* src, Seq& out);
@@ -341,7 +341,7 @@ template <typename Seq> error_code sequence_to(value_io* dst, const Seq& in);
 - `sequence_from`:源必须是 `kind::array`,否则 `kind_mismatch`;`out.clear()`;经 `at(i)` 每子节点一个元素(`nullptr` 子节点 → `kind_mismatch`),递归 `from_value`。
 - `sequence_to`:`make_array()`;每个元素经 `make_node()` 上的 `to_value` 后 `push_back`。对 `vector<bool>` 用代理复制循环。
 
-### 4.3 Map 族(第 712–749 行)
+### 4.3 Map 族(第 740–777 行)
 
 ```cpp
 template <typename Map> error_code map_from(const value_io* src, Map& out);
@@ -351,7 +351,7 @@ template <typename Map> error_code map_to(value_io* dst, const Map& in);
 - `map_from`:源必须是 `kind::object`;`out.clear()`;经 `get_key_at(i, key, child)` 枚举键值对(false 或 null 子节点 → `kind_mismatch`);值递归 `from_value`;键用 `key_traits<key_type>::assign` 转换并 `emplace`。
 - `map_to`:`make_object()`;每个映射值经 `to_value`;键用 `key_traits<key_type>::view` 写。
 
-### 4.4 Set 族(第 752–786 行)
+### 4.4 Set 族(第 780–814 行)
 
 ```cpp
 template <typename Set> error_code set_from(const value_io* src, Set& out);
@@ -360,7 +360,7 @@ template <typename Set> error_code set_to(value_io* dst, const Set& in);
 
 `set_from`:源必须是 `kind::array`;`out.clear()`;每个元素 `from_value` 后 `insert`。`set_to`:`make_array()`;每个元素 `to_value` + `push_back`。
 
-### 4.5 容器适配器 — `queue` / `stack` / `priority_queue`(第 794–914 行)
+### 4.5 容器适配器 — `queue` / `stack` / `priority_queue`(第 822–942 行)
 
 这些不暴露迭代器,所以读取复制并逐个排空 `front`/`top`。
 
@@ -370,7 +370,7 @@ template <typename Set> error_code set_to(value_io* dst, const Set& in);
 
 三者都以 `kind_mismatch` 拒绝非数组源,并按同样方式处理 null 子节点。
 
-### 4.6 `std::optional`(第 923–948 行)
+### 4.6 `std::optional`(第 951–976 行)
 
 ```cpp
 template <typename T> error_code optional_from(const value_io* src, std::optional<T>& out);
@@ -380,7 +380,7 @@ template <typename T> error_code optional_to(value_io* dst, const std::optional<
 - `optional_from`:null `src` → `no_such_field`;`null` 源 → `out.reset()` 且 `ok`;否则 `from_value` 进临时并启用之。
 - `optional_to`:未启用 → `make_scalar(field_value{})`(类别 `none`,序列化为 null)且 `ok`;启用 → `to_value(dst, *in)`。
 
-### 4.7 `std::variant`(第 955–1019 行)
+### 4.7 `std::variant`(第 983–1047 行)
 
 Wire 形状:一个**对象** `{"index":N,"value":V}`,其中 `N` 是活跃备选索引,为整型标量。
 
@@ -392,7 +392,7 @@ template <typename V> error_code variant_from(const value_io* src, V& out);
 - `variant_to`:`valueless_by_exception()` → `kind_mismatch`;`make_object()`;写 `"index"` = `int64(in.index())`;写 `"value"` 经 `to_value`(子失败传播,而非留下静默的空 `value` 节点)。
 - `variant_from`:源必须是对象;`"index"` 必须在并经整型道可转、位于 `[0, variant_size)`;`"value"` 必须在;经 `variant_from_at` / `variant_from_indexed` 分派到该备选(对备选集展开——每个备选读都是通用 `from_value<Alt>`,因此实例化该函数即安全实例化所有分支)。
 
-### 4.8 `std::tuple` / `std::pair`(第 1023–1072 行)
+### 4.8 `std::tuple` / `std::pair`(第 1051–1100 行)
 
 `std::pair` 是二元 tuple(`std::get`/`std::tuple_size` 可用),完全由 tuple 路径覆盖。
 
@@ -404,7 +404,7 @@ template <typename Tuple> error_code tuple_from(const value_io* src, Tuple& out)
 - `tuple_to`:`make_array()`;展开 `index_sequence`,每元素经 `to_value(std::get<I>)` 一个子节点,传播**第一个**子失败同时继续转换其余。
 - `tuple_from`:源必须是 `kind::array`;逐元素展开,读 `at(I)`(null 子节点 → `kind_mismatch`),各经 `from_value(std::get<I>)`。源可比 tuple 长(多余元素忽略);源较短在第一个缺失子节点处报 `kind_mismatch`。
 
-### 4.9 定长序列 — `std::array`(第 1075–1111 行)
+### 4.9 定长序列 — `std::array`(第 1103–1139 行)
 
 ```cpp
 template <typename A> error_code fixed_sequence_to(value_io* dst, const A& in);
@@ -414,7 +414,7 @@ template <typename A> error_code fixed_sequence_from(const value_io* src, A& out
 - `fixed_sequence_to`:`make_array()`;每元素一个子节点。
 - `fixed_sequence_from`:源必须是 `kind::array`;**严格**长度匹配 — `src->size()` 必须等于 `out.size()`,否则 `kind_mismatch`(绝不静默截断或残留陈旧尾部,镜像 `carray_from` 契约)。然后逐槽 `from_value`。
 
-### 4.10 C 风格数组 `T[N]` / `T[N][M]` / `T[A][B][C]`(第 1121–1224 行)
+### 4.10 C 风格数组 `T[N]` / `T[N][M]` / `T[A][B][C]`(第 1149–1252 行)
 
 Trait:`carray_total<T>`(维度积;rank 0 ⇒ 1)、`carray_rank<T>()`、`carray_extent<T, I>()`。
 
@@ -429,7 +429,7 @@ error_code carray_from(const value_io* src, T (&out)[N]);
 - `carray_from`:源必须是 `kind::array`;令 `total = carray_total<T[N]>`。对多维目标**先试嵌套形式**(每外维一个子数组——这也在 M==1 且平展与嵌套计数重合时消歧);若嵌套走失败且 `sz == total`,接受**平展行主序**形式(`carray_from_flat`);否则当 `sz == total` 时试平展形式;其它计数 → `kind_mismatch`。写绝不越界。
 - `carray_from_flat(src, base, out)`:把源当作覆盖完整维度积的单条平展元素序列,按行主序偏移线性填充;null 子节点 → `kind_mismatch`。
 
-### 4.11 反射结构体遍历(第 1231–1269 行)
+### 4.11 反射结构体遍历(第 1259–1297 行)
 
 ```cpp
 template <typename T> error_code reflect_from(const value_io* src, T& out);
@@ -441,7 +441,7 @@ template <typename T> error_code reflect_to(value_io* dst, const T& in);
 - `reflect_from`:源必须是 `kind::object`;对表序中每个字段访问器 `fa`,查 `fa->name`。`has_default<T>::value` 时缺键**保留成员现值**(`_WITH_DEFAULT` 注册);否则缺键返回 `missing_key`。存在的键经 `fa->set_value(&out, sub)` 递归——嵌套/容器/标量成员都过访问器,其 `error_code` 传播。
 - `reflect_to`:`make_object()`;每个字段经 `fa->get_value(&in, child)` 存于 `fa->name`。
 
-### 4.12 深度守卫(第 1278–1298 行)
+### 4.12 深度守卫(第 1306–1326 行)
 
 每个 `from_value`/`to_value` 入口带线程局部深度守卫:
 
@@ -453,11 +453,11 @@ struct conversion_depth_guard { /* RAII: ++/-- */ };
 
 递归超过 512 层的读写链(例如写侧自引用数据结构)报 `error_code::too_deep` 而非栈溢出。格式解析器同样把树深上限设为 512。
 
-*覆盖:`convert.hpp` 第 652–1298 行。*
+*覆盖:`convert.hpp` 第 680–1326 行。*
 
-## 5. 入口 `from_value` / `to_value`(`convert.hpp` 第 1300–1429 行)
+## 5. 入口 `from_value` / `to_value`(`convert.hpp` 第 1328–1457 行)
 
-### 5.1 ADL 钩子检测(第 1308–1322 行)
+### 5.1 ADL 钩子检测(第 1336–1350 行)
 
 ```cpp
 template <typename T, typename = void> struct has_adl_from;  // 当类型
@@ -506,7 +506,7 @@ error_code to_value(value_io* dst, const T& in);
 - `from_value`/`to_value` 对数据形状问题绝不抛异常;失败以 `error_code` 返回。分配仍可能因容器/字符串增长抛 `std::bad_alloc`,这在错误通道契约之外。
 - 转换器可重入,深度记账线程局部;每线程一个 arena/document 是预期用法(见第 10 章)。
 
-## 6. 命名转换(`*_named`,第 1431–2143 行)
+## 6. 命名转换(`*_named`,第 1459–2176 行)
 
 `to_value_named` / `from_value_named` 镜像普通分派链并在**反射字段边界**应用命名策略:键经 `detail::apply_naming(fa->name, np)` 计算;序列化侧 `np.skip_empty` 丢弃空字段。
 
@@ -521,7 +521,7 @@ error_code from_value_named(const value_io* src, T& out,
 
 分派顺序与普通入口相同。反射对象内部,容器元素递归走命名变体,因此**任何容器内的嵌套反射结构体也被改名**;关联容器键是用户数据、保持不动。
 
-### 6.1 空字段谓词(第 1455–1475 行)
+### 6.1 空字段谓词(第 1483–1503 行)
 
 `detail::field_is_empty(fa, obj)` 在 `skip_empty` 下字段值为「空」时为真:空等价(`fa->is_null_value(obj)` — 空 optional / null 指针)、`size()==0` 的容器、空字符串、数值零或 `false` bool。容器经类型擦除访问器探测;标量经 `get() -> field_value`,故检查格式无关。
 
@@ -529,20 +529,20 @@ error_code from_value_named(const value_io* src, T& out,
 
 第 4 章每一族都有经 `to_value_named`/`from_value_named` 递归的命名孪生:
 
-- `reflect_to_named` / `reflect_from_named`(1479–1524)— 唯一对键应用 `apply_naming` 者;`skip_empty` 只影响序列化;读侧缺键行为与 `reflect_from` 一致(`missing_key`,或 `has_default` 时保留默认)。
-- `optional_to_named` / `optional_from_named`(1526–1553)。
-- `variant_to_named` / `variant_from_named`(+ `variant_from_at_named`、`variant_from_indexed_named`,1555–1623)。
-- `tuple_to_named` / `tuple_from_named`(+ `tuple_to_seq_named`、`tuple_from_seq_named`,1625–1682)。
-- `fixed_sequence_to_named` / `fixed_sequence_from_named`(1684–1717)— **注意:** 命名 `from` 不严格;填充 `min(src->size(), out.size())` 个元素,源较短时返回 `ok`(部分填充无错误),不同于普通严格 `fixed_sequence_from`。
-- `carray_to_named` / `carray_from_named`(+ `carray_from_flat_named`,1721–1799)— 同嵌套后平展读出策略。
-- `sequence_to_named` / `sequence_from_named`(1801–1848)、`map_to_named` / `map_from_named`(1850–1889)、`set_to_named` / `set_from_named`(1891–1927)。
-- `queue_to_named` / `queue_from_named`(1929–1968)、`stack_to_named` / `stack_from_named`(1970–2009)、`priority_queue_to_named` / `priority_queue_from_named`(2011–2050)。
+- `reflect_to_named` / `reflect_from_named`(1508–1552)— 唯一对键应用 `apply_naming` 者;`skip_empty` 只影响序列化;读侧缺键行为与 `reflect_from` 一致(`missing_key`,或 `has_default` 时保留默认)。
+- `optional_to_named` / `optional_from_named`(1555–1581)。
+- `variant_to_named` / `variant_from_named`(+ `variant_from_at_named`、`variant_from_indexed_named`,1584–1651)。
+- `tuple_to_named` / `tuple_from_named`(+ `tuple_to_seq_named`、`tuple_from_seq_named`,1654–1710)。
+- `fixed_sequence_to_named` / `fixed_sequence_from_named`(1713–1750)— **注意:** 命名 `from` 不严格;填充 `min(src->size(), out.size())` 个元素,源较短时返回 `ok`(部分填充无错误),不同于普通严格 `fixed_sequence_from`。
+- `carray_to_named` / `carray_from_named`(+ `carray_from_flat_named`,1755–1832)— 同嵌套后平展读出策略。
+- `sequence_to_named` / `sequence_from_named`(1835–1881)、`map_to_named` / `map_from_named`(1884–1922)、`set_to_named` / `set_from_named`(1925–1960)。
+- `queue_to_named` / `queue_from_named`(1963–2001)、`stack_to_named` / `stack_from_named`(2004–2042)、`priority_queue_to_named` / `priority_queue_from_named`(2045–2083)。
 
 经命名入口触达的 ADL 钩子保留自己的键命名(以用户钩子 `from_value(src, out, e)` / `to_value(dst, in, e)` 调用,它拥有策略)。
 
-## 7. 共享实数文本格式化(第 2145–2187 行)
+## 7. 共享实数文本格式化(第 2178–2218 行)
 
-`namespace detail { void format_real(double value, std::string& out); }` — 把 `double` 变成序列化文本的唯一地点,供每个格式适配器使用。用 `std::to_chars`(能往返的最短十进制,故 `3.14` 保持 `"3.14"`),最短 token 无 `.`/`e`/`E` 时补 `.0`,非有限值映射为确定性 token `nan` / `-inf` / `inf`(匹配旧 `%.17g` 输出,绝不空串)。JSON 在调用前把非有限值映射为 null;XML/INI 保留 `inf`/`nan` 文本。`detail::scalar_format_real`(第 223–249 行)为标量字符串转换器镜像此行为。
+`namespace detail { void format_real(double value, std::string& out); }` — 把 `double` 变成序列化文本的唯一地点,供每个格式适配器使用。用 `std::to_chars`(能往返的最短十进制,故 `3.14` 保持 `"3.14"`),最短 token 无 `.`/`e`/`E` 时补 `.0`,非有限值映射为确定性 token `nan` / `-inf` / `inf`(匹配旧 `%.17g` 输出,绝不空串)。JSON 在调用前把非有限值映射为 null;XML/INI 保留 `inf`/`nan` 文本。`detail::scalar_format_real`(第 227–253 行)为标量字符串转换器镜像此行为。
 
 ## 8. 数字/节点/反射格式化(`include/rtti/number_format.hpp`,第 1–162 行)
 

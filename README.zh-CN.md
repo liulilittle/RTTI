@@ -368,7 +368,7 @@ rtti::for_each_field(p, [&](const char*, rtti::type_id, const rtti::field_value&
 ### 私有 / 受保护字段反射
 
 `RTTI_DEFINE_TYPE` 宏族现在记录每个反射字段的编译期访问级别,并能反射
-**私有(protected)/私有(private)** 成员:
+**受保护(protected)/私有(private)** 成员:
 
 - `rtti::member_access`(`public_` / `protected_` / `private_`,取值 1/2/3)
   存放在 `field_type_desc::access` 上,可通过 `field_access_of<T>(index)`

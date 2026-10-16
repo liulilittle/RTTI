@@ -50,10 +50,10 @@
 | `date_time.hpp` | `src/date_time.cpp` |
 | `naming.hpp` | `src/naming.cpp` |
 
-`README.md`(第 24–37 行)写明 `src/` 为 "static-library sources":即便所有格式
+`README.md` 第 56 行写明 `src/` 为 "static-library sources":即便所有格式
 门控全关,reflect 核心仍链接静态库。CMake 目标为 `rtti`
 (`add_library(rtti STATIC …)`,`CMakeLists.txt:22`),对外导出为 `rtti::rtti`,
-带 `BUILD_INTERFACE`/`INSTALL_INTERFACE` 包含目录(`CMakeLists.txt:58–60、97`)。
+带 `BUILD_INTERFACE`/`INSTALL_INTERFACE` 包含目录(`CMakeLists.txt:58–60、104`)。
 使用方必须链接该库,然后即可 `#include <rtti/…>`。
 
 真正在头文件内联的例外:
@@ -313,7 +313,7 @@ from_base("ff", 36, out, kUpper, true) == ok, out == 555       // 显式标志
 
 ### 2.7 转换桥(定义于 `convert.hpp`,spec §15.4)
 
-base-N 整数车道的值树序列化桥接声明于 `include/rtti/convert.hpp:572–620`
+base-N 整数车道的值树序列化桥接声明于 `include/rtti/convert.hpp:600–648`
 (inline):
 
 ```cpp
@@ -332,7 +332,7 @@ error_code from_value_base_signed(const value_io* src, unsigned base, std::int64
 ## 3. `date_time.hpp` —— Unix 纪元纳秒时间戳
 
 > 提取行范围:`include/rtti/date_time.hpp` 第 1–247 行。
-> 实现:`src/date_time.cpp` 第 1–398 行。
+> 实现:`src/date_time.cpp` 第 1–410 行。
 
 `rtti::date_time` 是一个值类型,以单个 `int64_t` 保存 **Unix 纪元纳秒**,带
 ISO 8601 解析/格式化与精度感知的单位换算(spec §14)。
@@ -478,7 +478,7 @@ static result<date_time> parse(string_view iso);    // :102
   - `error_code::ok` 附带解析后的时刻;
   - `invalid_number`:任何畸形文本(绝不抛出);
   - `overflow`:结果时刻离开 int64 ns 范围。
-- **说明**(`src/date_time.cpp:186–282`)—— 小数位 1..9 位,原样转为纳秒(10+ 位
+- **说明**(`src/date_time.cpp:186–294`)—— 小数位 1..9 位,原样转为纳秒(10+ 位
   拒绝)。时区指示符:`Z` 或 `z` 表 UTC,`+/-HH:MM` 表偏移(时 00..23、分
   00..59),归一化到 UTC。历法规则被遵循(闰年、月长、小时 00..23)。整秒车道须
   落在扩展界 `-9223372037 .. +9223372036` 秒内(多出的一个负秒即
@@ -589,7 +589,7 @@ epoch_ns_from_digits(9999999999999, ns) == overflow        // 13 位车道溢出
 ### 3.9 转换桥(定义于 `convert.hpp`)
 
 `date_time` 经 `value_io` 的读取路径是 `converter<date_time>` 特化
-(`convert.hpp:447–483`):
+(`convert.hpp:475–511`):
 
 - **读**(`from_value(src, dt)`):整数标量的单位经 `epoch_ns_from_digits` 推断;
   ISO 文本标量经 `parse()` 解析;其它节点形态 → `kind_mismatch`;畸形文本 →
@@ -599,10 +599,10 @@ epoch_ns_from_digits(9999999999999, ns) == overflow        // 13 位车道溢出
 显式输出模式:
 
 ```cpp
-enum class date_time_output { numeric_seconds, numeric_ms, numeric_us, numeric_ns, iso_string };  // convert.hpp:439–445
+enum class date_time_output { numeric_seconds, numeric_ms, numeric_us, numeric_ns, iso_string };  // convert.hpp:467–473
 
 inline error_code to_value_dt(value_io* dst, const date_time& in,
-                              date_time_output mode);          // convert.hpp:490–491
+                              date_time_output mode);          // convert.hpp:518–519
 ```
 
 - `to_value_dt` 按选定单位写标量;`iso_string` 输出规范 `format()` 文本(精确
@@ -613,7 +613,7 @@ inline error_code to_value_dt(value_io* dst, const date_time& in,
 > `converter<date_time>`,自动推断单位。只有 `to_value_dt` 是专用入口。
 
 - **反射成员**:`date_time` 成员经 ISO 字符串车道序列化
-  (`member_to_value`,`convert.hpp:543–561`),使亚秒精度在反射结构体往返中存活。
+  (`member_to_value`,`convert.hpp:571–589`),使亚秒精度在反射结构体往返中存活。
 
 **示例**(`date_time_test.cpp:278–378`):
 
@@ -692,7 +692,7 @@ struct naming_policy {                             // naming.hpp:41–45
   布尔或 null)。
 
 由格式适配器的 `write_config` 从各自的 `key_case` / `rename_map` /
-`skip_empty` 字段聚合而来(如 `json.hpp:60–75` 再导出 `rtti::detail::key_case`
+`skip_empty` 字段聚合而来(如 `json.hpp:60–76` 再导出 `rtti::detail::key_case`
 并镜像该结构)。
 
 ### 4.5 `apply_naming`
@@ -746,10 +746,10 @@ configure_file(cmake/version.hpp.in
                include/rtti/version.hpp @ONLY)        # CMakeLists.txt:6  ← 生成器
 ```
 
-模板 `cmake/version.hpp.in:1–6` 替换 `@PROJECT_VERSION_MAJOR@` /
+模板 `cmake/version.hpp.in:2–6` 替换 `@PROJECT_VERSION_MAJOR@` /
 `@PROJECT_VERSION_MINOR@` / `@PROJECT_VERSION_PATCH@` / `@PROJECT_VERSION@`。
 升级版本只需改 `project(RTTI VERSION …)`;头文件与包版本文件
-(`write_basic_package_version_file`,`CMakeLists.txt:103–106`)随之保持同步。
+(`write_basic_package_version_file`,`CMakeLists.txt:110–113`)随之保持同步。
 
 **测试**(`tests/type_support_test.cpp:38–39`):
 
@@ -783,13 +783,13 @@ struct version_tag {                 // rtti_fwd.hpp:9–13
 ### 6.2 前置声明(定义于 `reflection.hpp`)
 
 ```cpp
-class attr_arg;                                  // :16   定义于 reflection.hpp:873
-struct attr;                                     // :17   定义于 reflection.hpp:926
-struct field_attr_entry;                         // :18   定义于 reflection.hpp:932
-struct field_attr_list;                          // :19   定义于 reflection.hpp:938
-template <typename T, typename> struct attr_table;     // :20   定义于 reflection.hpp:946
-template <typename T, typename> struct field_attr_table; // :21  定义于 reflection.hpp:954
-template <typename T, typename> struct template_info;   // :25   定义于 reflection.hpp:1721
+class attr_arg;                                  // :16   定义于 reflection.hpp:933
+struct attr;                                     // :17   定义于 reflection.hpp:986
+struct field_attr_entry;                         // :18   定义于 reflection.hpp:992
+struct field_attr_list;                          // :19   定义于 reflection.hpp:998
+template <typename T, typename> struct attr_table;     // :20   定义于 reflection.hpp:1006
+template <typename T, typename> struct field_attr_table; // :21  定义于 reflection.hpp:1014
+template <typename T, typename> struct template_info;   // :25   定义于 reflection.hpp:2295
 ```
 
 它们属于属性系统与显式模板实参注册表(spec 20);`RTTI_TEMPLATE_INFO`
