@@ -1,8 +1,21 @@
-# CI: build and test RTTI on MSVC, GCC, Clang plus an ASan/UBSan job.
-# Every job is a real configure -> build -> ctest pipeline; the test targets
-# (rtti_tests, rtti_proto_extension_tests, rtti_flat_schema_tests) are
-# registered via enable_testing() + add_test (CMakeLists.txt, tests/CMakeLists.txt),
-# so `ctest --output-on-failure` is the single runner across platforms.
+# CI: build and test RTTI on MSVC, GCC and Clang, plus an ASan/UBSan job, a
+# mixed-toolchain link job and a Release benchmark job.
+#
+# Every test job is a real configure -> build -> ctest pipeline; the test
+# targets (rtti_tests, rtti_proto_extension_tests, rtti_flat_schema_tests) are
+# registered via enable_testing() + add_test (CMakeLists.txt,
+# tests/CMakeLists.txt), so `ctest --output-on-failure` is the single gate
+# across platforms.
+#
+# Visibility: after the ctest gate each test executable is additionally run
+# directly, so its per-case `[TEST] ...` lines and the trailing
+# `NNNNN assertions, 0 failures` summary show up in the job log; the same
+# counts are appended to the run's GitHub step summary (rendered as a table),
+# and the raw logs are uploaded as artifacts. The `benchmarks` job builds the
+# Release microbenchmarks and records their ns/op and MB/s tables in the step
+# summary + an artifact. CI runners are shared machines: benchmark numbers are
+# data points, not authoritative baselines (docs/benchmarks/ holds the
+# recorded local runs).
 name: CI
 
 # `on` as a mapping key is YAML 1.2-safe and is what GitHub Actions expects;
@@ -27,6 +40,41 @@ jobs:
         run: cmake --build build --config ${{ matrix.cfg }}
       - name: Test
         run: ctest --test-dir build -C ${{ matrix.cfg }} --output-on-failure
+      - name: Test detail (per-case output + step summary)
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path test-logs | Out-Null
+          $rows = @()
+          foreach ($exe in @('rtti_proto_extension_tests', 'rtti_flat_schema_tests', 'rtti_tests')) {
+            $path = "build/tests/${{ matrix.cfg }}/$exe.exe"
+            Write-Host "================ $path ================"
+            $out = & $path 2>&1 | Tee-Object -FilePath "test-logs/$exe.log"
+            $rc = $LASTEXITCODE
+            $out | Write-Host
+            $m = [regex]::Match(($out | Out-String), '(\d+) assertions, (\d+) failures')
+            $a = if ($m.Success) { $m.Groups[1].Value } else { 'n/a' }
+            $f = if ($m.Success) { $m.Groups[2].Value } else { 'n/a' }
+            $res = if ($rc -eq 0) { 'OK' } else { "exit $rc" }
+            $rows += "| $exe | $a | $f | $res |"
+          }
+          $head = (Get-Content strip_matrix_64.txt -TotalCount 1) -replace '.*rtti=', 'all-off rtti='
+          $tail = (Get-Content strip_matrix_64.txt -Tail 1) -replace '.*rtti=', 'all-on rtti='
+          @(
+            "### Test detail - windows-msvc (${{ matrix.cfg }})",
+            "",
+            "| program | assertions | failures | result |",
+            "| --- | --- | --- | --- |"
+          ) + $rows + @(
+            "",
+            "Strip-matrix baselines (``strip_matrix_64.txt``): $head ... $tail"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-windows-msvc-${{ matrix.cfg }}
+          path: test-logs/
 
   linux-gcc:
     runs-on: ubuntu-latest
@@ -41,6 +89,39 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Test detail (per-case output + step summary)
+        if: always()
+        run: |
+          set -u
+          mkdir -p test-logs
+          : > rows.md
+          for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
+            echo "================ build/tests/$exe ================"
+            build/tests/$exe > "test-logs/$exe.log" 2>&1
+            rc=$?
+            cat "test-logs/$exe.log"
+            a=$(grep -oE '[0-9]+ assertions' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
+            printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+          done
+          head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
+          tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
+          {
+            echo "### Test detail - linux-gcc (${{ matrix.cfg }})"
+            echo ""
+            echo "| program | assertions | failures | result |"
+            echo "| --- | --- | --- | --- |"
+            cat rows.md
+            echo ""
+            echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-linux-gcc-${{ matrix.cfg }}
+          path: test-logs/
 
   linux-clang:
     runs-on: ubuntu-latest
@@ -52,6 +133,39 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Test detail (per-case output + step summary)
+        if: always()
+        run: |
+          set -u
+          mkdir -p test-logs
+          : > rows.md
+          for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
+            echo "================ build/tests/$exe ================"
+            build/tests/$exe > "test-logs/$exe.log" 2>&1
+            rc=$?
+            cat "test-logs/$exe.log"
+            a=$(grep -oE '[0-9]+ assertions' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
+            printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+          done
+          head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
+          tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
+          {
+            echo "### Test detail - linux-clang (Debug)"
+            echo ""
+            echo "| program | assertions | failures | result |"
+            echo "| --- | --- | --- | --- |"
+            cat rows.md
+            echo ""
+            echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-linux-clang
+          path: test-logs/
 
   linux-asan:
     runs-on: ubuntu-latest
@@ -63,6 +177,71 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Test detail (per-case output + step summary)
+        if: always()
+        run: |
+          set -u
+          mkdir -p test-logs
+          : > rows.md
+          for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
+            echo "================ build/tests/$exe ================"
+            build/tests/$exe > "test-logs/$exe.log" 2>&1
+            rc=$?
+            cat "test-logs/$exe.log"
+            a=$(grep -oE '[0-9]+ assertions' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
+            printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+          done
+          head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
+          tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
+          {
+            echo "### Test detail - linux-asan (Debug, ASan/UBSan)"
+            echo ""
+            echo "| program | assertions | failures | result |"
+            echo "| --- | --- | --- | --- |"
+            cat rows.md
+            echo ""
+            echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-linux-asan
+          path: test-logs/
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Release)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build benchmarks
+        run: cmake --build build -j --target rtti_bench rtti_bench_new rtti_bench_parse
+      - name: Run benchmarks
+        run: |
+          set -u -o pipefail
+          mkdir -p bench-logs
+          for exe in rtti_bench rtti_bench_new rtti_bench_parse; do
+            echo "================ $exe ================"
+            ./build/bench/$exe 2>&1 | tee "bench-logs/$exe.txt"
+          done
+          {
+            echo "### Benchmarks - ubuntu-latest, Release (CI runner data point)"
+            echo ""
+            echo "Shared CI runners are noisy: treat these numbers as data points, not authoritative baselines (\`docs/benchmarks/\` holds the recorded local runs)."
+            echo ""
+            echo '```'
+            cat bench-logs/*.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload benchmark logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-logs-ubuntu-release
+          path: bench-logs/
 
   # Cross-compiler link check: build the rtti static library with GCC, build
   # everything with Clang, then swap the GCC-built archive in and force a
@@ -93,4 +272,36 @@ jobs:
                 build-xlink/tests/rtti_flat_schema_tests
           cmake --build build-xlink -j
           ctest --test-dir build-xlink --output-on-failure
-
+      - name: Test detail (per-case output + step summary)
+        if: always()
+        run: |
+          set -u
+          mkdir -p test-logs
+          : > rows.md
+          for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
+            echo "================ build-xlink/tests/$exe ================"
+            build-xlink/tests/$exe > "test-logs/$exe.log" 2>&1
+            rc=$?
+            cat "test-logs/$exe.log"
+            a=$(grep -oE '[0-9]+ assertions' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
+            res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
+            printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+          done
+          head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
+          tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
+          {
+            echo "### Test detail - linux-cross-link (GCC lib + Clang tests)"
+            echo ""
+            echo "| program | assertions | failures | result |"
+            echo "| --- | --- | --- | --- |"
+            cat rows.md
+            echo ""
+            echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-linux-cross-link
+          path: test-logs/
