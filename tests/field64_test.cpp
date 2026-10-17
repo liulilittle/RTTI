@@ -18,10 +18,11 @@
 //     construction through make_object);
 //   * 64 template arguments (RTTI_TEMPLATE_INFO) and a 17-argument list with a
 //     paren-wrapped element in a non-first position;
-//   * a 17-entry type-attribute table including one attribute with 64
+//   * a 64-entry type-attribute table including one attribute with 64
 //     arguments, and a 64-entry field-attribute table;
-//   * JSON/INI round-trips over the 64-field type (feature-gated) and
-//     missing-key default preservation for the WITH_DEFAULT type;
+//   * JSON/INI/XML/TOML/protobuf/FlatBuffers round-trips over the 64-field
+//     type (each feature-gated) and missing-key default preservation for the
+//     WITH_DEFAULT type;
 //   * concurrent type_of/fields/for_each_field materialization of a 64-field
 //     type (the concurrency_test.cpp pattern);
 //   * allocation balance over repeated 64-field reflection calls
@@ -41,6 +42,18 @@
 #endif
 #if RTTI_ENABLE_INI
 #include <rtti/ini.hpp>
+#endif
+#if RTTI_ENABLE_XML
+#include <rtti/xml.hpp>
+#endif
+#if RTTI_ENABLE_TOML
+#include <rtti/toml.hpp>
+#endif
+#if RTTI_ENABLE_PROTO
+#include <rtti/proto.hpp>
+#endif
+#if RTTI_ENABLE_FLAT
+#include <rtti/flat.hpp>
 #endif
 
 #include <array>
@@ -204,7 +217,7 @@ struct Field64Wide;
 template <typename...>
 struct Field64Mix;
 
-// Type with a 17-entry attribute table (one entry carries 64 arguments).
+// Type with a 64-entry attribute table (one entry carries 64 arguments).
 struct Field64AttrHost {
     int v = 0;
 };
@@ -282,7 +295,22 @@ RTTI_DEFINE_TYPE_ATTRS(rtti_test_lib::Field64AttrHost,
     RTTI_ATTR("k07", 7), RTTI_ATTR("k08", 8), RTTI_ATTR("k09", 9),
     RTTI_ATTR("k10", 10), RTTI_ATTR("k11", 11), RTTI_ATTR("k12", 12),
     RTTI_ATTR("k13", 13), RTTI_ATTR("k14", 14), RTTI_ATTR("k15", 15),
-    RTTI_ATTR("k16", 16),
+    RTTI_ATTR("k16", 16), RTTI_ATTR("k17", 17), RTTI_ATTR("k18", 18),
+    RTTI_ATTR("k19", 19), RTTI_ATTR("k20", 20), RTTI_ATTR("k21", 21),
+    RTTI_ATTR("k22", 22), RTTI_ATTR("k23", 23), RTTI_ATTR("k24", 24),
+    RTTI_ATTR("k25", 25), RTTI_ATTR("k26", 26), RTTI_ATTR("k27", 27),
+    RTTI_ATTR("k28", 28), RTTI_ATTR("k29", 29), RTTI_ATTR("k30", 30),
+    RTTI_ATTR("k31", 31), RTTI_ATTR("k32", 32), RTTI_ATTR("k33", 33),
+    RTTI_ATTR("k34", 34), RTTI_ATTR("k35", 35), RTTI_ATTR("k36", 36),
+    RTTI_ATTR("k37", 37), RTTI_ATTR("k38", 38), RTTI_ATTR("k39", 39),
+    RTTI_ATTR("k40", 40), RTTI_ATTR("k41", 41), RTTI_ATTR("k42", 42),
+    RTTI_ATTR("k43", 43), RTTI_ATTR("k44", 44), RTTI_ATTR("k45", 45),
+    RTTI_ATTR("k46", 46), RTTI_ATTR("k47", 47), RTTI_ATTR("k48", 48),
+    RTTI_ATTR("k49", 49), RTTI_ATTR("k50", 50), RTTI_ATTR("k51", 51),
+    RTTI_ATTR("k52", 52), RTTI_ATTR("k53", 53), RTTI_ATTR("k54", 54),
+    RTTI_ATTR("k55", 55), RTTI_ATTR("k56", 56), RTTI_ATTR("k57", 57),
+    RTTI_ATTR("k58", 58), RTTI_ATTR("k59", 59), RTTI_ATTR("k60", 60),
+    RTTI_ATTR("k61", 61), RTTI_ATTR("k62", 62), RTTI_ATTR("k63", 63),
     RTTI_ATTR("wide", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
               17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
               33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
@@ -353,6 +381,234 @@ RTTI_DEFINE_FIELD_ATTRS(rtti_test_lib::Field64Big,
     RTTI_FIELD_ATTR_ENTRY(f62, RTTI_ATTR("col", 62)),
     RTTI_FIELD_ATTR_ENTRY(f63, RTTI_ATTR("col", 63)),
     RTTI_FIELD_ATTR_ENTRY(f64, RTTI_ATTR("col", 64)))
+
+#if RTTI_ENABLE_PROTO
+// protobuf schema for the 64-field type: one proto3 varint field per member
+// (field numbers 1..64). Declared before the test cases so the static inline
+// descriptor array initializes before the harness runs them.
+namespace rtti {
+namespace proto {
+
+template <>
+struct schema<rtti_test_lib::Field64Big> {
+    static constexpr std::size_t count = 64;
+    static constexpr syntax syn = syntax::proto3;
+    static inline const field_base* const array[count] = {
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f01>(
+            make_field_desc("f01", 1, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f02>(
+            make_field_desc("f02", 2, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f03>(
+            make_field_desc("f03", 3, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f04>(
+            make_field_desc("f04", 4, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f05>(
+            make_field_desc("f05", 5, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f06>(
+            make_field_desc("f06", 6, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f07>(
+            make_field_desc("f07", 7, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f08>(
+            make_field_desc("f08", 8, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f09>(
+            make_field_desc("f09", 9, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f10>(
+            make_field_desc("f10", 10, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f11>(
+            make_field_desc("f11", 11, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f12>(
+            make_field_desc("f12", 12, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f13>(
+            make_field_desc("f13", 13, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f14>(
+            make_field_desc("f14", 14, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f15>(
+            make_field_desc("f15", 15, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f16>(
+            make_field_desc("f16", 16, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f17>(
+            make_field_desc("f17", 17, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f18>(
+            make_field_desc("f18", 18, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f19>(
+            make_field_desc("f19", 19, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f20>(
+            make_field_desc("f20", 20, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f21>(
+            make_field_desc("f21", 21, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f22>(
+            make_field_desc("f22", 22, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f23>(
+            make_field_desc("f23", 23, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f24>(
+            make_field_desc("f24", 24, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f25>(
+            make_field_desc("f25", 25, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f26>(
+            make_field_desc("f26", 26, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f27>(
+            make_field_desc("f27", 27, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f28>(
+            make_field_desc("f28", 28, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f29>(
+            make_field_desc("f29", 29, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f30>(
+            make_field_desc("f30", 30, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f31>(
+            make_field_desc("f31", 31, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f32>(
+            make_field_desc("f32", 32, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f33>(
+            make_field_desc("f33", 33, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f34>(
+            make_field_desc("f34", 34, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f35>(
+            make_field_desc("f35", 35, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f36>(
+            make_field_desc("f36", 36, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f37>(
+            make_field_desc("f37", 37, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f38>(
+            make_field_desc("f38", 38, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f39>(
+            make_field_desc("f39", 39, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f40>(
+            make_field_desc("f40", 40, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f41>(
+            make_field_desc("f41", 41, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f42>(
+            make_field_desc("f42", 42, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f43>(
+            make_field_desc("f43", 43, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f44>(
+            make_field_desc("f44", 44, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f45>(
+            make_field_desc("f45", 45, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f46>(
+            make_field_desc("f46", 46, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f47>(
+            make_field_desc("f47", 47, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f48>(
+            make_field_desc("f48", 48, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f49>(
+            make_field_desc("f49", 49, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f50>(
+            make_field_desc("f50", 50, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f51>(
+            make_field_desc("f51", 51, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f52>(
+            make_field_desc("f52", 52, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f53>(
+            make_field_desc("f53", 53, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f54>(
+            make_field_desc("f54", 54, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f55>(
+            make_field_desc("f55", 55, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f56>(
+            make_field_desc("f56", 56, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f57>(
+            make_field_desc("f57", 57, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f58>(
+            make_field_desc("f58", 58, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f59>(
+            make_field_desc("f59", 59, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f60>(
+            make_field_desc("f60", 60, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f61>(
+            make_field_desc("f61", 61, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f62>(
+            make_field_desc("f62", 62, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f63>(
+            make_field_desc("f63", 63, wire_type::varint)),
+        make_field<rtti_test_lib::Field64Big, &rtti_test_lib::Field64Big::f64>(
+            make_field_desc("f64", 64, wire_type::varint)),
+    };
+};
+
+} // namespace proto
+} // namespace rtti
+#endif
+
+#if RTTI_ENABLE_FLAT
+// FlatBuffers schema for the 64-field type: one i32 vtable slot per member
+// (slots 0..63).
+namespace rtti {
+namespace flat {
+
+template <>
+struct schema<rtti_test_lib::Field64Big> {
+    static constexpr std::size_t count = 64;
+    static inline const field_desc fields[count] = {
+        make_field_desc("f01", 0, fkind::i32),
+        make_field_desc("f02", 1, fkind::i32),
+        make_field_desc("f03", 2, fkind::i32),
+        make_field_desc("f04", 3, fkind::i32),
+        make_field_desc("f05", 4, fkind::i32),
+        make_field_desc("f06", 5, fkind::i32),
+        make_field_desc("f07", 6, fkind::i32),
+        make_field_desc("f08", 7, fkind::i32),
+        make_field_desc("f09", 8, fkind::i32),
+        make_field_desc("f10", 9, fkind::i32),
+        make_field_desc("f11", 10, fkind::i32),
+        make_field_desc("f12", 11, fkind::i32),
+        make_field_desc("f13", 12, fkind::i32),
+        make_field_desc("f14", 13, fkind::i32),
+        make_field_desc("f15", 14, fkind::i32),
+        make_field_desc("f16", 15, fkind::i32),
+        make_field_desc("f17", 16, fkind::i32),
+        make_field_desc("f18", 17, fkind::i32),
+        make_field_desc("f19", 18, fkind::i32),
+        make_field_desc("f20", 19, fkind::i32),
+        make_field_desc("f21", 20, fkind::i32),
+        make_field_desc("f22", 21, fkind::i32),
+        make_field_desc("f23", 22, fkind::i32),
+        make_field_desc("f24", 23, fkind::i32),
+        make_field_desc("f25", 24, fkind::i32),
+        make_field_desc("f26", 25, fkind::i32),
+        make_field_desc("f27", 26, fkind::i32),
+        make_field_desc("f28", 27, fkind::i32),
+        make_field_desc("f29", 28, fkind::i32),
+        make_field_desc("f30", 29, fkind::i32),
+        make_field_desc("f31", 30, fkind::i32),
+        make_field_desc("f32", 31, fkind::i32),
+        make_field_desc("f33", 32, fkind::i32),
+        make_field_desc("f34", 33, fkind::i32),
+        make_field_desc("f35", 34, fkind::i32),
+        make_field_desc("f36", 35, fkind::i32),
+        make_field_desc("f37", 36, fkind::i32),
+        make_field_desc("f38", 37, fkind::i32),
+        make_field_desc("f39", 38, fkind::i32),
+        make_field_desc("f40", 39, fkind::i32),
+        make_field_desc("f41", 40, fkind::i32),
+        make_field_desc("f42", 41, fkind::i32),
+        make_field_desc("f43", 42, fkind::i32),
+        make_field_desc("f44", 43, fkind::i32),
+        make_field_desc("f45", 44, fkind::i32),
+        make_field_desc("f46", 45, fkind::i32),
+        make_field_desc("f47", 46, fkind::i32),
+        make_field_desc("f48", 47, fkind::i32),
+        make_field_desc("f49", 48, fkind::i32),
+        make_field_desc("f50", 49, fkind::i32),
+        make_field_desc("f51", 50, fkind::i32),
+        make_field_desc("f52", 51, fkind::i32),
+        make_field_desc("f53", 52, fkind::i32),
+        make_field_desc("f54", 53, fkind::i32),
+        make_field_desc("f55", 54, fkind::i32),
+        make_field_desc("f56", 55, fkind::i32),
+        make_field_desc("f57", 56, fkind::i32),
+        make_field_desc("f58", 57, fkind::i32),
+        make_field_desc("f59", 58, fkind::i32),
+        make_field_desc("f60", 59, fkind::i32),
+        make_field_desc("f61", 60, fkind::i32),
+        make_field_desc("f62", 61, fkind::i32),
+        make_field_desc("f63", 62, fkind::i32),
+        make_field_desc("f64", 63, fkind::i32),
+    };
+};
+
+} // namespace flat
+} // namespace rtti
+#endif
 
 namespace rtti_test_lib {
 
@@ -623,26 +879,26 @@ RTTI_TEST_CASE(Field64TemplateArgsParenWrappedElement) {
                 rtti::type_of<std::pair<int, int>>()));
 }
 
-RTTI_TEST_CASE(Field64TypeAttrs17Entries) {
-    RTTI_CHECK_EQ(rtti::attr_count<Field64AttrHost>(), std::size_t(17));
+RTTI_TEST_CASE(Field64TypeAttrs64Entries) {
+    RTTI_CHECK_EQ(rtti::attr_count<Field64AttrHost>(), std::size_t(64));
     const rtti::attr* k01 = rtti::attr_at<Field64AttrHost>(0);
     RTTI_CHECK(k01 != nullptr);
     RTTI_CHECK_EQ(std::string(k01->name), std::string("k01"));
     RTTI_CHECK_EQ(k01->args.size(), std::size_t(1));
     RTTI_CHECK_EQ(k01->args[0].as_integer(), std::uint64_t(1));
-    const rtti::attr* k16 = rtti::attr_at<Field64AttrHost>(15);
-    RTTI_CHECK(k16 != nullptr);
-    RTTI_CHECK_EQ(std::string(k16->name), std::string("k16"));
-    RTTI_CHECK_EQ(k16->args[0].as_integer(), std::uint64_t(16));
-    RTTI_CHECK(rtti::attr_at<Field64AttrHost>(17) == nullptr);
+    const rtti::attr* k63 = rtti::attr_at<Field64AttrHost>(62);
+    RTTI_CHECK(k63 != nullptr);
+    RTTI_CHECK_EQ(std::string(k63->name), std::string("k63"));
+    RTTI_CHECK_EQ(k63->args[0].as_integer(), std::uint64_t(63));
+    RTTI_CHECK(rtti::attr_at<Field64AttrHost>(64) == nullptr);
 
     const rtti::attr* wide = rtti::find_attr<Field64AttrHost>("wide");
     RTTI_CHECK(wide != nullptr);
     RTTI_CHECK_EQ(wide->args.size(), std::size_t(64));
     RTTI_CHECK_EQ(wide->args[0].as_integer(), std::uint64_t(1));
     RTTI_CHECK_EQ(wide->args[63].as_integer(), std::uint64_t(64));
-    RTTI_CHECK(rtti::has_attr<Field64AttrHost>("k16"));
-    RTTI_CHECK(!rtti::has_attr<Field64AttrHost>("k17"));
+    RTTI_CHECK(rtti::has_attr<Field64AttrHost>("k63"));
+    RTTI_CHECK(!rtti::has_attr<Field64AttrHost>("k64"));
 }
 
 RTTI_TEST_CASE(Field64FieldAttrs64Entries) {
@@ -712,6 +968,87 @@ RTTI_TEST_CASE(Field64IniRoundTrip) {
     for (std::size_t i = 0; i < 64; ++i) {
         RTTI_CHECK_EQ(fs[i]->get(&back.value).as_integer(),
                       static_cast<std::int64_t>(i + 1) * 2);
+    }
+}
+#endif
+
+#if RTTI_ENABLE_XML
+RTTI_TEST_CASE(Field64XmlRoundTrip) {
+    Field64Big o;
+    const auto* fs = rtti::fields<Field64Big>();
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK(fs[i]->set(
+            &o, rtti::field_value::of(
+                    static_cast<std::int64_t>(i + 1) * 5)));
+    }
+    const std::string text = rtti::xml::serialize(o);
+    RTTI_CHECK(!text.empty());
+    auto back = rtti::xml::parse_as<Field64Big>(text);
+    RTTI_CHECK(back.ok());
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK_EQ(fs[i]->get(&back.value).as_integer(),
+                      static_cast<std::int64_t>(i + 1) * 5);
+    }
+}
+#endif
+
+#if RTTI_ENABLE_TOML
+RTTI_TEST_CASE(Field64TomlRoundTrip) {
+    Field64Big o;
+    const auto* fs = rtti::fields<Field64Big>();
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK(fs[i]->set(
+            &o, rtti::field_value::of(
+                    static_cast<std::int64_t>(i + 1) * 7)));
+    }
+    const std::string text = rtti::toml::serialize(o);
+    RTTI_CHECK(!text.empty());
+    auto back = rtti::toml::parse_as<Field64Big>(text);
+    RTTI_CHECK(back.ok());
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK_EQ(fs[i]->get(&back.value).as_integer(),
+                      static_cast<std::int64_t>(i + 1) * 7);
+    }
+}
+#endif
+
+#if RTTI_ENABLE_PROTO
+RTTI_TEST_CASE(Field64ProtoRoundTrip) {
+    Field64Big o;
+    const auto* fs = rtti::fields<Field64Big>();
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK(fs[i]->set(
+            &o, rtti::field_value::of(
+                    static_cast<std::int64_t>(i + 1) * 11)));
+    }
+    const std::string wire = rtti::proto::serialize(o);
+    RTTI_CHECK(!wire.empty());
+    auto back = rtti::proto::parse_as<Field64Big>(rtti::string_view(wire));
+    RTTI_CHECK(back.ok());
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK_EQ(fs[i]->get(&back.value).as_integer(),
+                      static_cast<std::int64_t>(i + 1) * 11);
+    }
+}
+#endif
+
+#if RTTI_ENABLE_FLAT
+RTTI_TEST_CASE(Field64FlatRoundTrip) {
+    Field64Big o;
+    const auto* fs = rtti::fields<Field64Big>();
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK(fs[i]->set(
+            &o, rtti::field_value::of(
+                    static_cast<std::int64_t>(i + 1) * 13)));
+    }
+    std::string wire;
+    RTTI_CHECK_EQ(rtti::flat::serialize(o, wire), rtti::error_code::ok);
+    RTTI_CHECK(!wire.empty());
+    auto back = rtti::flat::parse_as<Field64Big>(rtti::string_view(wire));
+    RTTI_CHECK(back.ok());
+    for (std::size_t i = 0; i < 64; ++i) {
+        RTTI_CHECK_EQ(fs[i]->get(&back.value).as_integer(),
+                      static_cast<std::int64_t>(i + 1) * 13);
     }
 }
 #endif
