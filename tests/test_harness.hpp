@@ -67,7 +67,10 @@ inline test_case**& test_cases_tail() {
 
 // Runs registered test cases in registration order. --filter=SUB or
 // --filter SUB keeps only cases whose name contains SUB (case-sensitive
-// substring). Returns the process exit code via summary().
+// substring). Returns the process exit code via summary(). Each case emits a
+// `[TEST] name` line before it runs (so a crash still names the case) and a
+// `[CASE] name: N assertions, M failures` line after it, which lets tooling
+// (CI step summaries) report per-case assertion counts.
 inline int run_all(int argc, char** argv) {
     const char* filter = nullptr;
     for (int i = 1; i < argc; ++i) {
@@ -88,7 +91,13 @@ inline int run_all(int argc, char** argv) {
         }
         std::fprintf(stderr, "[TEST] %s\n", c->name);
         std::fflush(stderr);
+        const int before_assertions = assertions();
+        const int before_failures = failures();
         c->fn();
+        std::fprintf(stderr, "[CASE] %s: %d assertions, %d failures\n",
+                     c->name, assertions() - before_assertions,
+                     failures() - before_failures);
+        std::fflush(stderr);
         ++run;
     }
     if (filter != nullptr) {

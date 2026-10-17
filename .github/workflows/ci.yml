@@ -8,14 +8,15 @@
 # across platforms.
 #
 # Visibility: after the ctest gate each test executable is additionally run
-# directly, so its per-case `[TEST] ...` lines and the trailing
+# directly, so its per-case `[TEST] ...` / `[CASE] ...` lines and the trailing
 # `NNNNN assertions, 0 failures` summary show up in the job log; the same
-# counts are appended to the run's GitHub step summary (rendered as a table),
-# and the raw logs are uploaded as artifacts. The `benchmarks` job builds the
-# Release microbenchmarks and records their ns/op and MB/s tables in the step
-# summary + an artifact. CI runners are shared machines: benchmark numbers are
-# data points, not authoritative baselines (docs/benchmarks/ holds the
-# recorded local runs).
+# counts (per program and per case) are appended to the run's GitHub step
+# summary and the raw logs are uploaded as artifacts. The `benchmarks` job
+# builds the Release microbenchmarks with MSVC (same toolchain family and the
+# same iteration parameters as the recorded local captures in
+# docs/benchmarks/) and records their ns/op and MB/s tables in the step
+# summary + an artifact. The CI runner CPU differs, so benchmark numbers are
+# data points to compare in shape, not authoritative baselines.
 name: CI
 
 # `on` as a mapping key is YAML 1.2-safe and is what GitHub Actions expects;
@@ -46,17 +47,33 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path test-logs | Out-Null
           $rows = @()
+          $cases = @()
+          $caseCount = 0
           foreach ($exe in @('rtti_proto_extension_tests', 'rtti_flat_schema_tests', 'rtti_tests')) {
             $path = "build/tests/${{ matrix.cfg }}/$exe.exe"
             Write-Host "================ $path ================"
-            $out = & $path 2>&1 | Tee-Object -FilePath "test-logs/$exe.log"
+            $out = & $path 2>&1
             $rc = $LASTEXITCODE
             $out | Write-Host
-            $m = [regex]::Match(($out | Out-String), '(\d+) assertions, (\d+) failures')
-            $a = if ($m.Success) { $m.Groups[1].Value } else { 'n/a' }
-            $f = if ($m.Success) { $m.Groups[2].Value } else { 'n/a' }
+            $out | Out-File -FilePath "test-logs/$exe.log" -Encoding utf8
+            $m = [regex]::Matches(($out | Out-String), '(\d+) assertions, (\d+) failures')
+            if ($m.Count -gt 0) {
+              $a = $m[$m.Count - 1].Groups[1].Value
+              $f = $m[$m.Count - 1].Groups[2].Value
+            } else {
+              $a = 'n/a'
+              $f = 'n/a'
+            }
             $res = if ($rc -eq 0) { 'OK' } else { "exit $rc" }
             $rows += "| $exe | $a | $f | $res |"
+            $crows = @()
+            foreach ($line in $out) {
+              if ($line -match '^\[CASE\] (.+): (\d+) assertions, (\d+) failures$') {
+                $crows += "| $($Matches[1]) | $($Matches[2]) | $($Matches[3]) |"
+              }
+            }
+            $caseCount += $crows.Count
+            $cases += @("#### $exe", "", "| case | assertions | failures |", "| --- | --- | --- |") + $crows + @("")
           }
           $head = (Get-Content strip_matrix_64.txt -TotalCount 1) -replace '.*rtti=', 'all-off rtti='
           $tail = (Get-Content strip_matrix_64.txt -Tail 1) -replace '.*rtti=', 'all-on rtti='
@@ -67,7 +84,12 @@ jobs:
             "| --- | --- | --- | --- |"
           ) + $rows + @(
             "",
-            "Strip-matrix baselines (``strip_matrix_64.txt``): $head ... $tail"
+            "Strip-matrix baselines (``strip_matrix_64.txt``): $head ... $tail",
+            "",
+            "<details><summary>Per-case assertion counts ($caseCount cases)</summary>",
+            ""
+          ) + $cases + @(
+            "</details>"
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Upload test logs
         if: always()
@@ -95,6 +117,7 @@ jobs:
           set -u
           mkdir -p test-logs
           : > rows.md
+          : > cases.md
           for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
             echo "================ build/tests/$exe ================"
             build/tests/$exe > "test-logs/$exe.log" 2>&1
@@ -104,7 +127,16 @@ jobs:
             f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
             res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
             printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+            {
+              echo "#### $exe"
+              echo ""
+              echo "| case | assertions | failures |"
+              echo "| --- | --- | --- |"
+              sed -n 's/^\[CASE\] \(.*\): \([0-9]*\) assertions, \([0-9]*\) failures$/| \1 | \2 | \3 |/p' "test-logs/$exe.log"
+              echo ""
+            } >> cases.md
           done
+          case_count=$(cat test-logs/*.log | grep -c '^\[CASE\] ' || true)
           head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
           tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
           {
@@ -115,6 +147,11 @@ jobs:
             cat rows.md
             echo ""
             echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+            echo ""
+            echo "<details><summary>Per-case assertion counts (${case_count} cases)</summary>"
+            echo ""
+            cat cases.md
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test logs
         if: always()
@@ -139,6 +176,7 @@ jobs:
           set -u
           mkdir -p test-logs
           : > rows.md
+          : > cases.md
           for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
             echo "================ build/tests/$exe ================"
             build/tests/$exe > "test-logs/$exe.log" 2>&1
@@ -148,7 +186,16 @@ jobs:
             f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
             res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
             printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+            {
+              echo "#### $exe"
+              echo ""
+              echo "| case | assertions | failures |"
+              echo "| --- | --- | --- |"
+              sed -n 's/^\[CASE\] \(.*\): \([0-9]*\) assertions, \([0-9]*\) failures$/| \1 | \2 | \3 |/p' "test-logs/$exe.log"
+              echo ""
+            } >> cases.md
           done
+          case_count=$(cat test-logs/*.log | grep -c '^\[CASE\] ' || true)
           head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
           tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
           {
@@ -159,6 +206,11 @@ jobs:
             cat rows.md
             echo ""
             echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+            echo ""
+            echo "<details><summary>Per-case assertion counts (${case_count} cases)</summary>"
+            echo ""
+            cat cases.md
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test logs
         if: always()
@@ -183,6 +235,7 @@ jobs:
           set -u
           mkdir -p test-logs
           : > rows.md
+          : > cases.md
           for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
             echo "================ build/tests/$exe ================"
             build/tests/$exe > "test-logs/$exe.log" 2>&1
@@ -192,7 +245,16 @@ jobs:
             f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
             res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
             printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+            {
+              echo "#### $exe"
+              echo ""
+              echo "| case | assertions | failures |"
+              echo "| --- | --- | --- |"
+              sed -n 's/^\[CASE\] \(.*\): \([0-9]*\) assertions, \([0-9]*\) failures$/| \1 | \2 | \3 |/p' "test-logs/$exe.log"
+              echo ""
+            } >> cases.md
           done
+          case_count=$(cat test-logs/*.log | grep -c '^\[CASE\] ' || true)
           head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
           tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
           {
@@ -203,6 +265,11 @@ jobs:
             cat rows.md
             echo ""
             echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+            echo ""
+            echo "<details><summary>Per-case assertion counts (${case_count} cases)</summary>"
+            echo ""
+            cat cases.md
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test logs
         if: always()
@@ -212,35 +279,45 @@ jobs:
           path: test-logs/
 
   benchmarks:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure (Release)
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build benchmarks
-        run: cmake --build build -j --target rtti_bench rtti_bench_new rtti_bench_parse
+      - name: Configure (MSVC x64)
+        run: cmake -S . -B build -A x64
+      - name: Build benchmarks (Release)
+        run: cmake --build build --config Release --target rtti_bench rtti_bench_new rtti_bench_parse
       - name: Run benchmarks
+        shell: pwsh
         run: |
-          set -u -o pipefail
-          mkdir -p bench-logs
-          for exe in rtti_bench rtti_bench_new rtti_bench_parse; do
-            echo "================ $exe ================"
-            ./build/bench/$exe 2>&1 | tee "bench-logs/$exe.txt"
-          done
-          {
-            echo "### Benchmarks - ubuntu-latest, Release (CI runner data point)"
-            echo ""
-            echo "Shared CI runners are noisy: treat these numbers as data points, not authoritative baselines (\`docs/benchmarks/\` holds the recorded local runs)."
-            echo ""
-            echo '```'
-            cat bench-logs/*.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          New-Item -ItemType Directory -Force -Path bench-logs | Out-Null
+          foreach ($exe in @('rtti_bench_new', 'rtti_bench', 'rtti_bench_parse')) {
+            Write-Host "================ $exe ================"
+            $runArgs = @()
+            # The recorded local captures ran rtti_bench_new with 20,000,000
+            # iters/sample; rtti_bench (100000000/10000000/1000000) and
+            # rtti_bench_parse (30) carry their iteration counts internally.
+            if ($exe -eq 'rtti_bench_new') { $runArgs = @('20000000') }
+            $out = & "build\bench\Release\$exe.exe" @runArgs 2>&1
+            $rc = $LASTEXITCODE
+            $out | Write-Host
+            $out | Out-File -FilePath "bench-logs\$exe.txt" -Encoding utf8
+            if ($rc -ne 0) { throw "$exe exited with $rc" }
+          }
+          $tables = (Get-Content bench-logs\*.txt) -join "`n"
+          @(
+            "### Benchmarks - windows-latest, MSVC Release (CI runner data point)",
+            "",
+            "Toolchain family and iteration parameters match the recorded local captures (``rtti_bench_new`` 20000000 iters/sample; ``rtti_bench`` built-in 100000000/10000000/1000000; ``rtti_bench_parse`` 30 iters). The runner CPU and the exact MSVC version differ, so compare shapes, not absolute values; the environment header above each table names the compiler actually used.",
+            "",
+            '```',
+            $tables,
+            '```'
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Upload benchmark logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bench-logs-ubuntu-release
+          name: bench-logs-windows-msvc-release
           path: bench-logs/
 
   # Cross-compiler link check: build the rtti static library with GCC, build
@@ -278,6 +355,7 @@ jobs:
           set -u
           mkdir -p test-logs
           : > rows.md
+          : > cases.md
           for exe in rtti_proto_extension_tests rtti_flat_schema_tests rtti_tests; do
             echo "================ build-xlink/tests/$exe ================"
             build-xlink/tests/$exe > "test-logs/$exe.log" 2>&1
@@ -287,7 +365,16 @@ jobs:
             f=$(grep -oE '[0-9]+ failures' "test-logs/$exe.log" | tail -1 | grep -oE '[0-9]+' || true)
             res=OK; [ "$rc" -eq 0 ] || res="exit $rc"
             printf '| %s | %s | %s | %s |\n' "$exe" "${a:-n/a}" "${f:-n/a}" "$res" >> rows.md
+            {
+              echo "#### $exe"
+              echo ""
+              echo "| case | assertions | failures |"
+              echo "| --- | --- | --- |"
+              sed -n 's/^\[CASE\] \(.*\): \([0-9]*\) assertions, \([0-9]*\) failures$/| \1 | \2 | \3 |/p' "test-logs/$exe.log"
+              echo ""
+            } >> cases.md
           done
+          case_count=$(cat test-logs/*.log | grep -c '^\[CASE\] ' || true)
           head_line=$(head -1 strip_matrix_64.txt | sed 's/.*rtti=/all-off rtti=/')
           tail_line=$(tail -1 strip_matrix_64.txt | sed 's/.*rtti=/all-on rtti=/')
           {
@@ -298,6 +385,11 @@ jobs:
             cat rows.md
             echo ""
             echo "Strip-matrix baselines (\`strip_matrix_64.txt\`): ${head_line} ... ${tail_line}"
+            echo ""
+            echo "<details><summary>Per-case assertion counts (${case_count} cases)</summary>"
+            echo ""
+            cat cases.md
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test logs
         if: always()
