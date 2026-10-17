@@ -38,6 +38,29 @@ into `docs/benchmarks/`:
 .\scripts\run_bench.ps1 -Config Release
 ```
 
+## CI benchmark jobs / CI 跑分任务
+
+- `.github/workflows/ci.yml` runs the `benchmarks` job on every push/PR
+  (GitHub-hosted `windows-latest`, MSVC Release, `rtti_bench_new 20000000`)
+  and records the tables in the run's step summary plus a `bench-logs-*`
+  artifact.
+- `.github/workflows/bench-msvc2022.yml` is a **manual** (`workflow_dispatch`)
+  job for the *recorded* toolchain: it targets a self-hosted Windows runner
+  that must carry the labels `self-hosted`, `windows`, `x64` and `vs2022`,
+  builds with `-G "Visual Studio 17 2022"` (MSVC 19.44.x, the version of the
+  captures in this directory), takes an optional `iterations` input (default
+  `20000000`) and warns in the summary when the detected compiler is not
+  MSVC 19.44.x.
+
+- `.github/workflows/ci.yml` 在每次 push/PR 上运行 `benchmarks`
+  (GitHub 托管 `windows-latest`、MSVC Release、`rtti_bench_new 20000000`),
+  结果进本次运行的 Step Summary 与 `bench-logs-*` artifact。
+- `.github/workflows/bench-msvc2022.yml` 是**手动**(`workflow_dispatch`)任务,
+  面向"记录所用的工具链":需自托管 Windows runner 打上 `self-hosted`、
+  `windows`、`x64`、`vs2022` 标签,并用 `-G "Visual Studio 17 2022"`
+  (MSVC 19.44.x,即本目录记录的版本)构建;可选 `iterations` 输入(默认
+  `20000000`),检测到的编译器不是 MSVC 19.44.x 时会在 Summary 中告警。
+
 ## Environment requirements / 环境要求
 
 - C++17 compiler; MSVC 2022 `/W4 /permissive- /Zc:preprocessor` (and

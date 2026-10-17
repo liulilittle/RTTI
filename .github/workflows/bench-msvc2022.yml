@@ -1,0 +1,76 @@
+# Manual benchmark run on a self-hosted Windows runner that carries the
+# Visual Studio 2022 toolchain - the exact compiler family/version of the
+# recorded captures under docs/benchmarks/ (MSVC 19.44.35229). The automatic
+# push/PR benchmark job in ci.yml runs on GitHub-hosted windows-latest (VS2026,
+# MSVC 19.51.x); this workflow exists so the numbers can be reproduced with the
+# recorded toolchain.
+#
+# The github-hosted benchmarks job in ci.yml and this one share the same
+# parameters: rtti_bench_new at 20000000 iters/sample (warm-up 312500 is
+# derived), rtti_bench's built-in 100000000/10000000/1000000 and
+# rtti_bench_parse's 30 iters - except that the `iterations` input here can
+# override the rtti_bench_new count on purpose.
+#
+# Requirements: a self-hosted Windows x64 runner labelled
+#   self-hosted, windows, x64, vs2022
+# with Visual Studio 2022 (C++ workload) and CMake. Without a matching runner
+# an on-demand run simply stays queued.
+name: Benchmarks (MSVC 2022, self-hosted)
+
+"on":
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "rtti_bench_new iterations per sample (recorded capture: 20000000)"
+        required: false
+        default: "20000000"
+        type: string
+
+jobs:
+  benchmarks-msvc2022:
+    runs-on: [self-hosted, windows, x64, vs2022]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (VS17 2022 x64)
+        # Pin the generator: this job exists to run the recorded VS2022
+        # toolchain, so it must not fall back to a newer Visual Studio.
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build benchmarks (Release)
+        run: cmake --build build --config Release --target rtti_bench rtti_bench_new rtti_bench_parse
+      - name: Run benchmarks
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bench-logs | Out-Null
+          foreach ($exe in @('rtti_bench_new', 'rtti_bench', 'rtti_bench_parse')) {
+            Write-Host "================ $exe ================"
+            $runArgs = @()
+            if ($exe -eq 'rtti_bench_new') { $runArgs = @('${{ inputs.iterations }}') }
+            $out = & "build\bench\Release\$exe.exe" @runArgs 2>&1
+            $rc = $LASTEXITCODE
+            $out | Write-Host
+            $out | Out-File -FilePath "bench-logs\$exe.txt" -Encoding utf8
+            if ($rc -ne 0) { throw "$exe exited with $rc" }
+          }
+          $compiler = (Get-Content bench-logs\rtti_bench_new.txt | Select-String '^compiler' | Select-Object -First 1).Line
+          $tables = (Get-Content bench-logs\*.txt) -join "`n"
+          @(
+            "### Benchmarks - self-hosted Windows runner, VS17 2022 (recorded toolchain)",
+            "",
+            "Target toolchain: MSVC 19.44.x (recorded captures: 19.44.35229). Detected: $compiler",
+            "",
+            "Parameters: ``rtti_bench_new`` ${{ inputs.iterations }} iters/sample; ``rtti_bench`` built-in 100000000/10000000/1000000; ``rtti_bench_parse`` 30 iters.",
+            "",
+            '```',
+            $tables,
+            '```'
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if ($compiler -notmatch 'MSVC 19\.44\.') {
+            Write-Host "::warning::Detected '$compiler', not MSVC 19.44.x - numbers are not directly comparable with the recorded captures."
+          }
+      - name: Upload benchmark logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-logs-msvc2022-selfhosted
+          path: bench-logs/
