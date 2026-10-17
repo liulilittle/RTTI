@@ -182,7 +182,7 @@ the full 64-combo re-sweep is recorded in `strip_matrix_64.txt`):
 
 | Suite | Debug `build/` | Release `build/` | LTCG `build-opt/` | Gates-off `build-off/` |
 | --- | ---: | ---: | ---: | ---: |
-| `rtti_tests` | 57653 | 57653 | 57653 | 33794 |
+| `rtti_tests` | 58174 | 58174 | 58174 | 33794 |
 | `rtti_proto_extension_tests` | 160 | 160 | 160 | — |
 | `rtti_flat_schema_tests` | 408 | 408 | 408 | — |
 

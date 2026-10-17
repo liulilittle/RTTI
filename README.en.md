@@ -692,20 +692,20 @@ is explicitly configured, built and run against the full test suite
 independently** (each in its own scratch directory, with the `CMakeCache.txt`
 `RTTI_ENABLE_*` values verified right after configure). Assertions grow
 monotonically as gates are added. The 2026-10-16 full 64-combo re-sweep
-(after the 64-field ladder widening; all combinations `0 failures`, zero
-warnings) ran from `33794` all-off to `57653` all-on. The sweep
-(`.opencode/batch_strip.ps1` + `.opencode/strip_matrix.ps1`)
-grouped by gate count:
+(after the 64-field ladder widening and the adapter round-trip coverage;
+all combinations `0 failures`, zero warnings) ran from `33794` all-off to
+`58174` all-on. The sweep (`scripts/run_strip_matrix.ps1`) grouped by gate
+count:
 
 | Gates on | Combinations run | rtti_tests assertions span |
 | --- | --- | --- |
 | 0 | 1 | 33794 |
-| 1 | 6 | 33964 – 39220 |
-| 2 | 15 | 35755 – 44565 |
-| 3 | 20 | 41043 – 49946 |
-| 4 | 15 | 46351 – 55551 |
-| 5 | 6 | 51696 – 57483 |
-| 6 | 1 | 57653 |
+| 1 | 6 | 34095 – 39232 |
+| 2 | 15 | 36016 – 44658 |
+| 3 | 20 | 41361 – 50076 |
+| 4 | 15 | 46779 – 55811 |
+| 5 | 6 | 52217 – 57873 |
+| 6 | 1 | 58174 |
 
 (The per-combination matrix is recorded in `strip_matrix_64.txt` at the
 repository root.)

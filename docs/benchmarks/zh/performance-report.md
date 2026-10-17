@@ -155,7 +155,7 @@ reflect_roundtrip            median      823474 ops/s  (min      741937, max    
 
 | 套件 | Debug `build/` | Release `build/` | LTCG `build-opt/` | 全关 `build-off/` |
 | --- | ---: | ---: | ---: | ---: |
-| `rtti_tests` | 57653 | 57653 | 57653 | 33794 |
+| `rtti_tests` | 58174 | 58174 | 58174 | 33794 |
 | `rtti_proto_extension_tests` | 160 | 160 | 160 | — |
 | `rtti_flat_schema_tests` | 408 | 408 | 408 | — |
 
